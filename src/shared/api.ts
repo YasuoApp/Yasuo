@@ -9,6 +9,7 @@
 // Type-only, so the circle with `learnings.ts` (which takes `AssistantMessage`
 // from here) never exists at runtime.
 import type { LearningProposal } from "./learnings"
+import type { ClickupAgentId } from "./clickup-agents"
 
 /**
  * One folder the workspace has been pointed at — a repository on this machine,
@@ -1788,6 +1789,280 @@ export type BoardCard = {
   updatedAt: string
 }
 
+/** Where the encrypted personal key lives in the manifest. Written and read
+ * only by `Store` — see `clickupTokenStatus` for why it never crosses back. */
+export const CLICKUP_TOKEN_KEY = "clickup.token"
+
+/**
+ * Whether a watched task changing is worth an OS notification.
+ *
+ * Its own key rather than `CHAT_NOTIFICATIONS_KEY`: somebody who wants to be
+ * called back when their agent finishes does not necessarily want to be called
+ * back when a customer comments, and the two are switched off for different
+ * reasons. Unset reads as **on**, the same bargain the chats' key makes.
+ */
+export const CLICKUP_NOTIFICATIONS_KEY = "clickup.notifications"
+
+/**
+ * One ClickUp task this workspace is watching.
+ *
+ * The record's id **is** the task's id, so adding the same task twice is one
+ * row rather than two — the way a chat's id is the CLI's session id. Everything
+ * else is either what the URL said or what the last successful poll saw.
+ *
+ * It is the whole workspace's rather than a project's: what somebody watches is
+ * the work they are answerable for, and that does not divide along the
+ * repositories on this machine. A task about a repository nobody has added here
+ * is still a task worth being told about.
+ */
+export type ClickupWatch = {
+  /** ClickUp's own task id, out of the URL — `86eutavc5`. */
+  id: string
+  /**
+   * The workspace id when the URL carried one, or null.
+   *
+   * `app.clickup.com/t/<team>/<task>` has it and `app.clickup.com/t/<task>`
+   * does not, and both are URLs people paste. It is kept because a **custom**
+   * task id (`ABC-123`) cannot be looked up without one — see `fetchTask`.
+   */
+  teamId: string | null
+  /** What was pasted, kept so the row can open the task where it lives. */
+  url: string
+  /** What the last successful poll saw, or null before the first one. */
+  seen: ClickupSnapshot | null
+  /**
+   * Everything this app has noticed about the task, newest first.
+   *
+   * **Kept rather than consumed**, which is the difference from a chat's unread
+   * mark: opening a row does not empty this, it moves `readAt`. What somebody
+   * wants from a watched task is not only "something happened" but "what has
+   * been happening", and a list that cleared itself on the first glance could
+   * never answer the second.
+   *
+   * Capped at `CLICKUP_HISTORY` and written to disk, because the whole point is
+   * a comment that arrived while the app was shut.
+   */
+  history: ClickupChange[]
+  /**
+   * When somebody last opened this row, or null for never.
+   *
+   * Unread is **derived** from this against `history` rather than stored, so
+   * there is no second thing to keep in step with the list — `unreadIn` in
+   * `lib/clickup/store.ts` is the one reader.
+   */
+  readAt: string | null
+  addedAt: string
+  /**
+   * When ClickUp was last read without an error, or null.
+   *
+   * Written on **every** successful poll, including one that found nothing.
+   * That is not bookkeeping: it is the only thing that can answer "is this
+   * watching anything at all", and a version of this that wrote it only
+   * alongside a change left the row unable to say it had ever run.
+   */
+  polledAt: string | null
+  /**
+   * Why the last poll failed, or null.
+   *
+   * Kept per task rather than thrown: one task deleted in ClickUp should not
+   * stop the other nine being watched, and the row is where the reason belongs.
+   */
+  error: string | null
+  /**
+   * The agents this task is assigned to — `shared/clickup-agents.ts`.
+   *
+   * Several, because they answer different questions about the same change:
+   * the Watcher says what it means, the Reviewer says whether the diff still
+   * matches it, the Engineer offers to build it. Read through `agentsIn`, which
+   * drops an id this build does not know — a record written by a newer version
+   * must not be a crash.
+   *
+   * Optional, like everything else added to this record after it existed.
+   */
+  agents?: ClickupAgentId[]
+  /**
+   * The project an agent runs in, or null.
+   *
+   * A watch is the **workspace's** — what somebody is answerable for does not
+   * divide along the repositories on this machine — but an agent needs a
+   * directory, so assigning one means also saying which repository this task is
+   * about. Null is the honest state for a task nobody has pointed at a project,
+   * and the pane says so rather than guessing: the nearest readable directory
+   * is exactly the wrong place to run a turn that writes.
+   */
+  folderId?: string | null
+  /** What the agents have offered to do, newest first, capped at
+   * `CLICKUP_PROPOSALS`. Read through `proposalsIn`. */
+  proposals?: ClickupProposal[]
+}
+
+/**
+ * One agent offering to do one piece of work, and what came of it.
+ *
+ * **The offer is the point.** Nothing here runs off the poll: a proposal is
+ * written when a change arrives, drawn as a card, and stays `pending` until
+ * somebody presses Run or Dismiss. See `shared/clickup-agents.ts` for the rule
+ * that shape exists to keep.
+ */
+export type ClickupProposal = {
+  id: string
+  agent: ClickupAgentId
+  /** When it was written, or last merged into — `foldProposals` moves this so a
+   * card that keeps collecting reasons reads as recent. */
+  at: string
+  /**
+   * The changes that provoked it, newest first — `ClickupChange.text`, the same
+   * sentences the history draws.
+   *
+   * Carried on the proposal rather than looked up: the history is capped, and a
+   * card that outlived the change it is about would otherwise be an offer with
+   * no reason attached.
+   */
+  because: string[]
+  status: "pending" | "running" | "done" | "failed" | "dismissed"
+  /** What a one-turn agent answered. Absent for the engineer, whose answer is a
+   * chat and a checkout. */
+  result?: string
+  /** The chat the engineer opened, so the card is a way back to it. */
+  chatId?: string
+  /** The workspace folder its checkout was added as — a real project, which is
+   * what makes the Explorer, the Changes tab and the dock's shell work in it
+   * with nothing taught about worktrees. */
+  worktreeFolderId?: string
+  /** The branch that checkout is on. */
+  branch?: string
+  /** Why it failed, for a card that says so rather than going quiet. */
+  error?: string
+}
+
+/** What one poll of one task saw — the thing the next poll is diffed against. */
+export type ClickupSnapshot = {
+  name: string
+  status: string
+  /**
+   * ClickUp's own hue for that status (`#2ecd6f`), or null.
+   *
+   * The one colour in this feature that this app did not choose: the pane draws
+   * the dot the user's own board draws, so "it went green" means the same thing
+   * in both places. Sanitised to a hex literal by `hexColor` in
+   * `main/clickup.ts` — it is the one value here that reaches a CSS `style`
+   * rather than a class.
+   *
+   * **Optional**, since snapshots written before it existed are on disk, and
+   * deliberately **not** compared by `describeChanges`: recolouring a status in
+   * ClickUp is not a change to the task.
+   */
+  statusColor?: string | null
+  /** ClickUp's word (`urgent`), not its number: this is drawn, never mapped. */
+  priority: string | null
+  assignees: string[]
+  /** Milliseconds, as ClickUp sends it, or null. */
+  due: number | null
+  description: string
+  /** ClickUp's `date_updated`, in milliseconds. */
+  updatedAt: number
+  /** The newest comment, or null for a task with none. */
+  comment: ClickupComment | null
+}
+
+export type ClickupComment = {
+  id: string
+  by: string
+  text: string
+  at: number
+}
+
+/**
+ * One thing that changed, in the words the row and the notification both use.
+ *
+ * A sentence rather than a before/after pair, because every reader of this
+ * wants the sentence: the row draws it, the notification body is it, and
+ * nothing compares two of them. `describeChanges` in `main/clickup.ts` is where
+ * they are written, and `test/clickup-watch.ts` is why that is a pure function.
+ */
+export type ClickupChange = {
+  text: string
+  /** When this app noticed, not when ClickUp says it happened: the second is a
+   * timestamp on a field that may not have one. */
+  at: string
+  /**
+   * Which field moved, or absent.
+   *
+   * The sentence stays the record's spine — it is what the notification and the
+   * sidebar row read — and this is what the dialog has room to draw *instead*:
+   * an icon, and the two values either side of the arrow. Deriving it back out
+   * of `text` would mean parsing this app's own English.
+   *
+   * **Optional on purpose.** Histories written before these fields existed are
+   * on disk and are never rewritten, so every reader takes a change without a
+   * `kind` as a sentence and nothing more.
+   */
+  kind?: ClickupChangeKind
+  /** What the field was, for the kinds that have a before — already in the
+   * words it is drawn in (`none`, `nobody`, a `YYYY-MM-DD` day). */
+  from?: string
+  /** What the field became. Absent where there is no second value to show: a
+   * description edit, and a comment, whose `text` is the whole of it. */
+  to?: string
+  /**
+   * The two texts, for the kinds too long to put either side of an arrow.
+   *
+   * A description and a comment are paragraphs: "Description edited" is all a
+   * row and a notification have room for, and it is also the least useful thing
+   * this app could say about a requirement that moved. So both texts are kept
+   * on the change and the dialog diffs them on demand, in the same
+   * `@codemirror/merge` the `Changes` tab's file diff is built from.
+   *
+   * They are kept **here** rather than fetched when the button is pressed,
+   * because there is nothing to fetch: ClickUp serves the description a task
+   * has now, and the one it had before this poll exists nowhere but the
+   * snapshot this app just overwrote.
+   *
+   * Each side is capped at `CLICKUP_BODY_MAX` — see there.
+   */
+  body?: ClickupBody
+}
+
+/** The before and after of one change, as text. An added comment has `before`
+ * empty, which diffs as the whole of it added. */
+export type ClickupBody = { before: string; after: string }
+
+export type ClickupChangeKind =
+  | "status"
+  | "name"
+  | "assignees"
+  | "priority"
+  | "due"
+  | "description"
+  | "comment"
+  /** The newest comment reworded — the same id with different text. Its own
+   * kind rather than a second `comment`, since saying somebody commented when
+   * they edited a typo is the failure `describeChanges` was written against. */
+  | "comment-edited"
+
+export type ClickupWatchAnswer = { watch: ClickupWatch } | { error: string }
+
+/**
+ * How many changes one task keeps.
+ *
+ * Enough to read a week of a task somebody is actually arguing over, and few
+ * enough that the file stays a file rather than a log. What falls off the end
+ * is the oldest, which is the part ClickUp itself still has.
+ */
+export const CLICKUP_HISTORY = 50
+
+/**
+ * How much of each side of a `ClickupBody` is kept.
+ *
+ * The watch file is read and rewritten whole on every poll, and a task whose
+ * description is a spec can carry tens of kilobytes of it — fifty changes of
+ * that, times both sides, is a file that costs something to write every two
+ * minutes. Four thousand characters is a long description read to the end and
+ * still a diff that renders instantly; what is cut is marked with a line saying
+ * so, since a diff that ends silently reads as a deletion.
+ */
+export const CLICKUP_BODY_MAX = 4_000
+
 /**
  * The language a fenced block carries when it holds a drawing.
  *
@@ -2367,6 +2642,83 @@ export type DesktopApi = {
   saveBoardColumns: (columns: BoardColumn[]) => Promise<void>
 
   /**
+   * Whether a ClickUp key has been saved, and **nothing else about it**.
+   *
+   * The key itself never comes back over the bridge: it is written once through
+   * `setClickupToken`, encrypted by `safeStorage` on the way into the manifest,
+   * and read only by the main side that makes the request. A `getSetting` for
+   * it would hand a personal token to every line of renderer code that asks.
+   */
+  clickupTokenStatus: () => Promise<{ present: boolean }>
+  /** Saves the key, or clears it when given the empty string. */
+  setClickupToken: (token: string) => Promise<void>
+
+  /** Every task this workspace is watching, in the order they were added. */
+  listClickupWatches: () => Promise<ClickupWatch[]>
+  /**
+   * Watches the task a pasted URL names, and reads it once straight away.
+   *
+   * Takes the **URL** rather than a parsed id, so that the one place a
+   * ClickUp URL is understood is `taskRefIn` and main is the only side that
+   * decides what a watchable task is. Answers with a sentence rather than
+   * throwing — a URL that is not a task, a key that is refused and a task that
+   * has been deleted are all one line under the box that was typed into.
+   *
+   * Adding a task already watched answers with the row that exists rather than
+   * a second one: the record's id is the task's.
+   */
+  addClickupWatch: (url: string) => Promise<ClickupWatchAnswer>
+  removeClickupWatch: (id: string) => Promise<void>
+  /**
+   * Reads every watched task now, rather than waiting for the next tick.
+   *
+   * What comes back is the whole list, because a poll can change any row —
+   * including into an error — and a caller holding a list wants the list.
+   */
+  refreshClickupWatches: () => Promise<ClickupWatch[]>
+  /** Moves one task's `readAt` to now — what opening its row means. The
+   * history itself is kept; see `ClickupWatch.history`. */
+  readClickupWatch: (id: string) => Promise<void>
+  /** Who this task is assigned to. The whole list every time, the way
+   * `saveClaudeProfiles` takes the whole list: a set of checkboxes has no
+   * meaningful per-item call. */
+  assignClickupAgents: (id: string, agents: ClickupAgentId[]) => Promise<void>
+  /** Which project its agents run in, or null for none. */
+  setClickupWatchProject: (id: string, folderId: string | null) => Promise<void>
+  /**
+   * Runs one proposal — **the press that makes a turn asked-for**.
+   *
+   * Answers with a sentence when it could not start, and with nothing when it
+   * did: what came of it lands on the proposal itself, which main pushes.
+   * A one-turn agent's answer arrives when the turn ends; the engineer's card
+   * carries the id of the chat it opened as soon as there is one, since the
+   * work after that is a conversation somebody is watching.
+   */
+  runClickupProposal: (
+    id: string,
+    proposalId: string,
+    /** Settings › Helper turns' own three, resolved by the caller — the same
+     * three `draftCommitMessage` and `distillLearnings` take, and for the same
+     * reason: they live in the renderer's settings store. */
+    model: string | null,
+    effort: string | null,
+    profileId: string | null
+  ) => Promise<{ error: string } | { chatId?: string }>
+  /** Takes a card off the pile without running it. Kept as `dismissed` rather
+   * than deleted, so a change that has already been answered for does not come
+   * back as a fresh offer on the next poll. */
+  dismissClickupProposal: (id: string, proposalId: string) => Promise<void>
+  /**
+   * The watches, whenever main has changed them — a poll that found something,
+   * or one that failed.
+   *
+   * Pushed rather than polled by the renderer for the reason the chats' events
+   * are: main owns the timer, and a second timer here would be a list that
+   * disagrees with the tray for as long as the two are out of phase.
+   */
+  onClickupWatches: (listener: (watches: ClickupWatch[]) => void) => () => void
+
+  /**
    * One drawing's scene, as the text of its `.excalidraw` file — Excalidraw's
    * own format, so a scene can be opened at excalidraw.com or in the editor's
    * desktop app without this studio.
@@ -2624,6 +2976,18 @@ export const IPC = {
   saveBoardCards: "board:save",
   listBoardColumns: "board:list-columns",
   saveBoardColumns: "board:save-columns",
+  clickupTokenStatus: "clickup:token-status",
+  setClickupToken: "clickup:set-token",
+  listClickupWatches: "clickup:watches",
+  addClickupWatch: "clickup:watch-add",
+  removeClickupWatch: "clickup:watch-remove",
+  refreshClickupWatches: "clickup:watch-refresh",
+  readClickupWatch: "clickup:watch-read",
+  assignClickupAgents: "clickup:agents-assign",
+  setClickupWatchProject: "clickup:watch-project",
+  runClickupProposal: "clickup:proposal-run",
+  dismissClickupProposal: "clickup:proposal-dismiss",
+  onClickupWatches: "clickup:watches-changed",
   readDrawing: "drawings:read",
   writeDrawing: "drawings:write",
   writeDrawingSvg: "drawings:write-svg",

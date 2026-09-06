@@ -385,7 +385,7 @@ function markDOM(kind: CellKind, shown: boolean): HTMLElement {
   span.setAttribute("role", "button")
   span.title = COMMENTED.has(kind)
     ? "Commented — click to comment on this line too"
-    : "Comment on this line — drag or shift-click for a range"
+    : "Comment on this line — drag or shift-click for a range, ⌥-drag to select the code" // prettier-ignore
 
   /*
    * The `+` on every row, whatever else that row is.
@@ -768,7 +768,10 @@ function threadWidgets(column: ReviewColumn): Extension {
  *
  * The gutter swallows the press either way, so it never reaches whatever else
  * the pane binds — and `preventDefault` on it is also what stops the drag from
- * selecting the text it is dragged across.
+ * selecting the text it is dragged across. **`⌥` is the one press it does not
+ * take**: the strip is laid over the `+`/`-` column and is the only thing there,
+ * so a reader who wants the code selected from its left edge would have nowhere
+ * to start. See `startSelecting`.
  */
 export function reviewGutter(column: ReviewColumn): Extension {
   const { side, removals, overlay } = column
@@ -886,6 +889,90 @@ export function reviewGutter(column: ReviewColumn): Extension {
     // Every row of the run was a folded bar, which is a line of neither file.
     if (!first || !last || isEmptyAnchor(anchor)) return null
     return { anchor, first, last }
+  }
+
+  /**
+   * The view an `⌥`-drag is selecting text in, or null.
+   *
+   * Only the view is kept: the anchor is the DOM selection's own, and the focus
+   * is wherever the pointer last resolved to.
+   */
+  let selecting: EditorView | null = null
+
+  /** Where a point in the pane is in the code, or null for a point that is not
+   * in it — a gutter cell, or past either end of the content. */
+  const caretAt = (view: EditorView, x: number, y: number): Range | null => {
+    const range = document.caretRangeFromPoint(x, y)
+    if (!range || !view.contentDOM.contains(range.startContainer)) return null
+    return range
+  }
+
+  /**
+   * An `⌥`-press: a text selection rather than a range to comment on.
+   *
+   * This strip is fourteen pixels wide and all fourteen are the comment control,
+   * so somebody who wants the code selected from its left edge has nowhere to
+   * put the press. `⌥` is the way out, and what it starts is the selection this
+   * diff already has everywhere else — **the browser's own**, which the observer
+   * reads back into the editor's state even though the view is not editable, as
+   * long as it is inside the content. That last clause is the whole reason this
+   * is driven by hand rather than by letting the press through: a drag the
+   * browser anchors in a *gutter* cell covers every cell of every column before
+   * it reaches the first line of code, since that is the DOM order, so it would
+   * copy the margin along with the row.
+   */
+  const startSelecting = (
+    view: EditorView,
+    block: BlockInfo,
+    mouse: MouseEvent
+  ): boolean => {
+    // A removed row lives inside a block widget, and a selection anchored in one
+    // is dropped by the observer — `DeletionWidget.ignoreEvent` is true, so the
+    // state keeps its empty selection and a copy would take some other line
+    // entirely. The working file's own lines only; a press on a deleted row
+    // falls through to the comment column.
+    if (block.type !== BlockType.Text) return false
+
+    const selection = document.getSelection()
+    const box = view.contentDOM.getBoundingClientRect()
+    // The row's first character rather than where the pointer is: the press is
+    // out in the margin, and what it names is the row.
+    const range = caretAt(view, box.left + 1, mouse.clientY)
+    if (!selection || !range) return false
+
+    selection.removeAllRanges()
+    selection.addRange(range)
+    selection.collapseToStart()
+
+    selecting = view
+    // On `window` for the same reason the comment drag is: the pointer spends
+    // the rest of the gesture over the code, and a mouseup can land anywhere.
+    window.addEventListener("mousemove", extend)
+    window.addEventListener("mouseup", stopSelecting, { once: true })
+    mouse.preventDefault()
+    return true
+  }
+
+  const extend = (event: MouseEvent) => {
+    if (selecting === null) return
+
+    const selection = document.getSelection()
+    const box = selecting.contentDOM.getBoundingClientRect()
+    // Clamped to the content's left edge, so a drag pulled back into the gutters
+    // — which is what pulling straight down the margin is — keeps selecting
+    // whole rows rather than stopping dead at a point that is in no line.
+    const range = caretAt(
+      selecting,
+      Math.max(event.clientX, box.left + 1),
+      event.clientY
+    )
+    if (!selection || !range) return
+    selection.extend(range.startContainer, range.startOffset)
+  }
+
+  const stopSelecting = () => {
+    window.removeEventListener("mousemove", extend)
+    selecting = null
   }
 
   const track = (event: MouseEvent) => {
@@ -1024,6 +1111,10 @@ export function reviewGutter(column: ReviewColumn): Extension {
           // The left button only: the right one is a context menu, and the
           // middle one is a paste on some platforms.
           if (mouse.button !== 0) return false
+
+          // The escape hatch out of this column — see `startSelecting`. Before
+          // the row is resolved, since it is not a row this gesture is after.
+          if (mouse.altKey) return startSelecting(view, block, mouse)
 
           const row = rowOf(view, block, mouse.clientY)
           // The collapsed bar's own cell. Left alone rather than swallowed:

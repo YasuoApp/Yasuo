@@ -13,6 +13,7 @@ import {
   type WorktreeChatOptions,
 } from "@shared/api"
 import { localCommand } from "./command-text"
+import { marksUnread } from "./unread"
 import { useProjects } from "../projects"
 import { useShells } from "../shell/store"
 import { useStudio } from "../store"
@@ -118,6 +119,20 @@ type WorktreeChatState = {
    * other end is a process in the main process, not a record.
    */
   asks: Record<string, WorktreeChatAsk>
+  /**
+   * Which chats have answered since anybody last looked at them.
+   *
+   * In memory and never written down, like `sending` and for a reason of its
+   * own: unread is about *this* run's attention. A window reopened is a column
+   * being read from the top, and a dot restored onto a chat from yesterday
+   * would be this app telling somebody they had missed something they had
+   * already closed the app on.
+   *
+   * The rule for what lands here, and why an `ask` does not, is
+   * `lib/worktree-chat/unread.ts`. Cleared by looking at the chat — `select`,
+   * and the window regaining focus while it is the one selected.
+   */
+  unread: Record<string, true>
 
   /** Chats with a tab open, oldest first — the strip's membership. */
   openIds: string[]
@@ -145,6 +160,14 @@ type WorktreeChatState = {
   refresh: () => Promise<void>
   /** Puts a chat on screen, reading its lines the first time. */
   select: (id: string) => void
+  /**
+   * Forgets that a chat has anything unread in it.
+   *
+   * An action rather than something `select` does privately, because there is a
+   * second way to read a chat that involves no click at all: coming back to the
+   * window with that chat already on screen. See `listen`.
+   */
+  markRead: (id: string) => void
   close: (id: string) => void
   closeOthers: (id: string) => void
   closeAll: () => void
@@ -259,6 +282,7 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
   compacting: {},
   compactError: {},
   asks: {},
+  unread: {},
   openIds: [],
   selectedId: null,
   unsaved: [],
@@ -285,6 +309,10 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
     set({
       openIds: openIds.includes(id) ? openIds : [...openIds, id],
       selectedId: id,
+      // Looking at it is reading it, which is the whole of what the dot means.
+      // Left alone when there is nothing to forget: a new record here on every
+      // tab switch is every subscriber of `unread` redrawn for no change.
+      unread: get().unread[id] ? without(get().unread, id) : get().unread,
     })
 
     // The pane too, or clicking a chat row would select a chat nothing is
@@ -333,6 +361,11 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
           set({ reading: get().reading.filter((entry) => entry !== id) })
         })
     }
+  },
+
+  markRead(id) {
+    if (!get().unread[id]) return
+    set({ unread: without(get().unread, id) })
   },
 
   close(id) {
@@ -477,6 +510,9 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
       messages: rest,
       drafts: without(get().drafts, id),
       unsaved: get().unsaved.filter((entry) => entry !== id),
+      // Nothing left to read it in. A dot kept for a deleted chat would be
+      // counted on its project's row for as long as the window lived.
+      unread: without(get().unread, id),
     })
     get().close(id)
   },
@@ -500,6 +536,8 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
       // The card belonging to a paused turn goes with it — main settles that ask
       // on its side, and a question left on screen would have nothing behind it.
       asks: without(get().asks, id),
+      // And the dot, which was pointing at lines that no longer exist.
+      unread: without(get().unread, id),
       // The meter goes too: `clear` closes the session, so the window it was
       // describing no longer exists, and a percentage left on screen would be
       // reporting a conversation that has been thrown away.
@@ -658,8 +696,44 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
       get().select(chatId)
     })
 
+    /*
+     * The other way a chat gets read: coming back to the window with that chat
+     * already on screen.
+     *
+     * Without this, a chat sent to and left on screen while its user goes to
+     * another app keeps its dot until they click something — a dot over the
+     * pane they are already reading. `focus` on the window rather than
+     * `visibilitychange`: this is one window, and what matters is whether it
+     * has the keyboard, not whether the compositor is drawing it.
+     */
+    const onFocus = () => {
+      const selected = get().selectedId
+      if (selected) get().markRead(selected)
+    }
+    window.addEventListener("focus", onFocus)
+
     const stopEvents = window.desktop.onWorktreeChatEvent((event) => {
       const { chatId } = event
+
+      /*
+       * Whether this leaves something unread in the chat, read before anything
+       * below acts on the event — `sending` is what tells quiet from a repeat,
+       * and the `busy` branch is about to rewrite it.
+       *
+       * Set here rather than in each branch because the rule is one rule over
+       * the whole stream, the way `main/notify.ts` reads the same events for
+       * the notice: two places deciding this is a dot and a banner that can
+       * disagree about the same turn.
+       */
+      if (
+        marksUnread(event, {
+          sending: get().sending,
+          selectedId: get().selectedId,
+          focused: document.hasFocus(),
+        })
+      ) {
+        set({ unread: { ...get().unread, [chatId]: true } })
+      }
 
       // The turn has stopped on something. Nothing else arrives for this chat
       // until it is answered, so there is no ordering to worry about here.
@@ -858,6 +932,7 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
     })
 
     return () => {
+      window.removeEventListener("focus", onFocus)
       stopEvents()
       stopReveal()
     }

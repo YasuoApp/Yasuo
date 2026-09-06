@@ -24,6 +24,7 @@ import {
   ArrowUpCircle,
   Bell,
   ChevronDown,
+  ClipboardList,
   Columns2,
   ExternalLink,
   KeyRound,
@@ -151,6 +152,8 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
               <ChatsSection />
             ) : section === "claude" ? (
               <ClaudeSection />
+            ) : section === "clickup" ? (
+              <ClickupSection />
             ) : section === "updates" ? (
               <UpdatesSection />
             ) : (
@@ -163,7 +166,8 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   )
 }
 
-type SectionId = "appearance" | "tabs" | "chats" | "claude" | "mcp" | "updates"
+type SectionId =
+  "appearance" | "tabs" | "chats" | "claude" | "clickup" | "mcp" | "updates"
 
 /** The sections, in the order they are listed. Each one is a heading, a line
  * saying what it covers, and the rows below — kept together so adding a
@@ -197,6 +201,13 @@ const SECTIONS: {
     label: "Claude",
     blurb: "Separate `claude` identities a chat's turns can run under.",
     icon: KeyRound,
+  },
+  {
+    id: "clickup",
+    label: "ClickUp",
+    blurb:
+      "A personal key, and whether a watched task changing is worth interrupting you for.",
+    icon: ClipboardList,
   },
   {
     id: "updates",
@@ -323,6 +334,121 @@ function ChatsSection() {
  * preference for that is a decision nobody has enough information to make, and
  * every setting costs a line somebody has to read.
  */
+/**
+ * The ClickUp personal key, and nothing else about ClickUp.
+ *
+ * **The field never shows the saved key**, because nothing can: it is sealed by
+ * the OS's own key store on the way into the manifest and `clickupTokenStatus`
+ * answers only whether there is one (see `main/token-store.ts`). So the row says
+ * `Saved` and the box is empty — a field pre-filled with dots that cannot be
+ * copied, edited or checked is a field that lies about what it is holding.
+ *
+ * Which **list** a board imports from is not here. That answer is different for
+ * every project and is only ever typed while looking at the board it belongs to,
+ * so it is asked for there — `ClickupImport` in `components/studio/board/`.
+ */
+function ClickupSection() {
+  const clickupNotifications = useSettings(
+    (state) => state.clickupNotifications
+  )
+  const setClickupNotifications = useSettings(
+    (state) => state.setClickupNotifications
+  )
+  const [present, setPresent] = useState<boolean | null>(null)
+  const [typed, setTyped] = useState("")
+  const [saving, setSaving] = useState(false)
+  const [failed, setFailed] = useState<string | null>(null)
+
+  useEffect(() => {
+    void window.desktop
+      .clickupTokenStatus()
+      .then((status) => setPresent(status.present))
+      .catch(() => setPresent(false))
+  }, [])
+
+  async function save(token: string) {
+    setSaving(true)
+    setFailed(null)
+    try {
+      await window.desktop.setClickupToken(token)
+      setPresent(token.length > 0)
+      setTyped("")
+    } catch (error) {
+      // The one way this fails that is worth a sentence: a machine with no
+      // keyring, where `token-store.ts` refuses rather than writing the key in
+      // plain text.
+      setFailed(error instanceof Error ? error.message : String(error))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <Row
+          title="Personal key"
+          description={
+            failed ??
+            (present
+              ? "Saved on this machine, in the system key store. Paste another to replace it, or save an empty box to remove it."
+              : "A personal API token from ClickUp › Settings › Apps. Kept in the system key store and never shown again.")
+          }
+        >
+          <div className="flex items-center gap-1.5">
+            <Input
+              type="password"
+              value={typed}
+              onChange={(event) => setTyped(event.target.value)}
+              // Enter saves, because this is a box with one thing in it and a
+              // button beside it — the two gestures for one field.
+              onKeyDown={(event) => {
+                if (event.key === "Enter") void save(typed.trim())
+              }}
+              placeholder={present ? "Saved" : "pk_…"}
+              aria-label="ClickUp personal key"
+              className="h-7 w-56 text-xs md:text-xs"
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={saving || (typed.trim() === "" && !present)}
+              onClick={() => void save(typed.trim())}
+              className="h-7 text-xs"
+            >
+              {typed.trim() === "" && present ? "Remove" : "Save"}
+            </Button>
+          </div>
+        </Row>
+      </Card>
+
+      <Card>
+        {/* The chats' own key is not reused: somebody who wants to be called
+            back when their agent finishes does not necessarily want to be
+            called back when a customer comments. Unset reads as on, which is
+            the same bargain — a watcher that announces nothing until a setting
+            is found is a watcher nobody knows is working. */}
+        <Row
+          title="Notify me when a watched task changes"
+          description="A banner for a status change, a new comment, a reassignment. Clicking it opens the task in ClickUp."
+        >
+          <Switch
+            checked={clickupNotifications}
+            onCheckedChange={setClickupNotifications}
+          />
+        </Row>
+      </Card>
+
+      <p className="px-1 text-xs leading-relaxed text-muted-foreground">
+        Watching is one way and read-only. Open{" "}
+        <span className="font-medium">ClickUp</span> at the foot of the left
+        column and paste a task link; this app reads those tasks every couple of
+        minutes and never writes anything back.
+      </p>
+    </div>
+  )
+}
+
 function UpdatesSection() {
   const check = useUpdates((state) => state.check)
   const checking = useUpdates((state) => state.checking)

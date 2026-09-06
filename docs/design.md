@@ -437,6 +437,526 @@ panel's tabs and like the `Changes` tab this copies: a board is one click from t
 project it belongs to, and restoring one would mean restoring a tab for every
 project somebody had glanced at.
 
+## Watching ClickUp tasks
+
+The left column's footer carries one button: **ClickUp**, with a count when
+something has moved. Everything else — the tasks being watched, what has happened
+to each, adding one, stopping — is in the dialog it opens. They are read every
+couple of minutes so that a status change or a customer's comment arrives here
+rather than in an email an hour later.
+
+### The import that was here first, and why it went
+
+This began as the opposite feature: a project's board **imported** a ClickUp
+list, turning tasks into cards. It worked, it was tested, and it was the wrong
+thing, so it is deleted rather than kept beside this — the store, the channels,
+the merge and its tests with it.
+
+The argument against it is short. A board here is already the user's own account
+of what they are working on, and cards are already written by the person looking
+at it; an import made that board a **second copy** of somebody else's, and the
+copy is always the stale one. Worse, it made the board answer a question nobody
+had — "what is in that ClickUp list" — when the question people actually have is
+"has anything happened to the thing I am waiting on". The first is a list you go
+and look at. The second is a thing that should come and find you. That is a
+watcher, not an import, and no amount of arranging cards was going to turn one
+into the other.
+
+What survives from it is the **key** — Settings › ClickUp, sealed by
+`safeStorage` in `main/token-store.ts` — and `main/clickup.ts`'s habit of
+answering with a sentence rather than throwing.
+
+### Pasting a link
+
+The `+` on the section's header opens one box for one line, the way `RenameRow`
+asks for a name: what it wants is already on somebody's clipboard. Both shapes
+ClickUp actually produces are accepted, and they differ by whether the workspace
+is in the path:
+
+```
+https://app.clickup.com/t/90181720832/86eutavc5
+https://app.clickup.com/t/86eutavc5
+```
+
+So the task is the **last** segment and the workspace the one before it, when
+there is one and when it is a run of digits — a word there is a view, not a
+workspace. A bare id is taken too, since somebody who has one has done the
+parsing by hand. The workspace is kept rather than dropped because a **custom**
+id (`ABC-123`) cannot be looked up without one.
+
+`taskRefIn` is also where it is settled that a watch's URL must be a **web**
+link. A watch is opened in the browser and put on a notification, so a pasted
+`file:///t/…` would otherwise be a row that asks the OS to open a path nobody
+chose. `test/clickup-watch.ts` checks that one by name.
+
+The box does **not** commit on blur, unlike a rename. It is filled by a paste,
+and pasting from another window is a blur — committing there would send half a
+URL the moment somebody went back to copy the rest of it.
+
+Which left `Enter` as the only way to send it and nothing on screen saying so,
+and a field whose only exit is a keystroke reads as a field that is not working.
+So the box has **Watch** and **Cancel** under it — the two keys drawn as the
+buttons they already were. `Watch` is disabled on an empty box rather than
+closing the row, so pressing it and pressing Enter cannot mean two different
+things; Enter and Escape still do exactly what they did.
+
+### The poll lives in main
+
+`main/clickup-watch.ts` owns the timer, and that is the whole reason the class
+exists rather than a hook. The point of watching a task is to be told while
+looking at something _else_ — another chat, another app, no window at all — and
+a timer in a React tree stops when that tree is not the one on screen. It is the
+division `WorktreeChats` already makes: the renderer draws a list main owns.
+
+**Two minutes**, and two requests per task. What is being watched is a person
+changing a status or writing a comment, which happens on a human's clock; a
+notification two minutes late has cost nobody anything. The second request is
+the comments, which the task's own JSON does not carry — and a comment is the
+single thing most worth being told about, which is the whole of why it is worth
+doubling the traffic. Ten tasks is a tenth of the 100 requests a minute a
+personal token is allowed.
+
+Each task's failure is written to **its own row** rather than thrown. One task
+deleted in ClickUp must not stop the other nine being watched, which is why
+`error` is a field on the record and not a state of the list. The tasks are read
+in parallel, and the list is read again at the end before it is written: `add`
+and `remove` are handlers and can land while the requests are open, so folding
+the answers into the list the poll _started_ from would quietly undo them.
+
+### What counts as a change
+
+`describeChanges` is pure, lives beside the fetch and is checked in
+`test/clickup-watch.ts`, because every way it can be wrong is quiet and
+expensive. Two decisions carry it:
+
+**The first poll announces nothing.** A task just added has no previous
+snapshot, and reporting everything about it would mean adding a task always
+fired a banner about a status nobody had changed.
+
+**A moved `date_updated` on its own announces nothing.** ClickUp bumps it for
+things this app cannot see — a custom field, a subtask, a time entry — and a
+banner saying "updated" with nothing under it is what trains somebody to ignore
+every banner after it. A poll where only the timestamp moved yields no change at
+all, which is the honest answer: something happened, and this app cannot say
+what.
+
+What is reported is the six things a person changes and a comment: status, name,
+assignees, priority, due date, description, and a **new** comment — where new
+means a different newest comment by id, not merely a newer one, since an edited
+comment keeps its id and announcing that would say somebody commented when
+nobody did. Each is a **sentence** — the row draws it and the notification body
+is it — and, since the dialog was given room to show a history properly, each
+also carries `kind`, `from` and `to`.
+
+That is a reversal of "a sentence and nothing else", and the dialog is why. A
+sentence has room to name only what a field _became_: "Status → done" cannot say
+what it was, and "was it in review or still in progress" is precisely the
+question somebody opens a history to answer. Deriving the pair back out of the
+sentence would mean parsing this app's own English, so the halves are carried
+beside it and `HistoryRow` draws them either side of an arrow, under the field's
+name and its icon. The sentence is untouched: nothing that reads it — the
+notification, the sidebar's newest line — has changed.
+
+### Reading a description, and a comment, as a diff
+
+Two kinds have no business either side of an arrow: a description and a comment
+are paragraphs. "Description edited" is what fits in a row and in an OS banner,
+and it is also the least useful true thing this app could say about a
+requirement that moved under somebody. So those changes carry `body` — the text
+before and the text after — and the dialog draws a **View diff** button that
+expands into the diff underneath the row.
+
+**Both texts are stored on the change, not fetched.** There is nothing to fetch:
+ClickUp serves the description a task has _now_, and the one it had before this
+poll exists nowhere but the snapshot the poll has just overwritten. That is the
+whole reason this could not be a button that goes and asks.
+
+Each side is cut at `CLICKUP_BODY_MAX` (4,000 characters). The watch file is
+read and rewritten whole every two minutes, and fifty changes of a description
+that is a spec, times two sides, is a file that costs something on every tick.
+The cut is **marked** rather than silent, because a diff whose last line simply
+stops reads as the rest of the paragraph having been deleted — a lie about
+exactly the thing somebody opened it to check.
+
+The diff itself is the **file diff's own**, reused rather than rebuilt:
+`unifiedMergeView`, `githubDiffGutters` and `githubDiffTheme`, so a diff reads
+the same wherever it appears in this app. What is left out is everything about
+the file diff that is about being a _file_ — no `documents.ts` buffer, since
+this text is not a path anything can hold open; no language, since it is prose;
+no review column, since there is nothing here to comment on; no side-by-side,
+since it lives in a pane half a dialog wide; and no `git diff` override, since
+there is no git here and CodeMirror's own ranges are the only ones there are.
+It is behind a `lazy`, the way every editor in this app is
+(`clickup/change-diff.tsx`), warmed on hover of the button that opens it.
+
+Expanded **in place** rather than opened in a dialog: a dialog over this one
+would cover the list somebody is reading down. Collapsed by default for the same
+reason — a history is a list to scan, and a paragraph opened in every row of it
+is not a list.
+
+That is also what made **`comment-edited`** worth having. An edited comment
+keeps its id, and announcing it as a _new_ comment says somebody commented when
+nobody did — the failure `describeChanges` is written against, and why this was
+announced as nothing at all at first. As its own kind, with the two texts, it
+says what actually happened, and an argument being edited under you is precisely
+what a watcher is for. Only the **newest** comment is watched, so an edit to an
+older one is still invisible; that is `newestComment`'s bound, not a new one.
+
+The three fields are **optional**, and stay optional. Histories written before
+they existed are on somebody's disk and are never rewritten, so a change with no
+`kind` falls back to its sentence — the same bargain every other optional field
+on a record here makes. Two kinds have no left-hand side at all and say so by
+leaving `to` unset: a description edit, which is deliberately not diffed, and a
+comment, whose predecessor is a different comment rather than an earlier value of
+the same one. A cleared field reads as `none` (or `nobody` for assignees) rather
+than as an empty half of an arrow.
+
+A due date is announced as its own **day in UTC**, for the reason a card's `due`
+is a day rather than an instant: ClickUp stores a date-only due as midnight UTC,
+and read locally it names the day before for everybody west of Greenwich.
+
+### A button, and everything else in a dialog
+
+This was a **section** in the left column, with the tasks listed under a header
+carrying a count, a `+` and a refresh. That is deleted, and the shape it went
+through on the way is the argument for what replaced it.
+
+The row started as a link to ClickUp — which made it useless for the one question
+the list exists to answer, since the click that could have said what happened had
+already sent you elsewhere. Then the history unfolded _inside_ the row, as an
+accordion, and a column two hundred pixels wide turned out to be a bad place to
+read a list of sentences: two open at once left no list to navigate by. Then the
+history moved out of the column and the row became the way in — at which point
+the section was a third of the column's height spent restating, badly, what one
+button and a pane say properly.
+
+So: **one button in the footer**, at the end of that bar which has stood empty
+since the Database and API panels took their window buttons with them. What a
+column that narrow can hold honestly is the one fact somebody needs from it
+without opening anything — whether something has happened — and that is the
+count. A count and not a dot, because "three tasks have moved" is worth crossing
+the window for where "one has" often is not, and there is nowhere else in the app
+that number appears.
+
+### The pane, which was a dialog
+
+`ClickupPane` is tasks down the left and the selected one's history on the
+right — the shape `SettingsDialog` has, and for the same reason: it stays the
+same size as the list grows, and it is the only layout where the thing being
+read has room without the thing being chosen disappearing.
+
+**It was a dialog for two revisions, and that is the second layout this feature
+has outgrown.** The reason is the same both times, at a different size: whatever
+holds this has to be big enough for the thing being read. A modal was the right
+answer to a two-hundred-pixel column, and the wrong one once a change could be
+expanded into a **diff** — it is 32rem tall whatever the window is, and no
+amount of widening fixes what a modal is for. A modal is also the one surface in
+this app that cannot be left open beside the work it is about, and watching a
+task is not a thing you do and dismiss; it is a thing you keep half an eye on
+while doing something else. That is a tab.
+
+So the watcher is the **fifth panel** — the first added since the Database and
+API panels were deleted, and the proof that the seam they left behind works:
+an entry in `PANES`, a prefix in `lib/tabs.ts`, an entry in `PANELS`, a case in
+`paneView`, and the strip, `⌘W`, the drag, `Close all` and the group machinery
+all work without knowing what a ClickUp task is.
+
+Two things about that entry are worth reading twice. It has **no `rootOf`**,
+which is what makes it the workspace's rather than a project's: the tab stays in
+the strip whichever project is being worked in, exactly as the watch list has
+always been the whole workspace's. And there is **one tab, not one per task** —
+`open` is a boolean read as a list of one (`CLICKUP_TAB`), `reorder` has nothing
+to reorder and `closeOthers` closes nothing. One tab per task was the obvious
+alternative and was rejected: a watch list is a handful of rows somebody scans
+against each other, and a strip holding six of them is the sidebar section this
+feature already deleted once, moved up a column.
+
+The footer button stays, and is now how the tab is opened. Its count is drawn on
+the tab as well while the tab is open, which is deliberate rather than
+duplication: the button is what makes somebody open the tab, and once the tab is
+open the button is behind whatever they are reading.
+
+The detail pane is **what the task is now** and **what has happened to it**, and
+they come from different places on purpose: the facts row (status, assignees,
+priority, due) is read off the last snapshot, since only that survives the
+history being capped at `CLICKUP_HISTORY`. Facts that are not set are simply
+absent rather than drawn as dashes.
+
+`showing` lives in `lib/clickup/store.ts` beside `open`, and holds the **task
+id** rather than a boolean: that is what lets a row in the left column open the
+tab _at_ something and what lets a freshly pasted link land on its own task.
+`""` is the footer button's press — it opens the tab on whatever was last read,
+or the first — since nothing out there knows which task is worth landing on.
+`show` also puts the pane on screen (`showPane`, the move `board` and `changes`
+both make) and marks the task read, because opening a task is reading it
+wherever it was opened from and no caller should have to remember that
+separately. Closing the tab leaves `showing` alone, so reopening lands where
+somebody was.
+
+The tab is **not remembered across a launch**, which is `board`'s and `changes`'
+bargain too: what is on disk is the watch list, and a tab is where somebody was
+looking.
+
+Adding is a **row above the list** rather than a dialog of its own: what it asks for
+is one line already on somebody's clipboard. It does not commit on blur, unlike a
+rename — the box is filled by a paste, and pasting from another window _is_ a
+blur, so committing there would send half a URL the moment somebody went back for
+the rest of it.
+
+`Last checked 2m ago` sits at the foot of the pane's list, beside a `↻` at its
+head. It is about the poll rather than about any one task, and it is the only
+thing in the app that answers "is this watching anything at all".
+
+`Stop watching` is two presses rather than an alert dialog. What it throws away
+is a list of changes this app cannot fetch again — ClickUp has the task, not
+Yasuo's reading of it — and a modal for it would be worse than the second press.
+It was written against the dialog this pane replaced, where the argument was
+sharper still: a modal over a modal.
+
+The empty history says out loud that it **starts when the task was added**, and
+that everything earlier is in ClickUp. A log that looked complete and was not
+would be worse than no log.
+
+Unread is **derived**, not stored: `history` is kept and `readAt` moves, so
+`unreadIn` in `lib/clickup/store.ts` is the one reader and there is no second
+list to keep in step. That is the difference from a chat's unread mark, which is
+this run's attention and remembered nowhere
+(`lib/worktree-chat/unread.ts`) — a chat answered while this app was running, and
+a task changed while it very likely was not, so this one is on disk.
+
+### Colour, and the one hue this app did not choose
+
+A history read by scanning is a history that has to be scannable, and the first
+version of this one was a column of identical grey rows. So every change carries
+a hue as well as its icon and its label: `CHANGE_TONE` in `lib/clickup/tones.ts`,
+off **the app's one palette** — `BOARD_TONES`, which lives under `lib/board/`
+because that is where it was written and is not the board's own. A second table
+of hues for this pane would drift from that one the first time either was tuned.
+
+Seven kinds and six hues, so exactly one family shares: **description, comment
+and comment-edited** are one, on purpose. They are the three changes that are
+somebody writing words, the three that carry a diff, and the three that never
+need telling apart by colour, since each already has its own icon and its own
+label. The hue rides the row's **left border** rather than its background: it
+runs the height of the row however tall it grows — a diff expanded under one is
+still visibly part of it — where a column of tinted blocks would be louder than
+the text it is there to organise. The `to` value is a chip in the same hue and
+the `from` is struck through, so which of the two is the answer needs no reading
+of the order.
+
+Colour is never the only difference between two rows, which is the rule
+`board/card-chips.tsx` already states: every row has an icon and a written label
+too, so nothing is lost by not seeing the hue.
+
+The facts row is **chips** rather than a definition list, for the same reason:
+it is the row somebody checks in a second, and four labelled lines of grey text
+is not a thing read in a second. Priority takes `clickupPriorityTone` — ClickUp's
+four words (`urgent` / `high` / `normal` / `low`) rather than the board's three,
+since this is somebody else's vocabulary and a workspace may have its own; an
+unrecognised word is the neutral. The due date reuses the board's own `dueState`
+and `DUE_TONES`, which is the same question about the same shape of string.
+
+The status is the exception, and the best of the lot: it is drawn in **ClickUp's
+own colour** (`ClickupSnapshot.statusColor`, off `status.color`). A status
+somebody made green in ClickUp is green here, which is the one thing no palette
+of this app's could have achieved — and the dot on each row in the list is what
+makes that list scannable as a list of _states_ rather than of names.
+
+Two rules come with it. It is the one value in this feature that reaches a CSS
+`style` rather than a Tailwind class, so it is validated to a hex literal by
+`hexColor` in `main/clickup.ts` **on the way in** — a string from somebody else's
+API reaching a style property unchecked is how a colour becomes a payload, and
+`test/clickup-watch.ts` checks the refusals by name. And it is deliberately
+**not** compared by `describeChanges`: recolouring a status in ClickUp is not a
+change to the task, and a version that announced it would fire a banner for a
+workspace's admin tidying up their palette.
+
+### Agents on a task
+
+A watched task can be assigned to **agents** — this workspace's own, not
+ClickUp's. ClickUp's assignees are a few lines above in the facts row and are
+somebody else's field, read-only like everything else here. These are three of
+this app's: `CLICKUP_AGENTS` in `shared/clickup-agents.ts`.
+
+- **Software Engineer** — offers to build the change. A `git worktree` of its
+  own, a branch named for the task, and a chat already holding the brief.
+- **Watcher** — one read-only turn: what actually moved, and what it means for
+  this repository.
+- **Reviewer** — one read-only turn: where the project's current diff and what
+  the task now asks for disagree.
+
+Assigning several is the ordinary case rather than an edge one: they answer
+different questions about the same change.
+
+#### The offer, and why nothing runs by itself
+
+This was asked for as an automatic trigger — a change lands, the engineer starts
+coding. It is built as a **proposal**: the poll writes a card, an OS banner says
+there is one, and nothing runs until somebody presses `Run`.
+
+The reason is the rule this repository already had. `one-turn-agent.ts` states
+it: a turn nobody asked for is refused, which is why this app produces no
+summary of a chat it was not asked to summarise. A two-minute timer that opens a
+`claude` session is that rule's exact counter-example — it spends money, writes
+code and does it while nobody is looking, on a signal as light as somebody
+fixing a typo in a description. **Pressing Run is the asking**, and it is the one
+thing between the timer and the turn.
+
+That separation is kept **physically** rather than by discipline.
+`main/clickup-watch.ts` writes proposals and cannot reach
+`main/clickup-agents.ts`; the only caller of `runProposal` is
+`IPC.runClickupProposal`. Anybody re-reading this can check the claim with one
+grep, which is the property that matters.
+
+What is lost by not being automatic is a few seconds of latency on work that
+takes minutes. What is kept is that no branch, no token and no edit ever happens
+without somebody having said so.
+
+Two smaller rules fall out of the same argument. A **pending** card is merged
+into rather than duplicated — three edits in an afternoon is one offer carrying
+three reasons, because a pane of identical cards is how somebody learns to
+ignore all of them — and a card that has already been **run** is finished work,
+so the next change opens a new one. `foldProposals` is pure and
+`test/clickup-agents.ts` has both by name.
+
+The reasons are carried **on the proposal** rather than looked up in the
+history, because the history is capped: an offer that outlived the change it is
+about would be a button with nothing behind it.
+
+#### Which changes wake whom
+
+The Watcher takes everything, including a status move: "it went back to In
+review" is worth a sentence. The Engineer and the Reviewer take only what a
+person changes when they change their mind — the description, and the comment
+where they say what they meant. A status moving is somebody moving a card, not a
+new instruction, and reviewing the same diff against the same description every
+time an assignee changes is a turn spent on nothing.
+
+A change with **no `kind`** — a history written before that field — wakes
+nobody. It is the honest answer: nothing on that record says what moved.
+
+#### A project, said before Run rather than after
+
+A watch is the workspace's and has no repository; an agent needs a directory. So
+a task carries a `folderId`, picked in the pane beside the agents, and the row
+says so in red while an agent is assigned and no project is. Said there rather
+than at Run time, where it would be a failure instead of a setting — and never
+guessed, because the nearest readable directory is exactly the wrong place to
+run a turn that writes.
+
+#### Worktrees, back — and only here
+
+`main/worktrees.ts` is a `git worktree` per engineer run, and reading § Worktrees,
+removed before touching it is the point of this section.
+
+That removal is not reversed. What it rejected was a checkout **between a
+project and every chat in it**, whose cost — a branch to name, a directory to
+remove afterwards — was paid on every conversation while the isolation was
+wanted on almost none of them. Every term of that inverts here. Nobody names
+anything: the branch is `clickup/<taskId>-<slug>`, and the task id is the one
+name already unique and already meaningful. Nobody is watching: an agent editing
+the tree somebody is in the middle of reading is the failure with no undo. And
+the isolation is not a nicety — it is what makes pressing Run safe at all,
+because what comes back is a branch to read rather than a working tree that
+moved under you.
+
+The layer itself stays deleted. There is no `worktreeId` in `ChatPlace`, nothing
+in the sidebar's model, no dialog. A run's checkout becomes an ordinary
+**workspace folder**, and from there the Explorer, the Changes tab, the dock's
+shell and the chat all work with nothing taught about worktrees — which is the
+shape the removal was in aid of. The checkouts live under
+`~/.yasuo/workspace/worktrees/<folderId>/<taskId>`, where the deleted layer put
+its own, rather than beside somebody's repository where their tooling would find
+them.
+
+`removeWorktree` deletes the directory and **not** the branch: the branch is the
+work somebody pressed Run for, and `--force` is there because an agent leaves a
+dirty tree behind by definition.
+
+#### What a run actually does
+
+The engineer stops at the **first message**, deliberately. What it produces is a
+conversation in a tab — the app's own chat, with its toolbar, its permission
+mode and its Stop — that somebody can watch and steer. An agent that ran to
+completion behind a progress bar would be the same turn with the one thing that
+makes it safe taken away. The brief tells it to work only on that branch and not
+to push; a commit is fine, because whoever pressed Run is going to read the diff.
+
+The Watcher and the Reviewer go through `readOnlyTurn` in `one-turn-agent.ts`,
+which is the third turn in that file and exists so there goes on being **one**
+place in this app that opens a turn which is not a conversation. Read-only by
+the same means the chat's `Read only` mode is: a tool list applied in this
+process, no `Bash`, no `Edit`. Their answer lands on the card.
+
+Main creates a folder and a chat that this window has not heard of, and there is
+no push channel for either. The renderer **re-reads both** when the call answers
+and then opens the chat: two new channels for one button is the worse trade.
+
+### Saying that it is running
+
+`polledAt` is written on **every** successful poll, including one that found
+nothing; the dialog draws it, and its `↻` polls now.
+
+Both of those are the fix for a real failure. The first version set one flag for
+"worth writing" and "worth announcing" at once, so a quiet poll wrote nothing at
+all — `polledAt` never moved, and with the tick at two minutes and no refresh
+button anywhere, a status changed in ClickUp looked for a while exactly like a
+watcher that had died. There was no way to tell the two apart from inside the
+app, which is the worst thing a background feature can do. `wrote` and
+`announced` are now separate words in `poll` for exactly that reason.
+
+A tick's failure is logged rather than dropped, too: the timers used to call
+`void this.poll()`, so a rejection became an unhandled rejection nobody would
+see and the ticks simply stopped. Every _network_ failure is already a row's own
+`error`, so anything reaching that catch is this app's own fault.
+
+**And one duly arrived**, which is why `fold` is a function of its own. It
+spread `watch.history` straight into a new array, and a record written before
+that field existed has none — so the spread threw, `poll` rejected on the first
+task, and every tick from then on died before writing anything. Nothing on
+screen said so: the file simply stopped changing, which is indistinguishable
+from a watcher that is running and finding nothing. Two things came out of it.
+Every optional field is now read through a default **on the main side too**, the
+way the renderer already read them — main writes the file and is therefore the
+side that must not assume its own latest shape. And a poll asked for by the `↻`
+puts its failure where the stamp goes (`pollError`), so the next one of these is
+a sentence somebody can read rather than a line in a terminal nobody has open.
+
+The subscription to main's pushes is held by the **column**, not by the dialog:
+the dialog is mounted only while it is open, and the count on the button has to
+be right while it is shut — which is every moment that matters, since the count
+is what makes somebody open it.
+
+### The notification, and how its rule differs
+
+A change rings the OS through `ipc.ts`, which is where the window is, and the
+rule is **not** the chats'. A chat's notice is held back while the window is
+focused, because the thing it is about is already on screen with a spinner on
+it. A watched task is about something happening in another app, and the list is
+one column of this one that may well be folded shut — so it rings either way.
+The banner's title is the task and its body is the sentence the row already
+draws; clicking it opens the task rather than raising this app.
+
+`CLICKUP_NOTIFICATIONS_KEY` switches it off, and is its own key rather than
+`CHAT_NOTIFICATIONS_KEY`: somebody who wants to be called back when their agent
+finishes does not necessarily want to be called back when a customer comments.
+Unset reads as **on**, the same bargain the chats' key makes.
+
+### What is not here
+
+No writing back, of any kind — no status change, no comment, no assignment. This
+app has no business being a second writer on a task somebody else is working in,
+and a watcher that could edit is a watcher whose failures are expensive.
+
+No polling the whole workspace, no lists, no boards, no search. What is watched
+is what somebody pasted, one link at a time, which is also what keeps the
+request budget a rounding error.
+
+And nothing tells the **agent**. A watched task is not handed to a chat, does
+not seed a composer and does not appear on a board — the agent still cannot
+write to the board (§ The agent cannot move a card), and this section did not
+quietly become a way around that.
+
 ## Chats
 
 A project's rows are its chats, and clicking one opens it.
@@ -546,6 +1066,69 @@ watched one of them would go dark while another was answering.
 tested (`test/chat-running.ts`) for the one rule in it: a chat with a question up
 must be counted once, not in both columns, or a project of three chats reads as
 five things happening.
+
+### Unread
+
+The three marks above all say what is happening **now**, and they all go dark at
+the same instant: the turn ends and the column looks exactly as it did before
+anybody sent anything. The case that leaves is the one this app is built around.
+Somebody sends a message, switches to another chat _inside this window_ to read
+while it works, and comes back to a list where the chat that finished is
+indistinguishable from the eleven that finished last Tuesday. The notification
+does not cover it either, by design — it fires only while the window is
+unfocused, and this is somebody sitting in front of it.
+
+So a chat that has answered since anybody looked at it is **marked unread**: a
+dot in the same slot the spinner and the shield use, and its title in
+`font-medium`. Weight rather than a second colour, because the hue is spoken for
+by the shield, and a column read by colour is a column with a legend. The dot is
+in the mark's own slot and not beside it so the titles down the column stay on
+one left edge — a row that indented itself only when it had news would make the
+list ripple as chats finished. The **tab** carries the same dot in its icon's
+slot, for the same reason and against the same failure: the tab of a chat you
+switched away from goes back to looking like the tab of one you have read. A
+shut project's row carries a count and a still dot, in the two slots its
+activity count already uses, and the rail carries the dot alone.
+
+It is **third in the same precedence**, and it can never contradict the other
+two: what marks a chat unread is it having _stopped_, so the dot and the spinner
+are mutually exclusive by construction rather than by an ordering somebody has
+to maintain. An `ask` is deliberately **not** marked — a question up is already
+drawn by the shield, which outranks this everywhere, and it stays in `asks`
+until it is answered, so there is nothing to remember for it.
+
+**Quiet, not `done`**, which is the same rule the notification is read by and
+for the same reason: a `done` ends a turn, and a message queued behind it starts
+the next one without anything arriving to say so, so a chat marked on `done`
+would light up while it was still typing. A failure is marked as it happens.
+That the dot and the banner read one stream by one rule is the point — the two
+disagreeing about a turn would be the app contradicting itself about whether
+anything happened.
+
+"Read" is **selected, in a focused window**, and the honest version was
+considered and rejected: read would truthfully mean the transcript has been
+scrolled to its end, and the pane is one instance reused across the whole strip,
+so a scroll position local to it is not per chat. Tracking one per chat to light
+a dot is more machinery than the dot is worth. What that bargain costs is that
+coming back to the window clears the mark on whichever chat is on screen — which
+is the same window focus the notification already trusts, and the pane in
+question is showing the answer.
+
+None of it is **written down**. Unread is about this run's attention: a window
+reopened is a column being read from the top, and a dot restored onto a chat
+from yesterday would be this app telling somebody they had missed something they
+had already closed the app on. `/clear` and deleting a chat drop the mark too —
+in both cases the lines it was pointing at are gone.
+
+The rule is `marksUnread` in `lib/worktree-chat/unread.ts`, split out and tested
+(`test/chat-unread.ts`) because **both** ways of getting it wrong look like
+nothing rather than like a bug: a dot that never lights is a feature that appears
+not to exist, and one that never goes out is a column permanently claiming news.
+`unreadIn` is the count for a shut project's row, and it is kept **out** of
+`ChatActivity` on purpose — that shape is shared with the menu bar's tray, which
+counts what is happening, and an unread chat is one where nothing is happening
+any more. Folding it in would make the number on the row and the number in the
+menu bar two readings of the same chats.
 
 ### The notification
 
@@ -3539,6 +4122,28 @@ there is a `+`/`-` column for the marks to sit over. `FOREIGN_WIDGET` in
 `lib/files/diff-chrome.ts` is what keeps `isHunkBar` — which identifies a
 collapsed region by elimination — from calling a thread's widget a collapsed
 bar and drawing an expander beside it.
+
+**`⌥`-drag is the way out of that column.** Laying it over the `+`/`-` column
+buys the sixteen pixels a column of its own would cost on every diff in the app,
+and the price is that all fourteen pixels of the strip are the comment control:
+a press there is a range being picked, so selecting the code from its left edge
+had nowhere to start. `⌥` is the discriminator — no guessing at whether a drag
+was meant vertically or horizontally, which is the thing this column was a gutter
+to avoid — and what it starts is **the browser's own selection**, which is what a
+selection in this read-only diff is everywhere else.
+
+Driven by hand (`startSelecting`) rather than by letting the press through, and
+the reason is DOM order: a drag the browser anchors in a gutter cell covers every
+cell of every column before it reaches the first line of code, so a copy would
+carry the whole margin. So the anchor is set into the content at the row's first
+character and the focus follows the pointer through `caretRangeFromPoint`, both
+ends inside `.cm-content` — which is also what makes `⌘C` copy the code and not
+the numbers: `@codemirror/view`'s observer reads a non-editable view's DOM
+selection back into the state as long as it is in the content, and the copy
+handler works off the state. Deleted rows are deliberately not part of the
+gesture: they are inside a block widget whose `ignoreEvent` is true, so a
+selection anchored there is dropped by that same observer and the copy would take
+some other line entirely.
 
 An anchor is a `ReviewAnchor`: a run of the commit's lines, a run of the working
 file's, or one of each. Both being set is a remark about a **hunk** — these

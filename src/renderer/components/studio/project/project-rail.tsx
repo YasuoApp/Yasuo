@@ -9,6 +9,7 @@ import {
   activityTitle,
   isRunning,
 } from "@/lib/worktree-chat/running"
+import { unreadIn } from "@/lib/worktree-chat/unread"
 import { IconButton } from "../icon-button"
 
 /**
@@ -50,10 +51,18 @@ export function ProjectRail() {
   const chats = useWorktreeChats((state) => state.chats)
   const sending = useWorktreeChats((state) => state.sending)
   const asks = useWorktreeChats((state) => state.asks)
+  const unread = useWorktreeChats((state) => state.unread)
   const activity = activityOf(chats, sending, asks)
   // Drawn only while the column is shut. Open, the rows themselves say it, and
   // a dot beside a list that is already spinning is a second thing to read.
   const running = !sidebar && isRunning(activity)
+  /*
+   * And the case the shut column loses hardest: a chat that has already
+   * finished. Nothing is running, so the dot above goes dark, and the news that
+   * a turn landed is behind 36px of nothing. Second to `running`, because a
+   * project still working is the more immediate of the two.
+   */
+  const news = !sidebar && !running && unreadIn(chats, unread) > 0
 
   return (
     <div
@@ -70,7 +79,9 @@ export function ProjectRail() {
             ? "Hide projects"
             : running
               ? `Show projects — ${activityTitle(activity)}`
-              : "Show projects"
+              : news
+                ? "Show projects — a chat has answered"
+                : "Show projects"
         }
         // Into the window rather than above: the crumb bar is directly over
         // this, and the default would put the tooltip on it.
@@ -91,16 +102,20 @@ export function ProjectRail() {
         rather than an item of its own. `pointer-events-none` so it never
         swallows the click meant for the button under it.
       */}
-      {running && (
+      {(running || news) && (
         <span
           aria-hidden
           className={cn(
             "pointer-events-none absolute top-1.5 right-1.5 size-1.5 rounded-full ring-2 ring-background",
             // The same split the rows make: waiting is somebody's to act on and
-            // takes the hue, working is furniture.
-            activity.waiting > 0
-              ? "animate-pulse bg-primary"
-              : "bg-muted-foreground"
+            // takes the hue, working is furniture. An answer nobody has read is
+            // the first of those and takes the hue too — but still, since it has
+            // already happened.
+            running
+              ? activity.waiting > 0
+                ? "animate-pulse bg-primary"
+                : "bg-muted-foreground"
+              : "bg-primary"
           )}
         />
       )}

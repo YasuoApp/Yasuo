@@ -7,7 +7,7 @@ import type { BoardPriority, BoardTone } from "@shared/api"
  * of six was picked, and what that is worth in pixels lives here, so a change of
  * palette is one file and touches nothing that was saved.
  *
- * Four uses per tone, and they are deliberately not one colour applied at four
+ * Six uses per tone, and they are deliberately not one colour applied at six
  * strengths:
  *
  * - `dot` is the mark in the column header — the only place a tone is at full
@@ -23,13 +23,24 @@ import type { BoardPriority, BoardTone } from "@shared/api"
  *   glance and over the card's own background rather than the app's, so this is
  *   the one that carries a tint *and* a text colour; the others only ever tint
  *   something that already had its own.
+ * - `text` is the hue on a glyph with nothing behind it, which is what a 12px
+ *   icon in a dense row needs: `chip` would put a tinted box around it and
+ *   `dot` is a background. Added for the ClickUp pane's list, where the row is
+ *   too tight for a chip.
  *
  * `slate` is the neutral, and it is first in the picker for that reason: a
  * column with nothing to say about itself should be able to say nothing.
  */
 export const BOARD_TONES: Record<
   BoardTone,
-  { dot: string; head: string; edge: string; ring: string; chip: string }
+  {
+    dot: string
+    head: string
+    edge: string
+    ring: string
+    chip: string
+    text: string
+  }
 > = {
   slate: {
     dot: "bg-slate-400 dark:bg-slate-500",
@@ -37,6 +48,7 @@ export const BOARD_TONES: Record<
     edge: "border-l-slate-300 dark:border-l-slate-600",
     ring: "bg-slate-400 dark:bg-slate-500",
     chip: "bg-slate-500/12 text-slate-700 dark:bg-slate-400/15 dark:text-slate-300",
+    text: "text-slate-600 dark:text-slate-400",
   },
   blue: {
     dot: "bg-blue-500 dark:bg-blue-400",
@@ -44,6 +56,7 @@ export const BOARD_TONES: Record<
     edge: "border-l-blue-400 dark:border-l-blue-500",
     ring: "bg-blue-500 dark:bg-blue-400",
     chip: "bg-blue-500/12 text-blue-700 dark:bg-blue-400/15 dark:text-blue-300",
+    text: "text-blue-600 dark:text-blue-400",
   },
   violet: {
     dot: "bg-violet-500 dark:bg-violet-400",
@@ -51,6 +64,7 @@ export const BOARD_TONES: Record<
     edge: "border-l-violet-400 dark:border-l-violet-500",
     ring: "bg-violet-500 dark:bg-violet-400",
     chip: "bg-violet-500/12 text-violet-700 dark:bg-violet-400/15 dark:text-violet-300",
+    text: "text-violet-600 dark:text-violet-400",
   },
   amber: {
     dot: "bg-amber-500 dark:bg-amber-400",
@@ -58,6 +72,7 @@ export const BOARD_TONES: Record<
     edge: "border-l-amber-400 dark:border-l-amber-500",
     ring: "bg-amber-500 dark:bg-amber-400",
     chip: "bg-amber-500/15 text-amber-700 dark:bg-amber-400/15 dark:text-amber-300",
+    text: "text-amber-600 dark:text-amber-400",
   },
   emerald: {
     dot: "bg-emerald-500 dark:bg-emerald-400",
@@ -65,6 +80,7 @@ export const BOARD_TONES: Record<
     edge: "border-l-emerald-400 dark:border-l-emerald-500",
     ring: "bg-emerald-500 dark:bg-emerald-400",
     chip: "bg-emerald-500/12 text-emerald-700 dark:bg-emerald-400/15 dark:text-emerald-300",
+    text: "text-emerald-600 dark:text-emerald-400",
   },
   rose: {
     dot: "bg-rose-500 dark:bg-rose-400",
@@ -72,6 +88,7 @@ export const BOARD_TONES: Record<
     edge: "border-l-rose-400 dark:border-l-rose-500",
     ring: "bg-rose-500 dark:bg-rose-400",
     chip: "bg-rose-500/12 text-rose-700 dark:bg-rose-400/15 dark:text-rose-300",
+    text: "text-rose-600 dark:text-rose-400",
   },
 }
 

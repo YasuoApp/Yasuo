@@ -17,6 +17,10 @@ export const PREFIX: Record<Pane, string> = {
   // A **root** id too, for the same reason `changes` is: one board per project,
   // and that is what it is about.
   board: "board:",
+  // Followed by `CLICKUP_TAB` and nothing else. The watcher is the workspace's
+  // rather than a project's, so there is one tab and its id is a constant —
+  // which is also why this panel has no `rootOf` in `lib/panels.ts`.
+  clickup: "clickup:",
 }
 
 /**

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react"
 import { defaultFilter } from "cmdk"
-import { Columns3, File, MessageSquare } from "lucide-react"
+import { Columns3, MessageSquare } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import {
@@ -13,6 +13,7 @@ import {
   CommandList,
   CommandShortcut,
 } from "@/components/ui/command"
+import { FileIcon } from "./file-icon"
 import { unfinishedCount } from "@/lib/board/cards"
 import { useBoard } from "@/lib/board/store"
 import { useFiles } from "@/lib/files/store"
@@ -362,7 +363,10 @@ function useEntries(query: string): Group[] {
           nameOf(entry.relative),
           entry.relative.replace(/\//g, ""),
         ],
-        icon: <File className="size-3.5 shrink-0" />,
+        // The same icon the strip and the `Changes` list draw for this path:
+        // a row here is the way *to* that tab, so a `.ts` found by typing has
+        // to be the `.ts` that opens.
+        icon: <FileIcon filePath={entry.path} />,
         open: async () => {
           // Opened and revealed both: somebody who found a file this way
           // generally wants to see what is beside it.

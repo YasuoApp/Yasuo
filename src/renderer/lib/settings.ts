@@ -3,6 +3,7 @@ import { create } from "zustand"
 import {
   CHAT_NOTIFICATIONS_KEY,
   CHAT_TRAY_KEY,
+  CLICKUP_NOTIFICATIONS_KEY,
   MCP_DISABLED_TOOLS_KEY,
   type ChatEffort,
 } from "@shared/api"
@@ -119,8 +120,18 @@ type SettingsState = Stored & {
    */
   chatTray: boolean
 
+  /**
+   * Whether a watched ClickUp task changing rings the OS.
+   *
+   * Main's to read and main's to act on, the same as the two above, and on by
+   * default for the same reason — see `CLICKUP_NOTIFICATIONS_KEY` for why it is
+   * not simply `chatNotifications` under another name.
+   */
+  clickupNotifications: boolean
+
   setGroupTabs: (group: boolean) => void
   setChatNotifications: (on: boolean) => void
+  setClickupNotifications: (on: boolean) => void
   setChatTray: (on: boolean) => void
   setDiffSideBySide: (sideBySide: boolean) => void
   setDiffWhitespace: (show: boolean) => void
@@ -206,6 +217,7 @@ export const useSettings = create<SettingsState>((set, get) => {
     mcpDisabledTools: [],
     chatNotifications: true,
     chatTray: true,
+    clickupNotifications: true,
     loaded: false,
 
     setGroupTabs(groupTabs) {
@@ -219,6 +231,16 @@ export const useSettings = create<SettingsState>((set, get) => {
       // as the two words main matches on, and only `"off"` means anything —
       // see `CHAT_NOTIFICATIONS_KEY`.
       void setSetting(CHAT_NOTIFICATIONS_KEY, chatNotifications ? "on" : "off")
+    },
+
+    setClickupNotifications(clickupNotifications) {
+      set({ clickupNotifications })
+      // Its own key for the reason the two above have theirs: main reads it,
+      // and only `"off"` means anything.
+      void setSetting(
+        CLICKUP_NOTIFICATIONS_KEY,
+        clickupNotifications ? "on" : "off"
+      )
     },
 
     setChatTray(chatTray) {
@@ -259,12 +281,14 @@ export const useSettings = create<SettingsState>((set, get) => {
 
     restore() {
       restorePromise ??= (async () => {
-        const [stored, disabled, notifications, tray] = await Promise.all([
-          recall(SETTINGS_KEY, isStored),
-          getSetting(MCP_DISABLED_TOOLS_KEY).catch(() => null),
-          getSetting(CHAT_NOTIFICATIONS_KEY).catch(() => null),
-          getSetting(CHAT_TRAY_KEY).catch(() => null),
-        ])
+        const [stored, disabled, notifications, tray, clickup] =
+          await Promise.all([
+            recall(SETTINGS_KEY, isStored),
+            getSetting(MCP_DISABLED_TOOLS_KEY).catch(() => null),
+            getSetting(CHAT_NOTIFICATIONS_KEY).catch(() => null),
+            getSetting(CHAT_TRAY_KEY).catch(() => null),
+            getSetting(CLICKUP_NOTIFICATIONS_KEY).catch(() => null),
+          ])
         set({
           // Nothing stored is the default, not a failure: the spread of a null
           // leaves the initial state as it stands.
@@ -278,6 +302,8 @@ export const useSettings = create<SettingsState>((set, get) => {
           // strip unless the key says `off`, and a switch drawn the other way
           // would describe a menu bar the user is looking at.
           chatTray: tray !== "off",
+          // And the same again, for the same reason.
+          clickupNotifications: clickup !== "off",
           loaded: true,
         })
       })()

@@ -13,6 +13,7 @@ import type {
   AssistantMessage,
   BoardCard,
   BoardColumn,
+  ClickupWatch,
   ReviewThread,
   ClaudeProfile,
   WorktreeChat,
@@ -87,6 +88,16 @@ export const BOARD_FILE = "board.json"
 /** The columns those cards are filed in, per project — renamed, recoloured and
  * reordered without a card changing, which is why they are not on one. */
 export const BOARD_COLUMNS_FILE = "board-columns.json"
+
+/**
+ * The ClickUp tasks this workspace is watching.
+ *
+ * The whole workspace's rather than a project's, and on disk rather than in
+ * memory: what it holds is the last snapshot each task was seen in and what has
+ * changed since somebody looked, and the point of the feature is being told
+ * about a comment that arrived while the app was shut. See `ClickupWatch`.
+ */
+export const CLICKUP_WATCHES_FILE = "clickup-watches.json"
 
 /**
  * The review's own threads, across every project.
@@ -485,6 +496,14 @@ export class Store {
     return this.writeList(BOARD_COLUMNS_FILE, columns)
   }
 
+  listClickupWatches(): Promise<ClickupWatch[]> {
+    return this.readList(CLICKUP_WATCHES_FILE)
+  }
+
+  saveClickupWatches(watches: ClickupWatch[]): Promise<void> {
+    return this.writeList(CLICKUP_WATCHES_FILE, watches)
+  }
+
   /** A drawing's scene, or "" for one that has never been saved. */
   readDrawing(id: string): Promise<string> {
     return this.readOwnFile(this.drawingPath(id))
@@ -585,6 +604,21 @@ export class Store {
   /** Where a folder's commands and sessions run. */
   resolveFolderDir(folderId: string): Promise<string> {
     return this.enqueue(async () => (await this.folderOf(folderId)).path)
+  }
+
+  /**
+   * Where this workspace's own files live, for the one caller that has to build
+   * a path under it rather than ask for a named file: an agent's `git worktree`
+   * checkout (`main/worktrees.ts`).
+   *
+   * Public where every other path here is private, and that is the exception it
+   * looks like: a checkout is a **directory this app creates and then hands to
+   * git**, so there is no read or write here to route it through. The gate that
+   * matters is elsewhere — the folder it becomes goes through `addFolder`, and
+   * everything read out of it afterwards through `insideAny`.
+   */
+  get workspaceFilesDir(): string {
+    return this.workspaceDir
   }
 }
 

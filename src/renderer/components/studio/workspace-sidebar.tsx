@@ -8,6 +8,7 @@ import {
 } from "@/lib/projects"
 import { IconButton } from "./icon-button"
 import { PanelHeader, type Fold } from "./panel-header"
+import { ClickupButton, useClickupWatches } from "./clickup/clickup-button"
 import { ProjectsSection } from "./project/projects-section"
 import { SideRow } from "./side-row"
 
@@ -46,6 +47,11 @@ export function WorkspaceSidebar({
   const shut = useProjects((state) => state.shutSections)
   /** Whether there is anything to fold *against* — see `Section`. */
   const alone = SIDEBAR_SECTIONS.length === 1
+
+  // Here rather than in the section it feeds: a folded section is unmounted,
+  // and the count on its header is the one thing still saying something
+  // happened. See `useClickupWatches`.
+  useClickupWatches()
 
   return (
     <nav
@@ -93,10 +99,14 @@ export function WorkspaceSidebar({
           badge and a help link: this app has no account, and `⌘,` was the only
           way to the dialog — a preference nobody can find is a preference
           nobody changes. */}
-      {/* Settings alone, at the right. Two buttons stood at the left end of
-          this bar — a window each for the Database and API panels — and went
-          with the panels. */}
-      <div className="flex h-8 shrink-0 items-center justify-end border-t px-3">
+      {/* Settings at the right, and the ClickUp button at the left — the end
+          of this bar that stood empty since the Database and API panels took
+          their window buttons with them. It is the whole of what the watcher
+          puts in this column: everything about a watched task is in the dialog
+          it opens, because a list of tasks each with a history of sentences is
+          not something a column this wide can hold. */}
+      <div className="flex h-8 shrink-0 items-center justify-between border-t px-3">
+        <ClickupButton />
         <IconButton
           label="Settings"
           onClick={onOpenSettings}

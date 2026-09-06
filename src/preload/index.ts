@@ -7,6 +7,7 @@ import {
 
 import {
   IPC,
+  type ClickupWatch,
   type DesktopApi,
   type DirectoryChange,
   type MenuCommand,
@@ -156,6 +157,30 @@ const api: DesktopApi = {
   listBoardColumns: () => ipcRenderer.invoke(IPC.listBoardColumns),
   saveBoardColumns: (columns) =>
     ipcRenderer.invoke(IPC.saveBoardColumns, columns),
+  clickupTokenStatus: () => ipcRenderer.invoke(IPC.clickupTokenStatus),
+  setClickupToken: (token) => ipcRenderer.invoke(IPC.setClickupToken, token),
+  listClickupWatches: () => ipcRenderer.invoke(IPC.listClickupWatches),
+  addClickupWatch: (url) => ipcRenderer.invoke(IPC.addClickupWatch, url),
+  removeClickupWatch: (id) => ipcRenderer.invoke(IPC.removeClickupWatch, id),
+  refreshClickupWatches: () => ipcRenderer.invoke(IPC.refreshClickupWatches),
+  readClickupWatch: (id) => ipcRenderer.invoke(IPC.readClickupWatch, id),
+  assignClickupAgents: (id, agents) =>
+    ipcRenderer.invoke(IPC.assignClickupAgents, id, agents),
+  setClickupWatchProject: (id, folderId) =>
+    ipcRenderer.invoke(IPC.setClickupWatchProject, id, folderId),
+  runClickupProposal: (id, proposalId, model, effort, profileId) =>
+    ipcRenderer.invoke(
+      IPC.runClickupProposal,
+      id,
+      proposalId,
+      model,
+      effort,
+      profileId
+    ),
+  dismissClickupProposal: (id, proposalId) =>
+    ipcRenderer.invoke(IPC.dismissClickupProposal, id, proposalId),
+  onClickupWatches: (listener) =>
+    subscribe<ClickupWatch[]>(IPC.onClickupWatches, listener),
 
   readDrawing: (id) => ipcRenderer.invoke(IPC.readDrawing, id),
   writeDrawing: (id, scene) => ipcRenderer.invoke(IPC.writeDrawing, id, scene),

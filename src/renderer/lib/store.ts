@@ -36,7 +36,13 @@ export const RAIL_WIDTH = 36
  * it is what makes a pane drawable at all, and a pane left out of it is one
  * that can be selected and never shown.
  */
-export const PANES: Pane[] = ["files", "changes", "worktree", "board"]
+export const PANES: Pane[] = [
+  "files",
+  "changes",
+  "worktree",
+  "board",
+  "clickup",
+]
 
 /**
  * `section` is held as a plain string rather than a `Section` on the way in: a
@@ -80,20 +86,22 @@ function isRememberedStrip(value: unknown): value is RememberedStrip {
  * drag along with it, back when one box on the right held four lists; the lists
  * are all on screen at once now, so this is only about the pane.
  *
- * A `Section` and three more, and none of the three has a sidebar of its own:
+ * A `Section` and four more, and none of the four has a sidebar of its own:
  * `worktree` draws a project's chats and is opened from the left column,
  * `changes` draws the diff of whichever changed file the Explorer's `Changes`
- * tab has picked, one tab per project, and `board` draws that project's kanban
- * cards, also one tab per project. `showPane` leaves the sections alone for all
- * three, since a click in somebody else's list must not move the section the
- * panel is on.
+ * tab has picked, one tab per project, `board` draws that project's kanban
+ * cards, also one tab per project, and `clickup` draws the watched tasks —
+ * **one tab for the workspace**, since what somebody watches does not divide
+ * along the repositories on this machine. `showPane` leaves the sections alone
+ * for all four, since a click in somebody else's list must not move the section
+ * the panel is on.
  *
  * There was a `terminal` pane beside them — a session with a tab, a chat view
  * and a transcript — and it is gone: a shell is a tab of the dock now
  * (`lib/shell/store.ts`), and the agent half of what it was is a project's
  * chat.
  */
-export type Pane = Section | "worktree" | "changes" | "board"
+export type Pane = Section | "worktree" | "changes" | "board" | "clickup"
 
 /**
  * Which of the Explorer's two lists is showing: the project's files, or the

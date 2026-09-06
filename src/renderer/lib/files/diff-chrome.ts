@@ -81,6 +81,16 @@ type DiffModel = {
   /** Keyed by the position a removed chunk's widget sits at (`chunk.fromB`,
    * which is where the merge extension adds it). */
   removed: Map<number, { firstOld: number; lines: number }>
+  /**
+   * Every position the merge extension puts a deletion widget at — one per
+   * chunk, `removed`'s keys plus the chunks that removed nothing.
+   *
+   * A chunk that is purely added still gets a widget (`buildDeletedChunks`
+   * adds one unconditionally, and `chunk.fromA >= chunk.toA` returns an empty
+   * node from it), so the map above is not the list of this module's own
+   * widgets — which is what `isHunkBar` eliminates against.
+   */
+  widgets: Set<number>
   hunks: Hunk[]
 }
 
@@ -112,6 +122,7 @@ function buildModel(state: EditorState): DiffModel {
     null
   )
   const removed = new Map<number, { firstOld: number; lines: number }>()
+  const widgets = new Set<number>()
 
   /** Each chunk as line spans in both documents, which is what both the number
    * map and the hunk headers are built from. */
@@ -143,6 +154,7 @@ function buildModel(state: EditorState): DiffModel {
     const newLines =
       chunk.toB > chunk.fromB ? b.lineAt(chunk.endB).number - startsAt + 1 : 0
 
+    widgets.add(chunk.fromB)
     if (oldLines > 0) {
       removed.set(chunk.fromB, { firstOld: oldLine, lines: oldLines })
     }
@@ -167,7 +179,7 @@ function buildModel(state: EditorState): DiffModel {
     newLine += 1
   }
 
-  return { oldOf, removed, hunks: buildHunks(spans, b.lines) }
+  return { oldOf, removed, widgets, hunks: buildHunks(spans, b.lines) }
 }
 
 /**
@@ -435,14 +447,22 @@ const hunkBlankSign = new Cell("", SIGN, "cm-diffCell-hunk")
  * By elimination rather than by asking the widget: `WidgetType` exposes no
  * public tag, and reading a minified class name would be a guess that survives
  * until the next build. This configuration has exactly two kinds of block
- * widget — a removed chunk, which the model knows the position of, and a
- * collapsed region — so not being the first is being the second.
+ * widget — a chunk's own, whose position the model knows, and a collapsed
+ * region — so not being the first is being the second.
+ *
+ * Eliminated against `widgets` rather than `removed`, which is the fix for a
+ * `⇕` drawn beside an added line: the merge extension puts a deletion widget at
+ * every chunk, and a chunk that removed nothing gets an **empty** one. Those are
+ * not in `removed`, so each was read as a collapsed bar — a zero-height row
+ * carrying the bar's borders across the three columns and an expander tall
+ * enough to overflow onto the line below it, which would have tried to
+ * uncollapse a region that is not there.
  */
 function isHunkBar(model: DiffModel, block: BlockInfo): boolean {
   // Elimination only works over the widgets this module knows about, and the
   // review's inline threads are a third kind it does not — see `FOREIGN_WIDGET`.
   if (block.widget && FOREIGN_WIDGET in block.widget) return false
-  return !model.removed.has(block.from)
+  return !model.widgets.has(block.from)
 }
 
 /**

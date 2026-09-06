@@ -52,6 +52,7 @@ import {
   isRunning,
   type ChatActivity,
 } from "@/lib/worktree-chat/running"
+import { unreadIn } from "@/lib/worktree-chat/unread"
 
 /**
  * The chats this column lists: the ones that are on disk.
@@ -108,6 +109,7 @@ export function ProjectsSection() {
   // happening inside it — see the `activity` prop on `ProjectRow`.
   const sending = useWorktreeChats((state) => state.sending)
   const asks = useWorktreeChats((state) => state.asks)
+  const unread = useWorktreeChats((state) => state.unread)
 
   const listed = saved(chats, unsaved)
   const orphans = ungroupedChats(listed)
@@ -148,6 +150,9 @@ export function ProjectsSection() {
                     ? activityOf(chatsOf(listed, folder.id), sending, asks)
                     : null
                 }
+                // Shut only, for the same reason — open, the rows underneath
+                // each carry their own dot.
+                unread={shut ? unreadIn(chatsOf(listed, folder.id), unread) : 0}
                 onNewChat={() =>
                   void useWorktreeChats
                     .getState()
@@ -183,8 +188,9 @@ export function ProjectsSection() {
               name="Ungrouped"
               shut={ungroupedShut}
               // A chat here has nowhere to run its next turn, so it is never
-              // one of the ones answering.
+              // one of the ones answering, and so never one that has answered.
               activity={null}
+              unread={0}
               // No `+` and no board: both need a project, and this row names
               // the absence of one.
               onNewChat={null}
@@ -285,6 +291,7 @@ function ProjectRow({
   name,
   shut,
   activity,
+  unread,
   onToggle,
   onNewChat,
   onOpenBoard,
@@ -304,6 +311,17 @@ function ProjectRow({
    * which by design does not fire while the window is focused.
    */
   activity: ChatActivity | null
+  /**
+   * How many of this project's chats have answered since anybody looked, or 0
+   * when the row is not the one saying so.
+   *
+   * Beside `activity` rather than inside it: `ChatActivity` is shared with the
+   * menu bar's tray, which counts what is *happening*, and a chat that has
+   * something unread in it is one where nothing is happening any more. Folding
+   * this into that count would make the number on this row and the number in
+   * the menu bar two readings of the same chats.
+   */
+  unread: number
   onToggle: () => void
   onNewChat: (() => void) | null
   /** Opens this project's board. Nullable for the same row `onNewChat` is. */
@@ -321,12 +339,21 @@ function ProjectRow({
   const Mark = shut ? Folder : FolderOpen
 
   const running = activity !== null && isRunning(activity)
+  // Only where the row has nothing more immediate to say. A project with a turn
+  // running is already drawing that, and it outranks news of one that finished.
+  const news = !running && unread > 0
 
   const row = (
     <div className="group/project relative flex items-center">
       <SideRow
         onClick={onToggle}
-        title={running ? `${name} — ${activityTitle(activity)}` : name}
+        title={
+          running
+            ? `${name} — ${activityTitle(activity)}`
+            : news
+              ? `${name} — ${unread} answered since you last looked`
+              : name
+        }
         className={cn(PILL, "font-medium text-foreground")}
       >
         <Mark
@@ -373,6 +400,27 @@ function ProjectRow({
         )}
         {running && activity.waiting > 0 && (
           <ShieldQuestion className="size-3 shrink-0 animate-pulse text-primary group-hover/project:invisible" />
+        )}
+
+        {/*
+          And the same pair for a project that has been answered in while it was
+          shut, in the same two slots — the count where the count goes, the mark
+          where the spinner goes. Not animated: this is news that has already
+          happened, and a pulse would make a finished chat read as a running one.
+        */}
+        {news && (
+          <>
+            <span
+              aria-hidden
+              className="shrink-0 text-[0.6875rem] font-medium text-muted-foreground tabular-nums transition-opacity group-hover/project:invisible"
+            >
+              {unread}
+            </span>
+            <span
+              aria-hidden
+              className="size-1.5 shrink-0 rounded-full bg-primary group-hover/project:invisible"
+            />
+          </>
         )}
       </SideRow>
 
@@ -463,6 +511,8 @@ function ProjectChats({ folderId }: { folderId: string | null }) {
   // Which chats are stopped on a question — see the note in `tab-items.tsx`
   // about why that is not the same thing as one that is working.
   const asks = useWorktreeChats((state) => state.asks)
+  // Which have answered since anybody looked — see `lib/worktree-chat/unread.ts`.
+  const unread = useWorktreeChats((state) => state.unread)
   const select = useWorktreeChats((state) => state.select)
   const remove = useWorktreeChats((state) => state.remove)
   const rename = useWorktreeChats((state) => state.rename)
@@ -484,6 +534,10 @@ function ProjectChats({ folderId }: { folderId: string | null }) {
       {own.map((chat) => {
         const isSending = sending.includes(chat.id)
         const isWaiting = asks[chat.id] !== undefined
+        // Third in the same precedence the other two keep: a chat with
+        // something unread in it is, by the rule that marked it, one that has
+        // stopped working — so this can never be true beside the spinner.
+        const isUnread = unread[chat.id] === true
 
         // Outside the menu while it is a field: a right-click on a text field
         // belongs to the field, not to the row it stands in for.
@@ -514,7 +568,9 @@ function ProjectChats({ folderId }: { folderId: string | null }) {
                   title={
                     isWaiting
                       ? `${chat.title} — waiting for your answer`
-                      : chat.title
+                      : isUnread
+                        ? `${chat.title} — answered since you last looked`
+                        : chat.title
                   }
                   // `text-foreground` because a chat's title is the content of
                   // this list rather than a label over it — the muted default
@@ -540,12 +596,32 @@ function ProjectChats({ folderId }: { folderId: string | null }) {
                       up, and only one of them is something to do. */}
                   {isWaiting ? (
                     <ShieldQuestion className="size-3 shrink-0 animate-pulse text-primary" />
+                  ) : isSending ? (
+                    <Loader2 className="size-3 shrink-0 animate-spin text-muted-foreground" />
                   ) : (
-                    isSending && (
-                      <Loader2 className="size-3 shrink-0 animate-spin text-muted-foreground" />
+                    isUnread && (
+                      // A dot in the slot the other two marks use, so the
+                      // titles down the column stay on one left edge — a row
+                      // that indented itself only when it had news would make
+                      // the list ripple as chats finished.
+                      <span
+                        aria-hidden
+                        className="size-1.5 shrink-0 rounded-full bg-primary"
+                      />
                     )
                   )}
-                  <span className="min-w-0 flex-1 truncate text-left">
+                  <span
+                    className={cn(
+                      "min-w-0 flex-1 truncate text-left",
+                      // Unread is the one state that says something about the
+                      // *content* of the row rather than about a process beside
+                      // it, so the title itself carries it. Weight rather than
+                      // hue: the hue is spoken for by the shield, and a column
+                      // where the news is a second colour is a column read by
+                      // colour.
+                      isUnread && "font-medium"
+                    )}
+                  >
                     {chat.title}
                   </span>
                   {/*

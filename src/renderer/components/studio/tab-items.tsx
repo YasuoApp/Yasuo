@@ -1,4 +1,5 @@
 import {
+  ClipboardList,
   Columns3,
   GitCompare,
   Loader2,
@@ -6,8 +7,10 @@ import {
   ShieldQuestion,
 } from "lucide-react"
 
+import { waitingIn } from "@shared/clickup-agents"
 import { unfinishedCount } from "@/lib/board/cards"
 import { useBoard } from "@/lib/board/store"
+import { CLICKUP_TAB, unreadWatchCount, useClickup } from "@/lib/clickup/store"
 import { useChanges } from "@/lib/files/changes"
 import { isDeleted, isDirty, useFiles } from "@/lib/files/store"
 import { gitStateOf, GIT_TONES, useGitStatus } from "@/lib/files/git-status"
@@ -42,9 +45,23 @@ export function useTabItems(): Map<string, TabStripItem> {
   // whoever is already looking at that chat, and the spinner beside a tab reads
   // as "still going" — which is exactly the answer that stops you clicking it.
   const chatAsks = useWorktreeChats((state) => state.asks)
+  // And which have answered since anybody looked at them. The strip needs it for
+  // the same reason the column does: the tab of a chat you switched away from
+  // goes back to looking exactly like the tab of one you have read.
+  const chatUnread = useWorktreeChats((state) => state.unread)
 
   const changesOpenIds = useChanges((state) => state.openIds)
   const changesByRoot = useChanges((state) => state.byRoot)
+
+  const clickupOpen = useClickup((state) => state.open)
+  const clickupWatches = useClickup((state) => state.watches)
+  const clickupUnread = unreadWatchCount(clickupWatches)
+  // What is waiting on a press, which outranks what is merely unread: an offer
+  // is a thing to do, and a change is a thing to read.
+  const clickupWaiting = clickupWatches.reduce(
+    (total, watch) => total + waitingIn(watch),
+    0
+  )
 
   const boardOpenIds = useBoard((state) => state.openIds)
   const boardCards = useBoard((state) => state.cards)
@@ -150,6 +167,30 @@ export function useTabItems(): Map<string, TabStripItem> {
   }
 
   /*
+   * The ClickUp watcher: one tab, and no project on the hover line — unlike the
+   * three above it, this tab is the **workspace's**, and stays in the strip
+   * whichever project is being worked in.
+   *
+   * The count is watched tasks with something nobody has looked at, which is the
+   * same number the footer button draws. Two places showing it is deliberate:
+   * the button is how the tab is opened, and once it is open the button is
+   * behind whatever the reader is looking at.
+   */
+  if (clickupOpen) {
+    add({
+      id: PREFIX.clickup + CLICKUP_TAB,
+      label: "ClickUp",
+      icon: <ClipboardList className="size-3.5 shrink-0" />,
+      note: clickupWaiting
+        ? String(clickupWaiting)
+        : clickupUnread
+          ? String(clickupUnread)
+          : undefined,
+      title: "Watched ClickUp tasks",
+    })
+  }
+
+  /*
    * A project's chats, named by what was first asked in them.
    *
    * `Untitled` until there is something to name it after, which is what the
@@ -168,6 +209,7 @@ export function useTabItems(): Map<string, TabStripItem> {
     )?.name
 
     const waiting = chatAsks[id] !== undefined
+    const unread = chatUnread[id] === true
     const title = where ? `${chat.title} — ${where}` : chat.title
 
     add({
@@ -175,14 +217,30 @@ export function useTabItems(): Map<string, TabStripItem> {
       label: chat.title,
       // Waiting wins over working: both are true while an ask is up — the turn
       // is held rather than finished — and only one of them is something to do.
+      // Unread comes last of the three and can never be true beside the
+      // spinner: what marks a chat unread is it having stopped.
       icon: waiting ? (
         <ShieldQuestion className="size-3.5 shrink-0 animate-pulse text-primary" />
       ) : chatSending.includes(id) ? (
         <Loader2 className="size-3.5 shrink-0 animate-spin text-muted-foreground" />
+      ) : unread ? (
+        // In the icon's own slot rather than beside it, so the label starts on
+        // the same pixel either way — a tab that grew by a dot would shift every
+        // tab to its right as a chat finished.
+        <span
+          aria-hidden
+          className="inline-flex size-3.5 shrink-0 items-center justify-center"
+        >
+          <span className="size-1.5 rounded-full bg-primary" />
+        </span>
       ) : (
         <MessageSquare className="size-3.5 shrink-0" />
       ),
-      title: waiting ? `${title} — waiting for your answer` : title,
+      title: waiting
+        ? `${title} — waiting for your answer`
+        : unread
+          ? `${title} — answered since you last looked`
+          : title,
     })
   }
 
@@ -249,6 +307,8 @@ function groupName(
     changes: [],
     // Nor has `board`, and for exactly that reason.
     board: [],
+    // Nor `clickup`: one tab for the whole workspace.
+    clickup: [],
     // Every chat is in a project, so the name above is always the answer and
     // this is never reached for one.
     worktree: [],
@@ -265,5 +325,6 @@ function groupName(
     worktree: "Chats",
     changes: "",
     board: "",
+    clickup: "",
   }[pane]
 }
