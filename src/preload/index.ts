@@ -123,6 +123,7 @@ const api: DesktopApi = {
   createWorktreeChat: (place, seed) =>
     ipcRenderer.invoke(IPC.createWorktreeChat, place, seed),
   readWorktreeChat: (id) => ipcRenderer.invoke(IPC.readWorktreeChat, id),
+  chatDigests: () => ipcRenderer.invoke(IPC.chatDigests),
   deleteWorktreeChat: (id) => ipcRenderer.invoke(IPC.deleteWorktreeChat, id),
   clearWorktreeChat: (id) => ipcRenderer.invoke(IPC.clearWorktreeChat, id),
   renameWorktreeChat: (id, title) =>

@@ -1,16 +1,24 @@
 import { useMemo } from "react"
-import { CheckCircle2, MessageSquare, Trash2 } from "lucide-react"
+import {
+  CheckCircle2,
+  MessageSquare,
+  MessageSquarePlus,
+  Trash2,
+} from "lucide-react"
 
 import { nameOf, relativeTo } from "@/lib/files/paths"
 import {
   anchorLabel,
+  commentsPrompt,
   isDeletedOnly,
+  openThreads,
   threadsOf,
   useReview,
   type ReviewThread,
 } from "@/lib/files/review"
 import type { FileRoot } from "@/lib/files/roots"
 import { cn } from "@/lib/utils"
+import { useWorktreeChats } from "@/lib/worktree-chat/store"
 import { FileIcon } from "../file-icon"
 import { SideRow } from "../side-row"
 
@@ -75,40 +83,100 @@ export function CommentsList({ root }: { root: FileRoot }) {
   }
 
   return (
-    <ul>
-      {files.map((file) => (
-        <li key={file.path}>
-          {/* Not a button: there is nothing a file heading here could do that
+    <>
+      <HandOver root={root} threads={threads} />
+      <ul>
+        {files.map((file) => (
+          <li key={file.path}>
+            {/* Not a button: there is nothing a file heading here could do that
               its comments do not already do better — clicking one of them opens
               this file *at that remark*, and opening it at the top would be a
               row that loses the reader's place. */}
-          <div className="flex h-6 items-center gap-1.5 pr-2 pl-3 text-xs">
-            <FileIcon filePath={file.path} className="size-3.5" />
-            <span
-              className="min-w-0 flex-1 truncate text-muted-foreground"
-              title={relativeTo(root.path, file.path) || file.path}
-            >
-              {nameOf(file.path)}
-            </span>
-            <span className="shrink-0 font-mono text-[0.65rem] text-muted-foreground tabular-nums">
-              {file.threads.length}
-            </span>
-          </div>
+            <div className="flex h-6 items-center gap-1.5 pr-2 pl-3 text-xs">
+              <FileIcon filePath={file.path} className="size-3.5" />
+              <span
+                className="min-w-0 flex-1 truncate text-muted-foreground"
+                title={relativeTo(root.path, file.path) || file.path}
+              >
+                {nameOf(file.path)}
+              </span>
+              <span className="shrink-0 font-mono text-[0.65rem] text-muted-foreground tabular-nums">
+                {file.threads.length}
+              </span>
+            </div>
 
-          <ul>
-            {file.threads.map((thread) => (
-              <li key={thread.id}>
-                <Row
-                  thread={thread}
-                  active={focused === thread.id}
-                  where={anchorLabel(thread.anchor)}
-                />
-              </li>
-            ))}
-          </ul>
-        </li>
-      ))}
-    </ul>
+            <ul>
+              {file.threads.map((thread) => (
+                <li key={thread.id}>
+                  <Row
+                    thread={thread}
+                    active={focused === thread.id}
+                    where={anchorLabel(thread.anchor)}
+                  />
+                </li>
+              ))}
+            </ul>
+          </li>
+        ))}
+      </ul>
+    </>
+  )
+}
+
+/**
+ * The whole pile handed to a chat — `Ask AI to fix…`, back because it was asked
+ * for.
+ *
+ * What it does is `commentsPrompt` into a **new chat in this project**, in the
+ * composer and unsent. Three decisions in that sentence, and each is the one the
+ * deleted version got argued about:
+ *
+ * - **Unsent**, because a prompt assembled by a button is exactly the kind that
+ *   wants a sentence added before it goes, and a turn nobody typed is a turn
+ *   nobody asked for.
+ * - **A new chat**, and not one of the project's existing ones. The composer is
+ *   deliberately uncontrolled and keyed by chat (see `initialDraft`), so writing
+ *   into a conversation already on screen would mean remounting its field —
+ *   which throws away whatever was half-typed in it. A new tab has no field to
+ *   lose, and a fix-up pass is a fresh conversation more often than not. Copying
+ *   the message into an older chat is still a `⌘A` away, which was the whole of
+ *   the argument for deleting this button in the first place.
+ * - **The comments stay here.** This is a copy: nothing is resolved, moved or
+ *   deleted by pressing it, and pressing it twice sends them twice.
+ *
+ * Only the open ones are handed over, which is why the count here can differ
+ * from the tab's: that one lists everything ever said, and this is a list of
+ * things to do.
+ */
+function HandOver({
+  root,
+  threads,
+}: {
+  root: FileRoot
+  threads: ReviewThread[]
+}) {
+  const open = openThreads(threadsOf({ threads }, root.id))
+  if (open.length === 0) return null
+
+  return (
+    <div className="px-2 pt-2 pb-1">
+      <button
+        type="button"
+        onClick={() => {
+          void useWorktreeChats
+            .getState()
+            .create(
+              { folderId: root.id },
+              { draft: commentsPrompt(open, root.path) }
+            )
+        }}
+        className="flex h-6 w-full items-center justify-center gap-1.5 rounded-md border border-dashed text-[0.7rem] text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
+      >
+        <MessageSquarePlus aria-hidden className="size-3 shrink-0" />
+        Send {open.length} {open.length === 1 ? "comment" : "comments"} to a new
+        chat
+      </button>
+    </div>
   )
 }
 

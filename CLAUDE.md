@@ -191,6 +191,17 @@ handler and the long-lived managers (`Store`, `SqlConnections`, `DockerRuntime`,
   `docs/design.md` § Committing and § Distilling learnings have the argument;
   `proposalsIn` is checked in `test/learnings.ts`.
 
+- **`chat-digest.ts`** — a chat read as a whole rather than as a conversation:
+  which files its edit tools wrote to, and what its turns were billed. Pure and
+  free of `electron` (`test/chat-digest.ts`); `WorktreeChats.digests` holds the
+  lines and the cache, and deliberately does **not** go through `read`, which
+  would keep every transcript in the workspace resident to answer a question worth
+  two numbers and a list of paths. What it cannot see is on `ChatDigest.paths`: a
+  file rewritten by a `Bash` line names no chat, so the `Changes` filter narrows
+  the list and never divides it. Searching what a chat **said** is not here and is
+  not main's: it is asked of the conversation on screen, whose lines the renderer
+  already holds (`lib/worktree-chat/search.ts`).
+
 ### `worktree-chat.ts` + `claude-agent.ts` — the `claude` a conversation runs on
 
 `worktree-chat.ts` is the policy, `claude-agent.ts` the SDK runner under it. A
@@ -341,6 +352,21 @@ a heavier title on the row and on the tab, off `marksUnread` in
 `done`**; read is selected-and-focused; nothing is written down, since unread is
 this run's attention. Its count is kept out of `ChatActivity` deliberately —
 that shape is the tray's too, and the tray counts what is happening.
+A message sent into a chat that was **already working** is marked `Queued` on its
+own line until the running turn ends (`queued` in the store, cleared on `done`) —
+in memory like `unread`, and a mark rather than a cancel: holding it back in main
+would take away the fold into the next turn that the queue is for.
+`⌘F` opens a **find bar over the transcript** (`chat-find.tsx`, matching in
+`lib/worktree-chat/search.ts`) — a bar and not a palette group, since the results
+are the conversation behind it. The matched **text** is painted through the CSS
+Custom Highlight API (`find-marks.ts`), which is the only way to mark a run of
+characters inside rendered markdown without wrapping it in an element React owns;
+a ring is left for folds alone, whose text may be collapsed out of the DOM. A
+match is an **occurrence** and not a message — `n of m`, the arrows and the marks
+are one unit, and the count is read off the message's own text so a match inside
+a shut fold still counts. It is the one window shortcut claimed conditionally: the panes are
+hidden rather than unmounted, so the pane checks it is the one showing before
+taking a key that belongs to CodeMirror everywhere else.
 The **right-hand panel** is Explorer, with `All files` and `Changes` tabs, and it
 is the whole height of its column. **Both columns collapse to a 36px rail**
 rather than to nothing (`explorer-rail.tsx`, `project-rail.tsx`) — one button
@@ -361,7 +387,10 @@ height and the panel's `collapsedSize` are one exported `DOCK_STRIP_HEIGHT`
 rather than an `h-9` beside a `36`. `⌃\`` toggles the Terminal tab
 (`isTerminalShortcut`), and it is the one shortcut deliberately _not_ refused
 inside a pty. A project's rows are its **chats**.
-The Explorer's tab row is **three**: `All files`, `Changes`and`Comments`
+The `Changes` list carries a **chip per chat** that wrote some of what is on it
+(`touchesIn`/`keptBy`in`lib/worktree-chat/digests.ts`), drawn only when more
+than one did, and the piles are split *after* that filter — so `Stage everything`and the discard act on what is shown and say`shown`while it is up. The`Comments`tab carries the one button back from the deleted agent review:`commentsPrompt` into a **new** chat's composer, unsent (`docs/design.md`§ Comments has why a new one and not the chat on screen).
+The Explorer's tab row is **three**:`All files`, `Changes`and`Comments`
 (`ExplorerTab`in`lib/store.ts`is the one list saying so). The third is the
 listing of the remarks left on a diff — they live *in* the diff, under the lines
 they are about, so "where are they all" had no answer short of opening every
@@ -516,6 +545,9 @@ Logic worth testing is split out from the drawing: `lib/worktree-chat/activity.t
 `lib/worktree-chat/running.ts` (`test/chat-running.ts`) with `main/notify.ts`'s
 own `ChatNotices` (`test/notify.ts`),
 `lib/worktree-chat/unread.ts` (`test/chat-unread.ts`),
+`lib/worktree-chat/digests.ts` with `main/chat-digest.ts` (`test/chat-digest.ts`),
+`lib/worktree-chat/search.ts` (`test/chat-search.ts`),
+`lib/files/review.ts`'s `commentsPrompt` (`test/comments.ts`),
 `lib/files/change-tree.ts` (`test/change-tree.ts`),
 `lib/files/git-diff.ts` with `main/git.ts`'s own `fileDiff` (`test/git-diff.ts`),
 `lib/files/block-doc.ts`, `lib/worktree-chat/mention-text.ts`

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type DragEvent } from "react"
+import { useEffect, useMemo, useRef, useState, type DragEvent } from "react"
 import { Archive } from "lucide-react"
 
 import {
@@ -7,13 +7,17 @@ import {
   type ChatPlace,
   type WorktreeChatOptions,
 } from "@shared/api"
+import { isStudioShortcut } from "@/lib/shortcuts"
 import { useStudio } from "@/lib/store"
 import { cn } from "@/lib/utils"
-import { blocksOf } from "@/lib/worktree-chat/activity"
+import { blockOf, blocksOf } from "@/lib/worktree-chat/activity"
+import { clearFind, paintFind, rectOfHit } from "@/lib/worktree-chat/find-marks"
+import { hitsIn } from "@/lib/worktree-chat/search"
 import { placeOf, useWorktreeChats } from "@/lib/worktree-chat/store"
 import { chatLine, totalOf, usageDetail } from "@/lib/worktree-chat/usage"
 import { ChatCardChip } from "../board/chat-card-chip"
 import { ChatAsk } from "./chat-ask"
+import { ChatFind } from "./chat-find"
 import { ChatComposer, type ChatComposerHandle } from "./chat-composer"
 import { ChatActivity } from "./chat-activity"
 import { ChatMessage } from "./chat-message"
@@ -147,6 +151,18 @@ const places = new Map<string, { top: number; pinned: boolean }>()
  */
 const RESTORE_MS = 400
 
+/** How far above the top of the pane a line found by search is put. Enough that
+ * what comes before it is visible — a message with nothing above it reads as the
+ * start of the conversation. */
+const FOUND_MARGIN = 48
+
+/** When a position written down now stops being re-applied. Its own function
+ * because both writers of `restore` want the same window, and because reading
+ * the clock is not something a component body may do. */
+function heldUntil(): number {
+  return Date.now() + RESTORE_MS
+}
+
 function Conversation({
   chatId,
   place,
@@ -167,6 +183,9 @@ function Conversation({
   const compacting = useWorktreeChats((state) => state.compacting[chatId])
   const compactError = useWorktreeChats((state) => state.compactError[chatId])
   const ask = useWorktreeChats((state) => state.asks[chatId])
+  /** The messages sent into this chat while it was already working, which the
+   * CLI has queued behind the turn on screen — see `queued` in the store. */
+  const queued = useWorktreeChats((state) => state.queued[chatId])
   const send = useWorktreeChats((state) => state.send)
   const stop = useWorktreeChats((state) => state.stop)
   const answer = useWorktreeChats((state) => state.answer)
@@ -192,7 +211,10 @@ function Conversation({
     state.folders.find((entry) => entry.id === place?.folderId)
   )?.path
 
-  const lines = messages ?? []
+  // Memoised, unlike the bare `messages ?? []` it was: the find below folds it
+  // into blocks and matches, and a fresh array on every render would recompute
+  // both on every keystroke in the composer.
+  const lines = useMemo(() => messages ?? [], [messages])
   // A chat with no lines *yet* is not an empty chat, and the two have nothing
   // in common to say — one gets the skeleton, the other the welcome.
   const empty = !reading && lines.length === 0
@@ -200,6 +222,65 @@ function Conversation({
   const box = useRef<HTMLDivElement>(null)
   const content = useRef<HTMLDivElement>(null)
   const composer = useRef<ChatComposerHandle>(null)
+
+  /**
+   * `⌘F`, and what it has found — null while the bar is shut.
+   *
+   * **It carries the chat it is about**, and is read back through that
+   * (`find?.chatId === chatId` everywhere below) rather than cleared by an
+   * effect on the way past: this pane is one instance reused across the strip's
+   * chats, so a search left open in one would otherwise follow the reader into
+   * the next and count matches in a conversation they had not searched. Switching
+   * away shuts it; switching back opens a fresh one. Same self-healing the
+   * `Changes` list's chat filter does.
+   *
+   * `opened` counts the presses rather than being a boolean, so pressing `⌘F`
+   * with the bar already up puts the caret back in the field and selects what is
+   * there — which is what the key does in every editor, and what makes a second
+   * press a new search rather than a no-op.
+   *
+   * In memory and per run, like every other "where somebody is" in this app.
+   */
+  const [find, setFind] = useState<{
+    chatId: string
+    query: string
+    /** Which match the arrows are on, counted up without bound and taken modulo
+     * the number of matches — so a query that finds fewer than before cannot
+     * leave this pointing past the end. */
+    at: number
+    opened: number
+  } | null>(null)
+  const showing = useStudio((state) => state.pane) === "worktree"
+
+  /*
+   * The key itself.
+   *
+   * On the window and on the capture phase, the way `⌘P` is claimed, but with a
+   * condition `⌘P` does not need: **only while this pane is the one on screen**.
+   * The panes are stacked and hidden with `invisible` rather than unmounted, so
+   * this component is alive and listening while somebody is reading a diff — and
+   * in a diff, a file or the block editor `⌘F` already belongs to CodeMirror's
+   * own search panel, over the text it is about. That is the right answer there
+   * and not one this bar could give.
+   */
+  useEffect(() => {
+    if (!showing) return
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (!isStudioShortcut(event, "f")) return
+      event.preventDefault()
+      setFind((held) =>
+        held?.chatId === chatId
+          ? { ...held, opened: held.opened + 1 }
+          : { chatId, query: "", at: 0, opened: 1 }
+      )
+    }
+
+    window.addEventListener("keydown", onKeyDown, { capture: true })
+    return () => {
+      window.removeEventListener("keydown", onKeyDown, { capture: true })
+    }
+  }, [chatId, showing])
 
   /**
    * A file dropped anywhere over the conversation, typed in as its path.
@@ -281,9 +362,7 @@ function Conversation({
     pinned.current = seen ? seen.pinned : true
     lastTop.current = seen?.top ?? 0
     restore.current =
-      seen && !seen.pinned
-        ? { top: seen.top, until: Date.now() + RESTORE_MS }
-        : null
+      seen && !seen.pinned ? { top: seen.top, until: heldUntil() } : null
     if (!element) return
     element.scrollTop = pinned.current ? element.scrollHeight : (seen?.top ?? 0)
   }, [chatId])
@@ -314,6 +393,114 @@ function Conversation({
     observer.observe(inner)
     return () => observer.disconnect()
   }, [empty, reading])
+
+  const blocks = useMemo(() => blocksOf(lines), [lines])
+
+  /*
+   * `⌘F` — see `ChatFind`, and `find` for why it carries the chat it is about.
+   *
+   * A match is an **occurrence**, so `hits` is longer than the number of
+   * messages carrying them and `n of m` counts what is painted. What each one is
+   * drawn *in* is still a block, because that is the unit the transcript is laid
+   * out in and the only thing a match inside a collapsed fold has on screen.
+   */
+  /** The search, but only while it is this chat's — see `find`. */
+  const finding = find?.chatId === chatId ? find : null
+  const hits = useMemo(
+    () => (finding ? hitsIn(lines, finding.query) : []),
+    [finding, lines]
+  )
+  const at = finding && hits.length > 0 ? finding.at % hits.length : 0
+  const current = hits[at] ?? null
+  const currentBlock = current ? blockOf(blocks, current.messageId) : null
+  /** The folds holding a match, which are the only blocks still ringed — see
+   * the wrapper below. `flatMap` drops a line this transcript no longer draws. */
+  const foundBlocks = useMemo(
+    () => new Set(hits.flatMap((hit) => blockOf(blocks, hit.messageId) ?? [])),
+    [hits, blocks]
+  )
+
+  /*
+   * Landing on the match the arrows are on.
+   *
+   * Through `restore` rather than a bare `scrollIntoView`, which is the same
+   * problem the effect above solves and so the same answer: the transcript
+   * settles over several frames — lines arrive from disk after a switch, and
+   * markdown, code and images grow as they render — so a single scroll lands on
+   * whatever height existed at that instant. Writing the position into `restore`
+   * puts the `ResizeObserver` in charge of holding it while that is going on.
+   *
+   * `handled` is what makes this land once per step rather than on every line a
+   * running turn appends: the token is the match being walked to, and it is not
+   * written until the node is actually found, so the effect keeps trying while
+   * the chat is still being read off disk.
+   */
+  const handled = useRef<string | null>(null)
+  useEffect(() => {
+    const element = box.current
+    const root = content.current
+    if (!element || !root || !current || !currentBlock || !finding) return
+
+    const token = `${chatId}:${at}:${finding.query}`
+    if (handled.current === token) return
+
+    /*
+     * The match itself where its text is on screen, and the block holding it
+     * where it is not — a match inside a collapsed fold has nothing narrower to
+     * land on, which is the same reason that fold is the one thing still ringed.
+     */
+    const found =
+      rectOfHit(root, current, finding.query) ??
+      element
+        .querySelector(`[data-block="${CSS.escape(currentBlock)}"]`)
+        ?.getBoundingClientRect()
+    if (!found) return
+
+    handled.current = token
+    pinned.current = false
+    const top = Math.max(
+      0,
+      element.scrollTop +
+        found.top -
+        element.getBoundingClientRect().top -
+        FOUND_MARGIN
+    )
+    restore.current = { top, until: heldUntil() }
+    element.scrollTop = top
+    lastTop.current = top
+  }, [current, currentBlock, at, chatId, finding, lines])
+
+  /*
+   * And marking the matches themselves — see `paintFind`.
+   *
+   * Re-painted through a `MutationObserver` as well as on the search changing,
+   * because the transcript's own DOM moves under it for reasons this component
+   * never hears about: a fold opened by hand, a code block or an image
+   * finishing, a line landing mid-turn. Nothing here touches the DOM — the
+   * marks are ranges in the highlight registry — so a repaint cannot be what
+   * triggers the next one.
+   */
+  useEffect(() => {
+    const root = content.current
+    if (!root || !finding) {
+      clearFind()
+      return
+    }
+
+    const paint = () => paintFind(root, hits, current, finding.query)
+    paint()
+
+    const observer = new MutationObserver(paint)
+    observer.observe(root, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    })
+    return () => {
+      observer.disconnect()
+      clearFind()
+    }
+  }, [finding, hits, current])
 
   // The chat's own running cost, added up from the turns' own lines rather than
   // kept anywhere — see `totalOf`. Null for a chat with no usage lines at all,
@@ -357,6 +544,32 @@ function Conversation({
             Drop to write the path into your message
           </p>
         </div>
+      )}
+
+      {/* `⌘F`, hanging over the top-right corner of the transcript the way an
+          editor's does — see `ChatFind` for why it is a bar and not a dialog.
+          Keyed by the chat so a bar carried across a switch cannot keep the
+          previous conversation's field. */}
+      {finding && (
+        <ChatFind
+          key={chatId}
+          query={finding.query}
+          opened={finding.opened}
+          at={at}
+          total={hits.length}
+          // A new query starts at its first match rather than wherever the last
+          // one had walked to: `at` is an index into a list that has just been
+          // replaced.
+          onQuery={(query) => setFind({ ...finding, query, at: 0 })}
+          onStep={(by) => {
+            if (hits.length === 0) return
+            // Wrapped here rather than counted up, so `at` is always an index
+            // into the list as it stands: `at + by` can go negative, which is
+            // what the `+ hits.length` is for.
+            setFind({ ...finding, at: (at + by + hits.length) % hits.length })
+          }}
+          onClose={() => setFind(null)}
+        />
       )}
 
       {/* Above the transcript rather than beside the composer: it is a fact
@@ -404,13 +617,52 @@ function Conversation({
             ref={content}
             className="mx-auto flex w-full max-w-2xl flex-col gap-3"
           >
-            {blocksOf(lines).map((block) =>
-              block.kind === "activity" ? (
-                <ChatActivity key={block.id} of={block} />
-              ) : (
-                <ChatMessage key={block.id} of={block.line} />
-              )
-            )}
+            {blocks.map((block) => (
+              /*
+               * A wrapper per block, for the one thing a block cannot carry
+               * itself: where it is. The palette's search opens a chat *at* a
+               * line, and both halves of landing on it — the scroll above and
+               * the ring below — need a node to find and mark. Drawn for every
+               * block rather than only the found one, so the transcript's
+               * layout does not change under a reader when one is.
+               */
+              <div
+                key={block.id}
+                data-block={block.id}
+                /*
+                 * A match is marked on the **words**, not on the block — see
+                 * `paintFind`, which paints them into the highlight registry.
+                 *
+                 * The ring is what is left of that for the one case the words
+                 * cannot answer: a **fold**. A turn's working is collapsed, so a
+                 * message the model wrote mid-turn has no text on screen to
+                 * paint — and a match that is counted, scrolled to and then
+                 * invisible is worse than one that was never counted. So a fold
+                 * holding a match says so, and says harder when it is the one
+                 * the arrows are on. An open fold gets both, which is the honest
+                 * answer for a container: the ring is where, the highlight is
+                 * what.
+                 */
+                className={cn(
+                  "rounded-lg",
+                  block.kind === "activity" &&
+                    foundBlocks.has(block.id) &&
+                    "ring-1 ring-ring/25 ring-offset-4 ring-offset-background",
+                  block.kind === "activity" &&
+                    block.id === currentBlock &&
+                    "ring-2 ring-ring/70"
+                )}
+              >
+                {block.kind === "activity" ? (
+                  <ChatActivity of={block} />
+                ) : (
+                  <ChatMessage
+                    of={block.line}
+                    queued={queued?.includes(block.line.id) === true}
+                  />
+                )}
+              </div>
+            ))}
             {/* At the end of the transcript rather than over it: it is the turn
                 asking, so it belongs where the turn had got to. */}
             {ask && (

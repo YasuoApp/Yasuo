@@ -1,5 +1,6 @@
 import type { AssistantMessage } from "../src/shared/api"
 import {
+  blockOf,
   blocksOf,
   countsOf,
   rowsOf,
@@ -181,6 +182,36 @@ check(
   "and neither fold reaches into the other",
   two.every((block) => block.kind !== "activity" || block.lines.length === 1)
 )
+
+section("finding the block a line ended up in")
+
+/*
+ * What `⌘F`'s find bar rings and scrolls to. The case worth the check is the
+ * middle one: a message the model wrote mid-turn is *inside* that turn's fold,
+ * so the answer has to be the fold rather than nothing — a match counted and
+ * then scrolled nowhere is worse than one that was never counted.
+ */
+{
+  const prompt = user("one")
+  const mid = said("halfway through")
+  const answer = said("done")
+  const blocks = blocksOf([prompt, tool("Read", "/a"), mid, answer])
+
+  check(
+    "a line drawn as itself is its own block",
+    blockOf(blocks, prompt.id) === prompt.id
+  )
+  check("so is a turn's last word", blockOf(blocks, answer.id) === answer.id)
+  check(
+    "a line inside the working answers with the fold holding it",
+    blockOf(blocks, mid.id)?.startsWith("activity-") === true,
+    blockOf(blocks, mid.id)
+  )
+  check(
+    "a line this chat does not have is null",
+    blockOf(blocks, "nope") === null
+  )
+}
 
 section("lines from a build that wrote fewer fields")
 

@@ -9,6 +9,7 @@ import {
   Coins,
   Copy,
   FileText,
+  Hourglass,
   ShieldCheck,
   TriangleAlert,
 } from "lucide-react"
@@ -43,14 +44,43 @@ import { toolLabel, toolMark } from "./chat-marks"
  * caught the eye. A single line of `Read /Users/…/worktrees/<uuid>/…/x.tsx`
  * defeats all three.
  */
-export function ChatMessage({ of }: { of: AssistantMessage }) {
+export function ChatMessage({
+  of,
+  queued = false,
+}: {
+  of: AssistantMessage
+  /** Sent while the chat was already working, so the CLI is holding it for the
+   * next turn — see `queued` in `lib/worktree-chat/store.ts`. Only ever true of
+   * a user line. */
+  queued?: boolean
+}) {
   if (of.role === "user") {
     return (
-      <div className="group relative ml-4">
+      /* `data-line` is how `⌘F` finds this message's rendered text to paint its
+         matches on — see `find-marks.ts`. On the two roles that are *speech*,
+         which are the two the find searches, and at every depth: a message
+         inside an open fold is drawn by this same component. */
+      <div data-line={of.id} className="group relative ml-4">
         <div className="rounded-lg rounded-br-sm bg-accent/60 py-1.5 pr-8 pl-2.5 text-xs">
           <MentionText text={of.text} />
         </div>
         <CopyMessage text={of.text} />
+        {/*
+          Under the bubble rather than in it, and in the margin the bubble
+          already leaves: what this says is not part of the message, it is what
+          is happening to it — and a line that changed shape when the turn ahead
+          of it ended would move the transcript under the reader.
+
+          It says `Queued` rather than counting down or naming the turn ahead:
+          the CLI folds everything waiting into the next turn at once, so
+          "second in line" would be a claim about an order that does not exist.
+        */}
+        {queued && (
+          <p className="flex items-center justify-end gap-1 pt-0.5 pr-1 text-[0.65rem] text-muted-foreground">
+            <Hourglass aria-hidden className="size-2.5 shrink-0" />
+            Queued behind the turn above
+          </p>
+        )}
       </div>
     )
   }
@@ -149,7 +179,9 @@ export function ChatMessage({ of }: { of: AssistantMessage }) {
   // The renderer the Explorer's Markdown preview uses, so a table or a code
   // block in a reply reads the way it does in a file.
   return (
-    <div className="group relative">
+    // `data-line` for the same reason as the user's line above: this is the
+    // other half of what `⌘F` searches.
+    <div data-line={of.id} className="group relative">
       <MarkdownView source={of.text} className="pr-8 pl-1 text-xs" />
       <CopyMessage text={of.text} />
     </div>

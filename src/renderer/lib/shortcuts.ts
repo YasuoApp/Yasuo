@@ -4,13 +4,19 @@ import { IS_MAC } from "@/components/studio/title-bar"
  * Whether a keydown is one of the studio's own window shortcuts, and one it is
  * entitled to take.
  *
- * The four there are — `⌘P` for the search palette, `⌘W` for the tab strip,
- * `⌘S` for the Explorer's open file, `⌘B` for the sidebar — agree on everything
- * but the letter, and are answered in the four places that know what they act
- * on rather than in a keymap here: the palette owns its own dialog, which tab is
- * the current one is only the strip's answer, only the Explorer knows which file
- * is on screen, and the sidebar is the workbench's own. What they share is this
- * predicate.
+ * The five there are — `⌘P` for the search palette, `⌘F` for the chat pane's
+ * find bar, `⌘W` for the tab strip, `⌘S` for the Explorer's open file, `⌘B` for
+ * the sidebar — agree on everything but the letter, and are answered in the
+ * places that know what they act on rather than in a keymap here: the palette
+ * owns its own dialog, which tab is the current one is only the strip's answer,
+ * only the Explorer knows which file is on screen, and the sidebar is the
+ * workbench's own. What they share is this predicate.
+ *
+ * `⌘F` is the one that has to ask a second question before it takes the key, and
+ * the chat pane asks it: every editor here is CodeMirror with `searchKeymap`, so
+ * inside a file or a diff that key belongs to the text on screen. It is claimed
+ * only while the chat pane is the one showing — which that pane can answer and
+ * this predicate cannot, since the panes are hidden rather than unmounted.
  *
  * `⌃` on macOS and `⌘` elsewhere are refused rather than ignored, so that
  * `⌃⌘W` — a chord something may yet be given — is not read as `⌘W` with a key

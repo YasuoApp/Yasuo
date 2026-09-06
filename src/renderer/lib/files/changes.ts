@@ -4,6 +4,7 @@ import { create } from "zustand"
 import type { GitChange } from "@shared/api"
 import { useProjects } from "../projects"
 import { useStudio } from "../store"
+import { useDigests } from "../worktree-chat/digests"
 import { useGitStatus } from "./git-status"
 import { parentOf } from "./paths"
 import { fileRoots, type FileRoot } from "./roots"
@@ -371,5 +372,15 @@ export function useWatchChanges(root: { id: string; folderId: string } | null) {
   useEffect(() => {
     if (id === null || folderId === null) return
     void refresh({ id, folderId })
+    /*
+     * And which chat wrote what, off the same signal.
+     *
+     * Here rather than on a timer of its own: what makes a chat's list of files
+     * stale is a turn writing one, which is the event this effect is already
+     * behind — `useGitStatus` debounces the watchers and answers for the root
+     * changing identity. A second set of timers over the same events would be
+     * two answers about one turn that can disagree.
+     */
+    void useDigests.getState().refresh()
   }, [refresh, id, folderId, status])
 }

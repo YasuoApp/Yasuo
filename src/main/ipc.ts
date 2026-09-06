@@ -562,6 +562,8 @@ export function registerIpc(getWindow: () => BrowserWindow | null): {
     worktreeChats.read(id)
   )
 
+  ipcMain.handle(IPC.chatDigests, () => worktreeChats.digests())
+
   ipcMain.handle(IPC.deleteWorktreeChat, (_event, id: string) => {
     // Before the delete rather than after: a chat killed mid-turn emits no
     // `busy: false`, so the watcher would keep it as working for the rest of

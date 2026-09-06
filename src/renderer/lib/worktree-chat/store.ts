@@ -120,6 +120,27 @@ type WorktreeChatState = {
    */
   asks: Record<string, WorktreeChatAsk>
   /**
+   * The messages sent into a chat that was already working, by chat id.
+   *
+   * **A message sent mid-turn is queued, and this is the only thing that says
+   * so.** The CLI takes it either way and folds it into the *next* turn, so what
+   * is on screen is a line sitting under an answer that is not being written for
+   * it — indistinguishable, until it starts, from the message the turn running
+   * above it is about. Which is the thing somebody wants to know before typing a
+   * third.
+   *
+   * Line ids rather than a count, because the mark goes on the line: two queued
+   * messages are two rows waiting, and a `2` at the foot of the pane would not
+   * say which.
+   *
+   * In memory and never written down, like `sending` and `unread`: what makes a
+   * line queued is a process in the main process, and a reload has neither the
+   * process nor the claim. Emptied at the end of the turn they were queued
+   * behind — see the `done` branch in `listen`.
+   */
+  queued: Record<string, string[]>
+
+  /**
    * Which chats have answered since anybody last looked at them.
    *
    * In memory and never written down, like `sending` and for a reason of its
@@ -282,6 +303,7 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
   compacting: {},
   compactError: {},
   asks: {},
+  queued: {},
   unread: {},
   openIds: [],
   selectedId: null,
@@ -509,6 +531,7 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
       chats: get().chats.filter((chat) => chat.id !== id),
       messages: rest,
       drafts: without(get().drafts, id),
+      queued: without(get().queued, id),
       unsaved: get().unsaved.filter((entry) => entry !== id),
       // Nothing left to read it in. A dot kept for a deleted chat would be
       // counted on its project's row for as long as the window lived.
@@ -533,6 +556,9 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
       messages: { ...get().messages, [id]: [] },
       sending: get().sending.filter((entry) => entry !== id),
       startedAt: without(get().startedAt, id),
+      // The lines those marks were on have gone, and so has the session that
+      // was going to run them.
+      queued: without(get().queued, id),
       // The card belonging to a paused turn goes with it — main settles that ask
       // on its side, and a question left on screen would have nothing behind it.
       asks: without(get().asks, id),
@@ -587,6 +613,7 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
     // announce it, since a `text` event is a line of the answer and the prompt
     // drawn as one appeared twice.
     const already = get().sending.includes(id)
+    const lineId = `local-${Date.now()}`
     set({
       sending: already ? get().sending : [...get().sending, id],
       // A message sent into a chat that is already working does not restart the
@@ -598,9 +625,16 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
         ...get().messages,
         [id]: [
           ...(get().messages[id] ?? []),
-          { id: `local-${Date.now()}`, role: "user", text },
+          { id: lineId, role: "user", text },
         ],
       },
+      // Sent into a chat that was already working, so the CLI queues it behind
+      // whatever is running — see `queued`. Read off `sending` rather than
+      // asked of main, because `sending` *is* main's answer: it is the `busy`
+      // event, and the optimistic add above is what a second message lands on.
+      queued: already
+        ? { ...get().queued, [id]: [...(get().queued[id] ?? []), lineId] }
+        : get().queued,
     })
 
     try {
@@ -615,9 +649,19 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
 
       await window.desktop.sendWorktreeChat(id, text)
     } catch (error) {
+      // This line only, not the chat's other marks: a message that could not be
+      // sent is not waiting behind anything, and the ones queued before it still
+      // are.
+      const waiting = (get().queued[id] ?? []).filter(
+        (entry) => entry !== lineId
+      )
       set({
         sending: get().sending.filter((entry) => entry !== id),
         startedAt: without(get().startedAt, id),
+        queued:
+          waiting.length > 0
+            ? { ...get().queued, [id]: waiting }
+            : without(get().queued, id),
         messages: {
           ...get().messages,
           [id]: [
@@ -829,6 +873,17 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
         // A turn can end while a card is up — Stop, or a failure — and the
         // question died with the process that asked it.
         if (get().asks[chatId]) set({ asks: without(get().asks, chatId) })
+        /*
+         * And whatever was queued behind that turn is now the turn.
+         *
+         * The end of a turn is exactly the moment the CLI folds its queue into
+         * the next one, so this is the one edge that clears the marks — all of
+         * them, since the fold takes every message waiting rather than the
+         * oldest. A turn that ended in an error clears them too: a message
+         * queued behind a turn that died is not still waiting, and the line
+         * under it is about to say what happened.
+         */
+        if (get().queued[chatId]) set({ queued: without(get().queued, chatId) })
         // The listing's title and order moved with the turn. Not on a failure:
         // its error line is still being written when this arrives, so the
         // listing would be re-read a beat too early. The line itself comes as

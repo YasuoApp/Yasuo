@@ -1499,6 +1499,56 @@ export type WorktreeChat = {
 export type WorktreeChatEvent = AssistantEvent & { chatId: string }
 
 /**
+ * What one chat did, folded out of its lines — the two questions asked *about* a
+ * conversation rather than inside it.
+ *
+ * One shape for both because they are one read. The lines are the expensive part
+ * — a chat's transcript is a file, and there is one per chat — so a call that
+ * answered "which files did this touch" and a second that answered "what did it
+ * cost" would read the same files twice on the same tick.
+ *
+ * Computed in main and never written down: it is a fold of what is already on
+ * disk, and a stored copy would be a second account of the transcript able to
+ * disagree with it. `main/chat-digest.ts` is the fold, and says what it can and
+ * cannot see.
+ */
+export type ChatDigest = {
+  chatId: string
+  /** The project it belongs to, or null for a chat whose folder is gone —
+   * `chatRootId` on the record. Carried so a caller can group by project
+   * without reading the listing a second time. */
+  folderId: string | null
+  /**
+   * The files its edits named, absolute, in the order they were first written
+   * to.
+   *
+   * **What an edit tool said it was about**, which is not the same as what the
+   * turn changed: a file rewritten by a `Bash` line (`sed -i`, `mv`, a
+   * formatter, a build) is not here, because nothing in the transcript says it
+   * was. So this narrows a list of changed files to the ones a chat can be
+   * shown to have touched; it never claims the rest were somebody else's.
+   */
+  paths: string[]
+  /** What its turns were billed, in USD, summed over the lines that carry a
+   * figure. Turns that reported none contribute nothing rather than zero — see
+   * `unpriced`. */
+  costUsd: number
+  /** How many turns are in it, and how many of those had no cost on them: a
+   * chat read back from before that field existed is a chat with nothing to say
+   * about what it cost, not one that was free. */
+  turns: number
+  unpriced: number
+}
+
+/*
+ * Searching what was *said* in a chat is not in this contract, and that is the
+ * shape of the feature rather than an omission: it is asked of the conversation
+ * on screen, whose lines the renderer already holds — see
+ * `lib/worktree-chat/search.ts`. A search of every chat would have been a walk
+ * of every transcript on disk per keystroke, and a channel to carry it.
+ */
+
+/**
  * What one read-only turn came back with — see `draftCommitMessage` and
  * `main/one-turn-agent.ts`.
  *
@@ -2522,6 +2572,16 @@ export type DesktopApi = {
     seed?: ChatSeed
   ) => Promise<WorktreeChat>
   readWorktreeChat: (id: string) => Promise<AssistantMessage[]>
+  /**
+   * Every chat folded to what it did — see `ChatDigest`.
+   *
+   * All of them in one call rather than one chat at a time, because both callers
+   * want the set: the `Changes` list asks which chat touched which file in *this*
+   * project, and the system bar sums what the workspace has spent. Main holds the
+   * lines of any chat that has been read or is running this run, so the usual
+   * answer costs no disk at all.
+   */
+  chatDigests: () => Promise<ChatDigest[]>
   deleteWorktreeChat: (id: string) => Promise<void>
   /**
    * Empties a chat and closes the CLI behind it — the composer's `/clear`.
@@ -2959,6 +3019,7 @@ export const IPC = {
   listWorktreeChats: "worktree-chats:list",
   createWorktreeChat: "worktree-chats:create",
   readWorktreeChat: "worktree-chats:read",
+  chatDigests: "worktree-chats:digests",
   deleteWorktreeChat: "worktree-chats:delete",
   clearWorktreeChat: "worktree-chats:clear",
   renameWorktreeChat: "worktree-chats:rename",

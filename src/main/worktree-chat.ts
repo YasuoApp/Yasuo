@@ -5,9 +5,11 @@ import { basename, dirname, join } from "node:path"
 
 import {
   chatOptions,
+  chatRootId,
   type AssistantMessage,
   type ChatAskOption,
   type ChatAskQuestion,
+  type ChatDigest,
   type ChatEffort,
   type ChatPermission,
   type ChatPlace,
@@ -19,6 +21,7 @@ import {
   type WorktreeChatEvent,
   type WorktreeChatOptions,
 } from "../shared/api"
+import { digestOf } from "./chat-digest"
 import {
   AGENT_TOOLS,
   collapse,
@@ -423,6 +426,21 @@ export class WorktreeChats {
   private readonly messages = new Map<string, AssistantMessage[]>()
 
   /**
+   * What `digests` folded out of a chat nobody has open, against the
+   * `updatedAt` it was folded from.
+   *
+   * The fold and not the lines, which is the point of it: this is asked for
+   * every chat in the workspace whenever the `Changes` list re-reads, and
+   * caching the transcripts instead would hold every conversation ever had in
+   * memory to save re-reading a file. A record whose `at` no longer matches the
+   * listing is simply folded again.
+   */
+  private readonly digested = new Map<
+    string,
+    { at: string; digest: ChatDigest }
+  >()
+
+  /**
    * Questions a turn has stopped on, keyed by ask id.
    *
    * By ask rather than by chat, even though a chat has one at a time: an answer
@@ -506,6 +524,52 @@ export class WorktreeChats {
   }
 
   /**
+   * Every chat folded to what it did — see `ChatDigest` and `chat-digest.ts`.
+   *
+   * **Deliberately not `read`.** That one keeps a chat's whole transcript in
+   * memory for the rest of the run, which is the right bargain for a chat
+   * somebody is switching between and the wrong one for a fold over *every*
+   * chat in the workspace: it would end with every conversation ever had
+   * resident, to answer a question whose answer is two numbers and a list of
+   * paths. So a chat nobody has open is read, folded and dropped, and what is
+   * kept is the fold.
+   *
+   * Three sources, in the order they cost: the lines already in memory for a
+   * chat that is open or running, which is the live case and touches no disk;
+   * the digest cached against the `updatedAt` it was folded from, which is what
+   * makes the second call on the same tick free; and the file. `updatedAt`
+   * moves on every appended line (`append`), so a running chat cannot be served
+   * a stale fold from the cache — and it never reaches the cache anyway,
+   * because its lines are in memory.
+   */
+  async digests(): Promise<ChatDigest[]> {
+    const chats = await this.source.chats()
+
+    const digests: ChatDigest[] = []
+    for (const chat of chats) {
+      const place = { id: chat.id, folderId: chatRootId(chat) }
+
+      const held = this.messages.get(chat.id)
+      if (held) {
+        digests.push(digestOf(place, held))
+        continue
+      }
+
+      const cached = this.digested.get(chat.id)
+      if (cached && cached.at === chat.updatedAt) {
+        digests.push(cached.digest)
+        continue
+      }
+
+      const digest = digestOf(place, await this.source.readChat(chat.id))
+      this.digested.set(chat.id, { at: chat.updatedAt, digest })
+      digests.push(digest)
+    }
+
+    return digests
+  }
+
+  /**
    * Empties a chat and closes the CLI behind it — the composer's `/clear`.
    *
    * **The session goes with the lines, and that is the whole point.** A chat's
@@ -556,6 +620,7 @@ export class WorktreeChats {
     live?.session?.close()
 
     this.messages.delete(id)
+    this.digested.delete(id)
     this.startedIn.delete(id)
     this.autoTitled.delete(id)
 

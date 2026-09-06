@@ -4,6 +4,9 @@ import { create } from "zustand"
  * clicking that file's row in the Changes list would. One direction only: that
  * store knows nothing about a comment. */
 import { useChanges } from "./changes"
+/* Only to say where a comment is in words somebody recognises — `src/main/git.ts`
+ * rather than forty characters of checkout before the name. */
+import { relativeTo } from "./paths"
 
 /*
  * The record's own types live in the contract rather than here, because a review
@@ -56,8 +59,10 @@ import type {
  * disk, on three legs: a review was *for* the chat at the end of it, anything
  * worth keeping was in that chat, and a comment read back a week later would
  * point at line numbers that had since moved. The first two went with the
- * `Ask AI to fix…` button — there is no chat at the end any more, so there was
- * nothing keeping it, and a reviewer who closed the window lost the afternoon.
+ * `Ask AI to fix…` button — a reviewer who closed the window lost the afternoon.
+ * `commentsPrompt` at the foot of this file is that button back, asked for by
+ * name; what it does **not** bring back is the idea that a comment's home is a
+ * chat. The threads stay here, and handing them over is a copy of them.
  *
  * The third leg was the real one, and it is answered rather than ignored: a
  * thread is addressed by the **lines it quoted**, not by its numbers. `settle`
@@ -778,4 +783,67 @@ export function snippetOf(
     ...lines.slice(0, limit),
     `… ${lines.length - limit} more line${lines.length - limit === 1 ? "" : "s"}`,
   ].join("\n")
+}
+
+/**
+ * A pile of comments as the message that hands them over — the `Comments` tab's
+ * `Send to a chat`.
+ *
+ * **This was deleted and is back because it was asked for.** `Ask AI to fix…`
+ * opened a chat with every remark written into its composer, and what it got
+ * wrong was deciding that a comment's *destination* is a chat; the note left
+ * where it went (`docs/design.md` § Comments) said it was a `⌘A` and a copy away
+ * from returning, and until somebody wanted it there was no button whose only
+ * purpose was to move remarks out of the pane they belong in. Somebody wanted
+ * it. What is different this time is where the remarks stay: they are a record
+ * on disk, this is a **copy** of them, and nothing here resolves, moves or
+ * deletes a thread. Sending twice is allowed and means what it says.
+ *
+ * It produces **text for a composer**, unsent — which is the other half of the
+ * old argument and still holds. A prompt assembled by a button is exactly the
+ * kind that wants a sentence added before it goes, and a turn nobody typed into
+ * is a turn nobody asked for.
+ *
+ * **Open threads only.** A resolved conversation is one somebody has already
+ * dealt with, and the pile is a list of things to do.
+ *
+ * Each remark carries where it is, the lines it quoted and what was said,
+ * because those are the three things that would otherwise be retyped by hand —
+ * which is the tedium this whole feature exists to remove. The quoted lines are
+ * the thread's own snippet rather than the file as it reads now: that is what
+ * the reviewer was looking at, and it is already capped (`SNIPPET_LIMIT`).
+ */
+export function commentsPrompt(
+  threads: ReviewThread[],
+  rootPath: string
+): string {
+  const open = openThreads(threads)
+  if (open.length === 0) return ""
+
+  const blocks = open.map((thread, at) => {
+    const where = `${relativeTo(rootPath, thread.path) || thread.path}:${anchorLabel(thread.anchor)}`
+    const quoted = thread.snippet.new ?? thread.snippet.old
+    const said = thread.notes.map((note) => note.body.trim()).filter(Boolean)
+
+    return [
+      `${at + 1}. ${where}${isDeletedOnly(thread.anchor) ? " (lines this change deleted)" : ""}`,
+      // Unlabelled: what a fence holds is code, and the line above says which
+      // file it came out of.
+      ...(quoted ? ["", "```", quoted, "```"] : []),
+      "",
+      // The whole thread, oldest first, because a reply is usually where the
+      // remark got specific. Run together as one paragraph per note rather than
+      // marked up as a conversation: with one voice there is nothing to
+      // attribute — see the note on `ReviewNote`.
+      ...said,
+    ].join("\n")
+  })
+
+  return [
+    `I have left ${open.length} ${open.length === 1 ? "comment" : "comments"} on the current diff of this project. Each one names the file and lines it is about, quotes the lines as they read when it was written, and then says what I meant.`,
+    "",
+    ...blocks.flatMap((block) => [block, ""]),
+  ]
+    .join("\n")
+    .trimEnd()
 }

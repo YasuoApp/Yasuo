@@ -326,6 +326,30 @@
   }
 
   /*
+   * `⌘F` in a chat, painted over the words themselves — see
+   * `lib/worktree-chat/find-marks.ts` for why the marks are ranges in the
+   * highlight registry rather than `<mark>` elements in the transcript.
+   *
+   * Here beside `::selection` because it is the same kind of thing: a painted
+   * run of text that belongs to no element, and so has nowhere else to be
+   * styled. Two registrations and two colours — every match in the amber every
+   * editor uses for a search result, and the one the arrows are on filled in
+   * properly, which is the only thing that says which of nine yellow words `4 of
+   * 9` is about.
+   *
+   * A `color` is set on the current one and not on the others: at 30% the text
+   * underneath still reads as itself, and at full strength it does not.
+   */
+  ::highlight(chat-find) {
+    background-color: color-mix(in oklch, var(--warning) 30%, transparent);
+  }
+
+  ::highlight(chat-find-current) {
+    background-color: var(--warning);
+    color: var(--warning-foreground);
+  }
+
+  /*
    * Scrollbars, which are the last piece of platform chrome in a window that
    * draws everything else itself — a 15px light-grey track down the side of a
    * dark panel is the single loudest thing left. Overlay-thin, no track, no

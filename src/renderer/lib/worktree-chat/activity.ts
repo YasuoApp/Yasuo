@@ -141,6 +141,27 @@ export function blocksOf(messages: AssistantMessage[]): ChatBlock[] {
   return blocks
 }
 
+/**
+ * Which block a line is drawn in, or null if the transcript has no such line.
+ *
+ * For the one caller that has a **line** id and needs the thing on screen: a
+ * chat opened from a search of what was said in it (`searchChats`) has to land
+ * somewhere, and the sentence it matched is not always a row — a message the
+ * model wrote mid-turn is folded into that turn's working, and only the last
+ * word of a turn stays out (see `blocksOf`). So the answer is the fold rather
+ * than nothing: it is where the line is, and opening it is one click.
+ */
+export function blockOf(blocks: ChatBlock[], lineId: string): string | null {
+  for (const block of blocks) {
+    if (block.kind === "line") {
+      if (block.line.id === lineId) return block.id
+      continue
+    }
+    if (block.lines.some((line) => line.id === lineId)) return block.id
+  }
+  return null
+}
+
 /** One row of an *open* fold: a run of tool calls that folds again, or a line
  * drawn as itself. */
 export type ActivityRow =

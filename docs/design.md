@@ -1067,6 +1067,44 @@ tested (`test/chat-running.ts`) for the one rule in it: a chat with a question u
 must be counted once, not in both columns, or a project of three chats reads as
 five things happening.
 
+### A message sent mid-turn says that it is waiting
+
+A chat holds its CLI open, so Enter while a turn is running is not refused: the
+message goes into the same process and the CLI folds it into the **next** turn,
+which is what the interactive `claude` does with a line typed mid-answer. That is
+the right behaviour and it had one thing missing — the line appears in the
+transcript immediately, under an answer that is not being written for it, and is
+from that moment indistinguishable from the message the running turn is about.
+Which is precisely the thing somebody wants to know before typing a third.
+
+So a user line sent into a chat that was **already working** is drawn with
+`Queued behind the turn above` under it. Four notes on that, and each is the
+reason it is not something bigger:
+
+- **The renderer already knows.** `send` sees `sending` — which is main's own
+  `busy` event, not a guess — and the optimistic line it writes is the only copy
+  on screen. So this is a mark on a line id in the store (`queued`), not a field
+  on `AssistantMessage`, not an event, and not a channel. Nothing on disk changes.
+- **It is this run's, like `unread` and `sending`.** What makes a line queued is
+  a process in the main process; a reload has neither the process nor the claim,
+  and a mark restored from a file would be a promise about a queue that no longer
+  exists.
+- **The edge that clears it is the end of a turn** (`done`), because that is the
+  moment the CLI folds its queue into the next one. All of them at once, since
+  the fold takes everything waiting rather than the oldest — which is also why
+  the mark says `Queued` rather than counting a position in a line that does not
+  exist. A turn that ended in an error clears them too: what was behind it is not
+  still waiting, and the line under it is about to say what happened.
+- **It is a mark, not a cancel.** Holding the messages in main until the turn
+  ended would make them cancellable and would also take away the thing the queue
+  is for — the CLI reading them as part of the next turn. That is a trade to make
+  deliberately if somebody asks; this is the half that costs nothing.
+
+Under the bubble rather than in it, in the margin the bubble already leaves: what
+it says is not part of the message but what is happening to it, and a line that
+changed shape when the turn ahead of it ended would move the transcript under the
+reader.
+
 ### Unread
 
 The three marks above all say what is happening **now**, and they all go dark at
@@ -2681,6 +2719,123 @@ What the palette lists otherwise is what the panels list, read from their stores
 rather than from an index — the chats and one board per project, both of which
 the studio already holds.
 
+### Finding a line in the chat on screen
+
+**`⌘F`, and it is a bar in the pane rather than anything in this palette.** `⌘P`
+is _go to_ — a file, a chat, a board, anywhere in the workspace — and it takes
+the screen because what it finds may be anywhere. `⌘F` is _find in this_, and
+what it finds is on the page behind it: a dialog would cover the one thing that
+has to stay readable while the arrows walk it. So the chat pane grows the bar
+every editor has, hanging over the top-right corner of the transcript —
+`components/studio/worktree/chat-find.tsx`, with `lib/worktree-chat/search.ts`
+underneath it (`test/chat-search.ts`).
+
+It went the other way first, and the correction is the point: the same search was
+a **group in the palette**, `In this chat`, one row per matching line with the
+key opening the dialog already on that tab. It worked and it was the wrong shape
+twice — the results were a list of quoted snippets _over_ the conversation those
+snippets are in, and cmdk wanted to sort them by relevance when the only order
+they have is the order they were said. Deleted rather than kept beside this: the
+group, `PaletteState.tab`, `openAt`, and the store's `focus` / `reveal` that the
+rows landed through.
+
+**The bar carries what the count and the arrows need and nothing else.** An
+input, `3 of 12`, `↑` `↓`, `✕`. No `Aa`, no whole-word, no `.*`: the match is the
+query **as typed** — one literal run of text, case ignored, spaces and all —
+which is what `⌘F` means in every editor, and three toggles nobody presses would
+be three controls in the way of the count everybody reads. `Enter` and `⇧Enter`
+step, `Escape` closes, and a second `⌘F` puts the caret back in the field and
+selects what is there (`opened` counts the presses, since a boolean cannot say
+"again").
+
+The matching went the other way first and it was wrong: the query was **split on
+spaces** and a line counted if it carried every word somewhere, which is right
+for a palette full of half-remembered names and useless in a find bar. It cannot
+say where a match _is_, so it can neither count nor step; and highlighting
+`migration` for a query of `schema migration` is a bar disagreeing with itself.
+
+**The words themselves are painted, in the amber every editor uses**, and the one
+the arrows are on is filled in properly. That is the whole reason this is a bar
+and not a dialog: the results _are_ the conversation, marked where they sit.
+
+It is done through the **CSS Custom Highlight API**
+(`lib/worktree-chat/find-marks.ts`, styled beside `::selection` in
+`globals.css`), and that API is what makes it possible at all. A message is
+rendered markdown — headings, links, code blocks, mentions — so marking a run of
+characters the ordinary way means splitting text nodes and wrapping them in
+`<mark>`: through React that is either re-rendering somebody's code block around
+a span, or mutating a tree React owns and will overwrite on the next line that
+lands. `CSS.highlights` takes `Range`s and paints them, touching no DOM at all.
+Which is also why the repaint hangs off a `MutationObserver` as well as off the
+search: the transcript moves for reasons the pane never hears about — a fold
+opened by hand, an image finishing, a line arriving mid-turn — and a repaint that
+touches nothing cannot be what triggers the next one.
+
+**`n of m` counts occurrences, and so does everything else.** This was messages
+for a version — a word said twice in one message and once in the next counted as
+`2` with three marks on screen under it, which is a count arguing with what it
+has just painted. So a match is an occurrence: `ChatHit` is a message id and
+_which_ occurrence within it, the arrows walk them one at a time, and the current
+one is the only range in the second colour.
+
+The count is read off the **message's own text**, not off the rendered DOM, and
+that is what lets a match inside a collapsed fold be counted at all — the fold
+has no text on screen for the painter to find. The painter lines its ranges up
+with the count by position: the `nth` occurrence in the model is the `nth` in the
+rendering. The two can only come apart where markdown _syntax_ is what matched (a
+query of `*` against `**bold**`), which paints one mark short rather than the
+wrong one.
+
+One more thing follows from painting text rather than boxing messages:
+
+- **The ring survives for exactly one case: a fold.** A turn's working is
+  collapsed, so a message the model wrote mid-turn has no text on screen to
+  paint — and a match that is counted, scrolled to and then invisible is worse
+  than one that was never counted. So a fold holding a match says so, and says it
+  harder when it is the one the arrows are on. An open fold gets both, which is
+  the honest answer for a container: the ring is where, the highlight is what.
+
+A term split across two text nodes — a word with `*emphasis*` inside it — is not
+painted. The node walk is what keeps this independent of how a message is
+rendered, and reaching across nodes would mean rebuilding the flattened text of
+every block on every keystroke for a case nobody writes.
+
+What is searched is **what was said, and nothing else**: the two voices, and not
+a tool's summary, which is a path or a command the conversation is _about_, nor a
+thinking line, which is the model talking to itself. The palette already finds
+files, so a path typed here should not turn up the forty tool calls that read it.
+The answer is in transcript order — `3 of 12` has to mean the third one down the
+page — and it is uncapped, because a count that stopped at forty in a chat with
+two hundred is a number the arrows would then walk into.
+
+**It scrolls to the match itself**, through the same range the highlight is
+painted on (`rectOfHit`) — not to the top of the message holding it, which in a
+long reply is the wrong screen. Where there is no range to land on the block is
+the fallback, and that is again the collapsed fold: a message the model wrote
+mid-turn is inside one (`blockOf` in `lib/worktree-chat/activity.ts`, tested), so
+the fold is what is ringed and landed on, one click from being read rather than
+nowhere. The scroll goes through the same `restore` machinery a switched-to chat
+uses, because the transcript settles over several frames and a single
+`scrollIntoView` lands on whatever height existed at that instant.
+
+Two rules that keep it from following somebody around. The find state **carries
+the chat it is about** and is read back through it, because this pane is one
+instance reused across the strip: a search left open in one chat would otherwise
+count matches in the next one somebody clicked. And the key is claimed **only
+while the chat pane is the one showing** — the panes are stacked and hidden with
+`invisible` rather than unmounted, so this component is alive and listening while
+somebody reads a diff, and in a diff, a file or the block editor `⌘F` already
+belongs to CodeMirror's own search panel over the text it is about. That is the
+right answer there and not one this bar could give.
+
+There is no channel behind any of it. The lines of the chat on screen are already
+in the renderer's store — `select` read them once — so the whole feature is a
+pass over an array. A search of **every** chat was built before this and deleted
+with the palette group: it needed a channel, a walk of every transcript on disk
+behind a debounce, and a cap, and what it bought was finding a conversation whose
+title you had forgotten by a sentence inside it. `main/chat-digest.ts` is what is
+left of it, folding only what the `Changes` filter and the spend figure need.
+
 **Nothing it lists can fail any more.** Opening a row is a read or a `select`,
 so `open` resolves to nothing and the palette's only line under the input is the
 `Opening …` one, shown after 150ms so the usual case never flashes it. The
@@ -2690,11 +2845,13 @@ the pane, and so is the channel.
 
 ## The window shortcuts
 
-`⌘P` opens the search above, `⌘W` closes the tab the pane is showing, `⌘S` writes
-the Explorer's open file, `⌘B` shows or hides the sidebar and `⌃\`` shows or hides
-the dock's Terminal — each answered by a `keydown`listener in the renderer
-rather than by an accelerator in the application menu.`lib/shortcuts.ts` holds
-the predicates.
+`⌘P` opens the search above, `⌘F` opens the chat pane's own find bar (§ Finding a
+line in the chat on screen — the one of these that is conditional, since inside
+an editor that key is the editor's), `⌘W` closes the tab the pane is showing,
+`⌘S` writes the Explorer's open file, `⌘B` shows or hides the sidebar and
+`⌃\`` shows or hides the dock's Terminal — each answered by a `keydown`listener
+in the renderer rather than by an accelerator in the application
+menu.`lib/shortcuts.ts` holds the predicates.
 
 They are the page's rather than the menu's because a registered accelerator is
 handled in the main process, before the page sees the key at all, and each of
@@ -3854,6 +4011,60 @@ repository. Nothing is optimistic: what a `git add` did to a `MM` file is git's
 answer to give, so all three writes end by re-reading the list, the tree's
 colours and the listings the paths were in.
 
+#### Whose work this is
+
+**Several chats answering at once in one project is the point of this app, and
+this list is where the cost of it lands.** `git status` belongs to the project,
+not to a conversation, so three turns' work arrives as one pile with nothing on
+it saying which chat left which file — and the two sentences somebody says while
+reading it (keep this, throw that away) are exactly the ones that need to know.
+
+So there is a row of chips over the piles: `All`, then one per chat, each with
+how many of the rows on this list it wrote. Picking one narrows the tree to that
+chat's own writes.
+
+**What a chat is shown to have written comes out of its transcript** — the
+`file_path` of every `Write` / `Edit` / `MultiEdit` / `NotebookEdit` that did not
+come back an error, folded by `main/chat-digest.ts` and read here through
+`ChatDigest.paths`. Nothing new is recorded to make this work: the tool line
+already carried the path, because the row draws it as a chip. A refused or failed
+edit is dropped — it changed nothing, and a file listed under a chat that could
+not write to it points the filter at the wrong conversation — while a call still
+in flight is kept, since it is about to land and the list re-reads when it does.
+
+**It narrows the list and never divides it.** A file rewritten by a `Bash` line —
+`sed -i`, a formatter, a build, `git checkout` — leaves nothing in the transcript
+saying so, so `All` is not "the rest of them" and the counts are not expected to
+add up to it. That ceiling is the reason this is a filter rather than a column of
+attribution on every row: a row that named an author would be wrong silently,
+where a chip that omits a file is only ever incomplete.
+
+**Drawn only when more than one chat is in the list.** With one, or none, the
+answer is already on the screen, and a control offering to narrow a list to the
+whole of itself is a control explaining a situation nobody is in — the same rule
+`Ungrouped` follows in the left column. The held chat id is read back through the
+chips rather than reset by an effect, so switching to another project simply has
+no such chip and the list is not narrowed; the palette's tab row heals itself the
+same way.
+
+**Everything in the panel then acts on what is shown**, and the piles are split
+_after_ the filter for exactly that reason. A list narrowed to one chat with a
+`Stage everything` that also staged another chat's files would be a control lying
+about the rows above it. So the headings' buttons and the menu's three
+whole-checkout items say `shown` while a filter is up, and the discard is handed
+a target of those paths rather than `"all"` — `discardAll` is git throwing away
+the checkout, which is not what a narrowed list is asking for. The commit box is
+the one thing above the filter and outside it: what is staged is staged whether
+or not it is being drawn.
+
+The list is re-read off the same signal the changes are (`useWatchChanges`), so a
+chip's count tracks a turn as it writes without a second set of timers over the
+same watcher events. `touchesIn` and `keptBy` in
+`lib/worktree-chat/digests.ts` are the pure halves, with `pathsTouched` on the
+main side; `test/chat-digest.ts` checks both, including the one shape that is not
+an equality — a wholly untracked **directory** is one row in `git status` and
+what the chat named is the files inside it.
+
 ### Committing
 
 **The rule above said a commit is a sentence somebody writes, and that is still
@@ -4098,6 +4309,43 @@ handing the whole pile over in one go — and what it did wrong was decide that 
 comment's _destination_ is a chat. It is a `⌘A` and a copy away from being back,
 and until somebody asks for it there is no button whose only purpose is to move
 remarks out of the pane they belong in.
+
+#### Handing the pile over, which was asked for
+
+**Somebody asked for it, so it is back** — one row at the head of the `Comments`
+tab, `Send N comments to a new chat`, over `commentsPrompt` in
+`lib/files/review.ts`. The sentence above is the standing test and this is what
+passing it looks like; what is deliberately _not_ back is the claim it was
+deleted for. The remarks stay where they are: a thread is a record on disk, this
+is a **copy** of it, and pressing the button resolves nothing, moves nothing and
+deletes nothing. Pressing it twice sends them twice, which is what it says.
+
+Three decisions in it, each one the thing the old version got argued about.
+
+**Unsent.** The message lands in the composer and the last word is the reader's.
+A prompt assembled by a button is exactly the kind that wants a sentence added
+before it goes, and a turn nobody typed is a turn nobody asked for — the rule at
+the top of `one-turn-agent.ts`, which this does not bend, because the turn here
+is the ordinary one somebody presses Send on.
+
+**A new chat, not one of the project's existing ones.** This is a constraint
+before it is a preference: the composer is uncontrolled and keyed by chat (see
+`initialDraft`), so writing into a conversation already on screen means
+remounting its field, which throws away whatever was half-typed in it. A new tab
+has no field to lose. It is also usually the right shape — a fix-up pass reads
+better as its own conversation — and the `⌘A` that was the whole argument for
+deleting this is still there for the times it is not.
+
+**Only the open ones**, which is why the count on the button can differ from the
+count on the tab. That list is everything ever said; this is a list of things to
+do, and a settled conversation is not one.
+
+Each remark carries the three things that would otherwise be retyped by hand —
+which file, which lines, and what was said, replies included — because that
+retyping is the whole tedium the feature exists to remove. The quoted lines are
+the thread's **own snippet** rather than the file as it reads now: that is what
+the reviewer was looking at, and it is already capped (`SNIPPET_LIMIT`), so eight
+comments are still one prompt. Checked in `test/comments.ts`.
 
 #### Where they are drawn
 
@@ -5202,6 +5450,35 @@ Two figures are easy to get wrong and are worth stating:
 The app's share is every process Electron runs, added up. The dock's shells are
 not in it: a pty is a child of the daemon, and counting it would make the studio
 look responsible for work the user started deliberately.
+
+### What the chats have cost
+
+One more figure at that end of the row, beside the app's own: what every chat in
+the workspace has been billed, added up from the turns' own usage lines
+(`spentIn` over `ChatDigest`). It is here because it is the same question the
+meters answer — what is this costing — asked of the other resource the studio
+spends, and because there was nowhere else for it: a total belongs to the
+**workspace**, and every panel in this window is about one project. A chat's own
+total is still on its composer, where the conversation it is about is.
+
+**Since the beginning, not today**, and that is a decision rather than a
+shortcut. A usage line carries what a turn cost and not when it ran (see
+`TurnUsage`), so "today" could only be worked out from a chat's `updatedAt` — the
+time of its _last_ line, which for a conversation resumed this morning would book
+last week's turns as today's. A figure that is honest and coarse beats one that
+is precise about the wrong thing. The breakdown per project is on the tooltip,
+where there is width for it, along with the count of turns that reported **no**
+cost: those are kept out of the sum and named, because a turn that crashed before
+it had a figure is not a free turn.
+
+It is drawn only once there is something to say. A `$0.00` in the corner of a
+fresh workspace is a claim, and "nothing has been spent" and "nothing has been
+read yet" are two different states.
+
+Nothing polls for it. The fold is re-read when the chat listing moves — which is
+what the end of a turn does — and again off the `Changes` list's own watcher,
+which needs the same call for its chat filter. Both are `chatDigests`, and
+neither is a timer.
 
 ## Updating
 

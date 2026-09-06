@@ -9,7 +9,7 @@ import {
   Undo2,
 } from "lucide-react"
 
-import type { GitChange } from "@shared/api"
+import type { GitChange, WorktreeChat } from "@shared/api"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -41,6 +41,8 @@ import { openThreads, threadsOf, useReview } from "@/lib/files/review"
 import { useFiles } from "@/lib/files/store"
 import { useStudio } from "@/lib/store"
 import { cn } from "@/lib/utils"
+import { keptBy, touchesIn, useDigests } from "@/lib/worktree-chat/digests"
+import { useWorktreeChats } from "@/lib/worktree-chat/store"
 import { FileIcon } from "../file-icon"
 import { SideRow } from "../side-row"
 import { CommitBox } from "./commit-box"
@@ -119,6 +121,19 @@ export function ChangesList({ root }: { root: FileRoot }) {
   const [target, setTarget] = useState<RowTarget | null>(null)
   const [discarding, setDiscarding] = useState<RowTarget | "all" | null>(null)
 
+  /*
+   * Which chat's work the list is narrowed to, if any — see `ChatFilter`.
+   *
+   * Held as an id and read back through the chats that actually touched
+   * something (`active` below) rather than reset by an effect: switching to
+   * another project draws another project's chips, and an id that is not among
+   * them is simply not a filter — the same self-healing the palette's tab row
+   * does. So a project's list never opens narrowed to a chat in a different one.
+   */
+  const [byChat, setByChat] = useState<string | null>(null)
+  const digests = useDigests((state) => state.digests)
+  const chatTitles = useWorktreeChats((state) => state.chats)
+
   /** Both piles start folded, so a checkout arrives as two counts rather than as
    * however many rows a turn happened to touch. The headings keep their own
    * actions while folded — `Stage all` is the one thing somebody wants without
@@ -146,7 +161,47 @@ export function ChangesList({ root }: { root: FileRoot }) {
     return <Note>Nothing has changed in this checkout.</Note>
   }
 
-  const { staged, unstaged } = splitChanges(changes)
+  /*
+   * The chats that wrote some of what is on this list, and the one being read.
+   *
+   * `touches` is computed against the changes rather than off the transcripts,
+   * so a chat whose files have all been committed is not offered — see
+   * `touchesIn`. `active` is the held id only while it is still one of them.
+   */
+  const touches = touchesIn(digests, root.id, changes)
+  const active = touches.some((touch) => touch.chatId === byChat)
+    ? byChat
+    : null
+  const filtered = active
+    ? keptBy(
+        changes,
+        digests.find((digest) => digest.chatId === active)?.paths ?? []
+      )
+    : changes
+
+  const activeTitle =
+    chatTitles.find((chat) => chat.id === active)?.title ?? "that chat"
+
+  /*
+   * Everything below acts on what is **shown**, which is the whole reason the
+   * split happens after the filter: a list narrowed to one chat with a
+   * `Stage everything` that staged another chat's files as well would be a
+   * control lying about the rows above it. The labels say `shown` while a
+   * filter is up, and `DiscardDialog` is handed a target rather than `"all"` —
+   * `discardAll` is `git` throwing away the checkout, which is not what a
+   * filtered list is asking for.
+   */
+  const { staged, unstaged } = splitChanges(filtered)
+  const shownOnly = active !== null
+  const discardShown: RowTarget | "all" = shownOnly
+    ? {
+        label: activeTitle,
+        paths: unstaged.map((change) => change.path),
+        staged: false,
+        path: null,
+        chat: true,
+      }
+    : "all"
 
   const nodes = (pile: string, rows: GitChange[]) => (
     <ul>
@@ -205,6 +260,16 @@ export function ChangesList({ root }: { root: FileRoot }) {
             `CommitBox`. */}
         {staged.length > 0 && <CommitBox root={root} />}
 
+        {/* Under the commit box and over the piles, which is where it acts:
+            what a filter narrows is the rows, and the message above them is
+            about everything staged whether it is drawn or not. */}
+        <ChatFilter
+          touches={touches}
+          chats={chatTitles}
+          active={active}
+          onPick={setByChat}
+        />
+
         {staged.length > 0 && (
           <>
             <Heading
@@ -216,7 +281,9 @@ export function ChangesList({ root }: { root: FileRoot }) {
               }
             >
               <RowAction
-                label="Unstage everything"
+                label={
+                  shownOnly ? "Unstage everything shown" : "Unstage everything"
+                }
                 onClick={() => {
                   void useChanges.getState().unstage(
                     root,
@@ -242,13 +309,19 @@ export function ChangesList({ root }: { root: FileRoot }) {
               }
             >
               <RowAction
-                label="Discard every change in this checkout"
-                onClick={() => setDiscarding("all")}
+                label={
+                  shownOnly
+                    ? "Discard every change shown"
+                    : "Discard every change in this checkout"
+                }
+                onClick={() => setDiscarding(discardShown)}
               >
                 <Undo2 />
               </RowAction>
               <RowAction
-                label="Stage everything"
+                label={
+                  shownOnly ? "Stage everything shown" : "Stage everything"
+                }
                 onClick={() => {
                   void useChanges.getState().stage(
                     root,
@@ -315,7 +388,10 @@ export function ChangesList({ root }: { root: FileRoot }) {
 
         {/* The whole checkout, and reachable from a row's menu as well: a list
             long enough for `Discard all` to be worth wanting is one with no
-            empty space left to right-click. */}
+            empty space left to right-click. Narrowed to a chat, these are about
+            what is drawn — the same rule the headings' buttons follow, and the
+            reason all three read the piles after the filter rather than
+            before. */}
         <ContextMenuItem
           disabled={unstaged.length === 0}
           onClick={() => {
@@ -326,7 +402,7 @@ export function ChangesList({ root }: { root: FileRoot }) {
           }}
         >
           <Plus />
-          Stage all
+          {shownOnly ? "Stage all shown" : "Stage all"}
         </ContextMenuItem>
         <ContextMenuItem
           disabled={staged.length === 0}
@@ -338,14 +414,14 @@ export function ChangesList({ root }: { root: FileRoot }) {
           }}
         >
           <Minus />
-          Unstage all
+          {shownOnly ? "Unstage all shown" : "Unstage all"}
         </ContextMenuItem>
         <ContextMenuItem
           variant="destructive"
-          onClick={() => setDiscarding("all")}
+          onClick={() => setDiscarding(discardShown)}
         >
           <Undo2 />
-          Discard all changes…
+          {shownOnly ? "Discard all shown…" : "Discard all changes…"}
         </ContextMenuItem>
       </ContextMenuContent>
 
@@ -373,6 +449,17 @@ type RowTarget = {
   paths: string[]
   staged: boolean
   path: string | null
+  /**
+   * Set when the label is a **chat** rather than a path: the discard of a list
+   * narrowed by `ChatFilter`, which is a pile of files scattered through the
+   * checkout and not a folder.
+   *
+   * Only the dialog reads it, and only for its wording — every other caller
+   * takes the paths and asks no questions. Without it the sentence somebody
+   * confirms says "every changed file in this folder", which is the one thing
+   * this target is not.
+   */
+  chat?: true
 }
 
 /** One level of the tree. Recursive, and deliberately not flattened first: the
@@ -568,16 +655,23 @@ function DiscardDialog({
           <AlertDialogTitle>
             {all
               ? `Discard every change in ${root.label}?`
-              : one
-                ? `Discard changes to “${row?.label}”?`
-                : `Discard ${row?.paths.length} changes in “${row?.label}”?`}
+              : row?.chat
+                ? `Discard the ${row.paths.length} ${row.paths.length === 1 ? "change" : "changes"} written by “${row.label}”?`
+                : one
+                  ? `Discard changes to “${row?.label}”?`
+                  : `Discard ${row?.paths.length} changes in “${row?.label}”?`}
           </AlertDialogTitle>
           <AlertDialogDescription>
             {all
               ? `All ${count} changed ${count === 1 ? "file" : "files"} go back to the last commit. Files that were never committed are moved to the trash. Nothing staged is kept.`
-              : one
-                ? "The file goes back to the last commit — the staged copy and the edits on disk both. A file that was never committed is moved to the trash instead, since there is nothing to go back to."
-                : "Every changed file in this folder goes back to the last commit — the staged copies and the edits on disk both. Files that were never committed are moved to the trash instead, since there is nothing to go back to."}
+              : row?.chat
+                ? // The list is narrowed, so what is going is what is drawn —
+                  // and the sentence says which files those are rather than
+                  // naming a folder they are not all in.
+                  "The files shown go back to the last commit — the staged copies and the edits on disk both. Files that were never committed are moved to the trash instead. Anything this chat did not write is left alone."
+                : one
+                  ? "The file goes back to the last commit — the staged copy and the edits on disk both. A file that was never committed is moved to the trash instead, since there is nothing to go back to."
+                  : "Every changed file in this folder goes back to the last commit — the staged copies and the edits on disk both. Files that were never committed are moved to the trash instead, since there is nothing to go back to."}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -934,6 +1028,102 @@ function Heading({
         {children}
       </span>
     </div>
+  )
+}
+
+/**
+ * Which chat wrote what, as a row of chips over the piles.
+ *
+ * **The question this answers is the one this whole app creates.** Several chats
+ * answering at once in one project is the point of the studio, and the cost of
+ * it lands here: `git status` is the project's, so three turns' work arrives as
+ * one list with nothing on it saying which conversation left which file. A chip
+ * narrows the list to one chat's own writes.
+ *
+ * **Drawn only when more than one chat is in the list**, which is the state it
+ * exists for. One chat, or none, and the answer is already on the screen: a
+ * control offering to narrow a list to the whole of itself is a control
+ * explaining a situation nobody is in — the same reason `Ungrouped` is drawn
+ * only when it holds something.
+ *
+ * What it cannot say is on `ChatDigest.paths`: a file a turn rewrote through
+ * `Bash` names no chat here, so this narrows the list and never divides it —
+ * `All` is not "the rest of them", it is everything, and the counts are not
+ * expected to add up to it.
+ */
+function ChatFilter({
+  touches,
+  chats,
+  active,
+  onPick,
+}: {
+  touches: { chatId: string; count: number }[]
+  chats: WorktreeChat[]
+  active: string | null
+  onPick: (chatId: string | null) => void
+}) {
+  if (touches.length < 2) return null
+
+  return (
+    <div
+      role="group"
+      aria-label="Narrow these changes to one chat"
+      className="no-scrollbar flex items-center gap-1 overflow-x-auto px-3 pt-2 pb-0.5"
+    >
+      <Chip active={active === null} onClick={() => onPick(null)}>
+        All
+      </Chip>
+      {touches.map((touch) => {
+        const title =
+          chats.find((chat) => chat.id === touch.chatId)?.title ?? "Untitled"
+        return (
+          <Chip
+            key={touch.chatId}
+            active={active === touch.chatId}
+            title={`${title} — wrote ${touch.count} of these files`}
+            // A second click on the chip that is already on clears the filter:
+            // the way out of a narrowed list is the row it was narrowed from,
+            // and `All` is across the row once there are four chats.
+            onClick={() =>
+              onPick(active === touch.chatId ? null : touch.chatId)
+            }
+          >
+            <MessageSquare aria-hidden className="size-3 shrink-0" />
+            <span className="max-w-28 truncate">{title}</span>
+            <span className="font-mono tabular-nums">{touch.count}</span>
+          </Chip>
+        )
+      })}
+    </div>
+  )
+}
+
+function Chip({
+  active,
+  title,
+  onClick,
+  children,
+}: {
+  active: boolean
+  title?: string
+  onClick: () => void
+  children: ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      aria-pressed={active}
+      onClick={onClick}
+      className={cn(
+        "flex h-5 shrink-0 items-center gap-1 rounded-md px-1.5 text-[0.65rem] transition-colors",
+        active
+          ? "bg-muted text-foreground"
+          : "text-muted-foreground hover:text-foreground"
+      )}
+    >
+      {children}
+    </button>
   )
 }
 

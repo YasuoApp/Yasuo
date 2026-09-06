@@ -11,6 +11,7 @@ import { check, finish, section } from "./harness"
 const {
   anchorLabel,
   commentedLines,
+  commentsPrompt,
   EMPTY_ANCHOR,
   isDeletedOnly,
   isEmptyAnchor,
@@ -523,6 +524,53 @@ async function main() {
     "a long range is cut with a line saying how much is missing",
     snippetOf(text, 1, 5, 2) === "one\ntwo\n… 3 more lines",
     "a prompt that stops mid-function reads as the reviewer having meant that much"
+  )
+
+  section("the pile handed to a chat")
+
+  /*
+   * `Send … to a new chat` — the button that was deleted and is back. What is
+   * checked is the three things that would otherwise be retyped by hand, since
+   * that tedium is the whole reason the feature exists: which file, which lines,
+   * and what was said. Plus the one rule that is not obvious from reading it —
+   * a settled conversation is not a thing to do.
+   */
+  const pile = [
+    thread(
+      "/repo/src/a.ts",
+      12,
+      14,
+      ["this leaks", "and the caller too"],
+      "const x = 1"
+    ),
+    { ...thread("/repo/src/b.ts", 3, 3, ["done with this"]), resolved: true },
+    thread("/repo/src/c.ts", 8, 8, ["wrong error path"]),
+  ]
+  const prompt = commentsPrompt(pile, "/repo")
+
+  check(
+    "only the open ones are counted",
+    prompt.startsWith("I have left 2 comments"),
+    prompt.slice(0, 60)
+  )
+  check("and only the open ones are in it", !prompt.includes("done with this"))
+  check(
+    "each says where it is, relative to the project",
+    prompt.includes("1. src/a.ts:12–14") && prompt.includes("2. src/c.ts:8"),
+    prompt
+  )
+  check(
+    "the lines it quoted come through fenced",
+    prompt.includes("```\nconst x = 1\n```"),
+    prompt
+  )
+  check(
+    "every note of a thread is said, not only the first",
+    prompt.includes("this leaks") && prompt.includes("and the caller too")
+  )
+  check(
+    "a review with nothing open is not a message",
+    commentsPrompt([{ ...pile[1]! }], "/repo") === ""
   )
 
   finish()
