@@ -11,7 +11,7 @@ import type {
   McpToolInfo,
 } from "../shared/api"
 import { claudeBinary } from "./claude-bin"
-import { environment, locate } from "./shell-env"
+import { locate, spawnEnvironment } from "./shell-env"
 
 const run = promisify(execFile)
 
@@ -147,7 +147,7 @@ export async function removeMcpServer(input: {
   try {
     await run(binary, args, {
       cwd: input.cwd ?? homedir(),
-      env: environment(),
+      env: await spawnEnvironment(),
       timeout: REMOVE_TIMEOUT_MS,
     })
   } catch (error) {
@@ -203,7 +203,7 @@ async function list(cwd: string): Promise<McpListing> {
     options: {
       cwd,
       pathToClaudeCodeExecutable: binary,
-      env: environment(),
+      env: await spawnEnvironment(),
       abortController: held,
     },
   })

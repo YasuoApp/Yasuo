@@ -143,6 +143,73 @@ export function withoutAgentSession<T extends NodeJS.ProcessEnv>(env: T): T {
   return env
 }
 
+/** Asked once per run: a login shell's startup is the expensive part, and the
+ * answer cannot change while the app is up. */
+let shellPathOnce: Promise<string | null> | null = null
+
+/**
+ * The PATH the user's own login shell exports, or null.
+ *
+ * The counterpart to `locate` above, and written against the same fact from the
+ * other side: `locate` finds `claude` through the user's shell, but the process
+ * spawned at that path is handed `process.env`, whose PATH from launchd is the
+ * bare `/usr/bin:/bin:/usr/sbin:/sbin`. The CLI itself runs — it was located by
+ * absolute path — and then every MCP server it spawns for itself dies ENOENT
+ * looking for `node` or `npx`, which is not a failure of any one server: they
+ * all go at once. A pty never sees this because `shell()` gives it `-l -i`.
+ */
+function shellPath(): Promise<string | null> {
+  shellPathOnce ??= readShellPath()
+  return shellPathOnce
+}
+
+async function readShellPath(): Promise<string | null> {
+  if (process.platform === "win32") return null
+
+  // Fenced by a marker rather than read as the last line: an interactive rc file
+  // is free to print anything, and unlike `command -v` the answer here is not
+  // recognisable on its own.
+  const marker = "__yasuo_path__"
+  const { file, args } = shell(`printf '${marker}%s${marker}' "$PATH"`)
+
+  try {
+    const { stdout } = await run(file, args, {
+      timeout: 10_000,
+      maxBuffer: 1024 * 1024,
+      windowsHide: true,
+    })
+    const [, value] = stdout.split(marker)
+    return value?.includes(path.delimiter) ? value : null
+  } catch {
+    // Same bargain as `locate`: no shell, a profile that hangs, a non-zero exit.
+    // Falling back to the inherited PATH is what the app did before this existed.
+    return null
+  }
+}
+
+/**
+ * `environment`, with the user's own PATH merged in — for a process spawned
+ * *without* a shell in between, which is every `claude` this app starts.
+ *
+ * Merged rather than replaced: what launchd gave us is a subset in the ordinary
+ * case, but an app launched *from* a terminal already has a good PATH, and a
+ * plugin's own bin directory arrives that way and is on no profile.
+ */
+export async function spawnEnvironment(
+  extra: Record<string, string> = {}
+): Promise<Record<string, string | undefined>> {
+  const env = environment(extra)
+  const fromShell = await shellPath()
+  if (!fromShell || extra.PATH) return env
+
+  const seen = new Set(fromShell.split(path.delimiter))
+  const rest = (env.PATH ?? "")
+    .split(path.delimiter)
+    .filter((entry) => entry !== "" && !seen.has(entry))
+
+  return { ...env, PATH: [fromShell, ...rest].join(path.delimiter) }
+}
+
 export function environment(
   extra: Record<string, string> = {}
 ): Record<string, string | undefined> {

@@ -15,7 +15,7 @@ import type {
   TurnUsage,
 } from "../shared/api"
 import { claudeBinary } from "./claude-bin"
-import { environment, locate } from "./shell-env"
+import { locate, spawnEnvironment } from "./shell-env"
 
 /**
  * Running an agent conversation, over `@anthropic-ai/claude-agent-sdk`.
@@ -487,7 +487,7 @@ export async function startAgentSession(
       // The user's own install, not the SDK's bundled CLI: their login, their
       // settings, their `CLAUDE_BIN` override.
       pathToClaudeCodeExecutable: binary,
-      env: environment({
+      env: await spawnEnvironment({
         /*
          * The CLI's own state signal, which it only emits when asked to.
          *

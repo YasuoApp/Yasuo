@@ -4,7 +4,7 @@ import { promisify } from "node:util"
 
 import type { ClaudeAccount } from "../shared/api"
 import { claudeBinary } from "./claude-bin"
-import { environment, expandHome, locate } from "./shell-env"
+import { expandHome, locate, spawnEnvironment } from "./shell-env"
 
 const run = promisify(execFile)
 
@@ -52,7 +52,7 @@ export async function claudeAccount(configDir: string): Promise<ClaudeAccount> {
       // The user's home rather than a project: the answer is about the config
       // directory, and a repository's own settings have no say in it.
       cwd: process.env.HOME ?? undefined,
-      env: environment(dir ? { CLAUDE_CONFIG_DIR: dir } : {}),
+      env: await spawnEnvironment(dir ? { CLAUDE_CONFIG_DIR: dir } : {}),
       timeout: TIMEOUT_MS,
     })
     return readAuthStatus(dir, stdout)

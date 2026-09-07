@@ -2,7 +2,7 @@ import { query } from "@anthropic-ai/claude-agent-sdk"
 
 import { CHAT_EFFORTS, type AgentModel, type ChatEffort } from "../shared/api"
 import { claudeBinary } from "./claude-bin"
-import { environment, locate } from "./shell-env"
+import { locate, spawnEnvironment } from "./shell-env"
 
 /**
  * Which models the user's own `claude` will answer on.
@@ -94,7 +94,7 @@ async function ask(): Promise<AgentModel[]> {
     prompt: nothing,
     options: {
       pathToClaudeCodeExecutable: binary,
-      env: environment(),
+      env: await spawnEnvironment(),
       abortController: held,
     },
   })

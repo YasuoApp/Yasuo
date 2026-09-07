@@ -4,7 +4,7 @@ import { query } from "@anthropic-ai/claude-agent-sdk"
 
 import type { AgentCommand, AgentCommandListing } from "../shared/api"
 import { claudeBinary } from "./claude-bin"
-import { environment, locate } from "./shell-env"
+import { locate, spawnEnvironment } from "./shell-env"
 
 /**
  * Which slash commands the user's own `claude` has — the list pressing `/` in
@@ -113,7 +113,7 @@ async function list(cwd: string): Promise<AgentCommandListing> {
     options: {
       cwd,
       pathToClaudeCodeExecutable: binary,
-      env: environment(),
+      env: await spawnEnvironment(),
       abortController: held,
     },
   })

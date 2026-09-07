@@ -67,6 +67,25 @@ export function WorktreeChatPane() {
 
   return (
     <Conversation
+      /*
+       * One instance per chat rather than one reused across the strip.
+       *
+       * Everything below that is not in the store is this instance's — the find
+       * bar, the scroll box, the refs — and a switch used to carry all of it
+       * into the next conversation. Two of those leaks were patched where they
+       * were found, each by naming the chat the state belonged to: the find bar
+       * reads itself back through `find?.chatId === chatId`, and the composer
+       * carries `key={chatId}` so one chat's half-written message could not sit
+       * under another's. This is that fix for the whole pane instead of a third
+       * one: nothing survives the switch, so nothing can be about the wrong
+       * chat.
+       *
+       * The one piece of state that *should* survive is already module-level
+       * for its own reasons — `places`, where each chat was left reading — so
+       * remounting does not cost the reader their place. The transcript is
+       * re-rendered on a switch either way (see `RESTORE_MS`).
+       */
+      key={shown.id}
       chatId={shown.id}
       // The chat's own place rather than the workbench's: a chat tab can be on
       // screen for a moment before the context has followed it, and the caption
