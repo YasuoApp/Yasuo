@@ -28,9 +28,6 @@ const LABELS: Record<Pane, string> = {
   // Never drawn either, for the same reason `changes` is not: one board per
   // project, so a board tab has no group to fold into.
   board: "Boards",
-  // Never drawn, and the strongest case of it: there is exactly one ClickUp tab
-  // in the whole workspace.
-  clickup: "Watched ClickUp tasks",
 }
 
 /** Where the `+` at the end of a chat group's strip would put a chat: the group

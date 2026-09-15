@@ -594,6 +594,14 @@ export async function startAgentSession(
    */
   const agents = new Map<string, ChatAgent>()
   const announceAgents = () => handlers.onAgents([...agents.values()])
+  /** Everything running, dropped at once, when the chat is known to be quiet.
+   * Silent if there was nothing, so a quiet turn does not push an empty list on
+   * every result. */
+  const forgetAgents = () => {
+    if (agents.size === 0) return
+    agents.clear()
+    announceAgents()
+  }
 
   /**
    * When the turn being answered started, for the wall time on its usage line.
@@ -655,7 +663,12 @@ export async function startAgentSession(
           // `requires_action` is an ask on screen. Still busy: the turn is held
           // rather than over, and a composer that said otherwise would invite a
           // second message on top of a question nobody has answered.
-          handlers.onBusy(message.state !== "idle")
+          const idle = message.state === "idle"
+          handlers.onBusy(!idle)
+          // The CLI's own `idle` already waits for background subagents, so an
+          // entry still in the map here is a bookend that never arrived — and a
+          // heartbeat under a finished chat is a spinner nobody can stop.
+          if (idle) forgetAgents()
           continue
         }
 
@@ -801,7 +814,13 @@ export async function startAgentSession(
           // Whatever is queued behind this result starts being answered now.
           turnStartedAt = Date.now()
           answering = false
-          if (!reportsState) handlers.onBusy(false)
+          // Without state events the result *is* the end of the work as far as
+          // this app can tell, so the heartbeat goes out with the spinner it
+          // belongs to rather than outliving it.
+          if (!reportsState) {
+            handlers.onBusy(false)
+            forgetAgents()
+          }
           handlers.onTurn(errorOf(message, interrupted))
           interrupted = false
           /*

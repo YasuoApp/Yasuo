@@ -13,11 +13,6 @@ const COLUMN_KEY = "projects.column"
  * panels afterwards, so this is a union of one — kept as a union, and kept
  * beside `SIDEBAR_SECTIONS`, because the two answer different questions: what
  * a section may be, and which are drawn.
- *
- * The ClickUp watcher was a section here for one revision and is not one now:
- * a list of tasks each carrying a history of sentences is not something a
- * column this wide can hold, so it is a button in the footer and a panel of its
- * own. See `docs/design.md` § Watching ClickUp tasks.
  */
 export type SidebarSection = "projects"
 

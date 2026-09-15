@@ -132,29 +132,6 @@ handler and the long-lived managers (`Store`, `SqlConnections`, `DockerRuntime`,
   answers with the paths it could not restore instead of deleting them: they go
   to the trash in `ipc.ts`, because this module stays free of `electron` so the
   tests can import it.
-- **`clickup-agents.ts` + `worktrees.ts`** — the agents a watched ClickUp task
-  can be assigned to (`shared/clickup-agents.ts`: Software Engineer, Watcher,
-  Reviewer). **Nothing here is reachable from the poll**, and that is the
-  feature's whole safety argument: `clickup-watch.ts` writes **proposals**, and
-  the only caller of `runProposal` is `IPC.runClickupProposal` — pressing `Run`
-  is what makes the turn asked-for, which is the rule `one-turn-agent.ts`
-  states. An automatic trigger was asked for and deliberately not built;
-  `docs/design.md` § Agents on a task has the argument. The engineer gets a
-  `git worktree` (`worktrees.ts`) whose checkout becomes an ordinary **workspace
-  folder** — the deleted worktree _layer_ stays deleted, there is no
-  `worktreeId` anywhere, and see § Worktrees, removed before touching it. The
-  other two go through `readOnlyTurn`, the third turn in `one-turn-agent.ts`.
-- **`clickup.ts` + `clickup-watch.ts`** — the ClickUp watcher, and the only place
-  this app talks to ClickUp. Read-only, always. `clickup.ts` is the requests and
-  the pure halves (`taskRefIn`, `snapshotOf`, `newestComment`,
-  `describeChanges`), free of `electron` with the token as an argument so
-  `test/clickup-watch.ts` can import it; `clickup-watch.ts` is the record, the
-  two-minute timer and the diff. `ipc.ts` is what turns a change into an OS
-  banner (`CLICKUP_NOTIFICATIONS_KEY`) and a push to the window — and its rule is
-  **not** `notify.ts`'s: a watched task rings whether or not the window is
-  focused, because what changed is in another app. The key is
-  `token-store.ts`'s, sealed by `safeStorage` and never handed back to the
-  renderer.
 - **`updater.ts`** — whether GitHub has a newer release, and running
   `install.sh` (carried in the bundle as an `extraResources` entry) to install
   it. **Not `electron-updater`**: Squirrel.Mac will not replace an unsigned
@@ -337,9 +314,7 @@ The shape, in one pass: the **left column** (`workspace-sidebar.tsx`) holds
 the one line saying which sections are drawn, and the next to arrive is an id
 added to it. It stacked three once: the **Database and API panels are deleted**,
 and with them the panel windows they were the only users of, so there is one
-window again (`docs/design.md` § Database and API, removed). `ClickUp` was a
-section here for one revision and is not one now — a watch list is a button in
-the column's **footer** and a panel of its own, for the reason below.
+window again (`docs/design.md` § Database and API, removed).
 A project's rows say what is happening in them — a spinner, a shield for a chat
 stopped on a question, and a count on the project's own row **while it is shut**
 (`activityOf` in `lib/worktree-chat/running.ts`, tested; waiting wins over
@@ -428,45 +403,12 @@ compared as a string and never round-tripped through a local `Date`.
 "three fixed columns" decision, why this is not the deleted Tasks layer, and why
 there is no assignee, no comments and no attachments.
 
-The **ClickUp watcher** is one button in the left column's footer, with a count
-when something has moved, and the **fifth panel** (`ClickupPane`) holding
-everything else: the tasks being watched, each one's history, adding, refreshing,
-stopping. It was a sidebar _section_, then a dialog — `docs/design.md` § Watching
-ClickUp tasks has why neither could hold it, and the short version is that a
-change's `body` is now read as a **diff** and neither a 200px column nor a 32rem
-modal is a place to read one. It is the **one panel with no `rootOf`**: one tab
-for the whole workspace (`CLICKUP_TAB`, `open` a boolean read as a list of one),
-so it stays in the strip whichever project is being worked in. Tasks are pasted as links
-(`taskRefIn` takes both `…/t/<team>/<task>` and `…/t/<task>`, and refuses any
-scheme that is not the web) and read every two minutes. **The poll is main's** —
-`main/clickup-watch.ts` owns the timer and the file
-(`workspace/clickup-watches.json`), because the point is being told while looking
-at something else; the renderer draws a list main pushes (`onClickupWatches`).
-Colour is `CHANGE_TONE` in `lib/clickup/tones.ts` off **`BOARD_TONES`**, which is
-the app's one palette and not the board's — except the status, which is drawn in
-**ClickUp's own** `status.color`: the one value here that reaches a CSS `style`,
-so `hexColor` validates it in main and `describeChanges` never compares it (a
-recoloured status is not a change). What is announced is `describeChanges` in
-`main/clickup.ts`, tested: the first
-poll announces nothing, and a moved `date_updated` **on its own** announces
-nothing, since ClickUp bumps it for custom fields and subtasks this app cannot
-see. `history` is kept and `readAt` moves, so unread is _derived_ (`unreadIn`)
-and opening a task does not destroy the log it draws; `showing` holds a task id
-rather than a boolean, so a row opens the tab _at_ something and `""` opens it on
-whatever was last read. **`polledAt` is written on every successful poll**, including a
-quiet one — it and the `↻` are what answer "is this running", and a version that
-wrote it only alongside a change could not. `fold` is its own function and
-tested because of the failure it was pulled out of: it spread a `history` that
-records written before that field did not have, so every tick threw and stopped
-writing **silently**. Read every optional field through a default on the main
-side as well as in the renderer, and note that a pressed poll's failure now
-lands in the pane (`pollError`) rather than only in main's log. The subscription
-lives in the **column**, not the pane, because a pane is unmounted with its tab
-and the button's count is what makes anybody open it. A task also carries **agents** (`agents`), the **project** they run in
-(`folderId`) and their **proposals** — see `main/clickup-agents.ts` above; the
-pane's `Offers` list is the only thing that turns one into a turn. Nothing is
-ever written back to ClickUp, and nothing is handed to the agent. It replaced a board **import** that
-was deleted outright — `docs/design.md` § Watching ClickUp tasks has the rest.
+**There is no ClickUp watcher** — the button, the panel, the poll, the sealed
+key and the agents a watched task could be assigned to are all deleted, along
+with `main/worktrees.ts` and the `readOnlyTurn` they were the only caller of.
+`docs/design.md` § Watching ClickUp tasks, removed has the argument. What stays
+on a user's disk stays: nothing reads `workspace/clickup-watches.json` or the
+`clickup.token` key any more, and nothing deletes them either.
 
 ### Constraints that bite
 
@@ -540,8 +482,6 @@ Logic worth testing is split out from the drawing: `lib/worktree-chat/activity.t
 `lib/files/review.ts` (`test/comments.ts`), `lib/tab-groups.ts`
 (`test/tab-groups.ts`), `lib/files/roots.ts` (`test/file-roots.ts`),
 `lib/board/cards.ts` (`test/board-cards.ts`),
-`main/clickup.ts`'s `taskRefIn` / `snapshotOf` / `newestComment` /
-`describeChanges` (`test/clickup-watch.ts`),
 `lib/worktree-chat/running.ts` (`test/chat-running.ts`) with `main/notify.ts`'s
 own `ChatNotices` (`test/notify.ts`),
 `lib/worktree-chat/unread.ts` (`test/chat-unread.ts`),
@@ -556,9 +496,8 @@ own `ChatNotices` (`test/notify.ts`),
 `lib/worktree-chat/claude-profiles.ts`'s `accountLabel` / `accountCaption` with
 `main/claude-auth.ts`'s own `readAuthStatus` and `main/claude-profiles.ts`'s
 naming of a profile's directory (`test/claude-account.ts`),
-`shared/learnings.ts` (`test/learnings.ts`),
-`shared/clickup-agents.ts`'s `foldProposals` with `main/worktrees.ts`'s own
-`branchFor` (`test/clickup-agents.ts`). Put new logic on that side of the line.
+`shared/learnings.ts` (`test/learnings.ts`). Put new logic on that side of the
+line.
 
 ## Conventions
 

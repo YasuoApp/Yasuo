@@ -1,7 +1,6 @@
 import { chatRootId } from "@shared/api"
 
 import { useBoard } from "./board/store"
-import { CLICKUP_TAB, useClickup } from "./clickup/store"
 import { useChanges } from "./files/changes"
 import { useFiles } from "./files/store"
 import { fileRoots, rootOfPath, shownRootOf } from "./files/roots"
@@ -29,7 +28,7 @@ import {
 import { useWorktreeChats } from "./worktree-chat/store"
 
 /**
- * The six panels' tabs, addressed alike.
+ * The five panels' tabs, addressed alike.
  *
  * The strip above the pane is one strip, so everything about a tab that is not
  * its label and its icon is the same question whichever panel it came from:
@@ -233,26 +232,6 @@ const PANELS: Record<Pane, PanelTabs> = {
     // `changes` above, and for the same reason.
     rootOf: (id) => id,
   },
-  /*
-   * The ClickUp watcher: **one tab, for the workspace**.
-   *
-   * No `rootOf`, and that is the whole of what makes it workspace-level — what
-   * somebody watches is the work they are answerable for, which does not divide
-   * along the repositories on this machine, so the tab stays in the strip
-   * whichever project is being worked in. The list of watched tasks is *inside*
-   * the tab rather than being tabs of its own, which is why `open` is a boolean
-   * read as a list of one and `reorder` has nothing to do.
-   */
-  clickup: {
-    open: () => (useClickup.getState().open ? [CLICKUP_TAB] : []),
-    active: () => (useClickup.getState().open ? CLICKUP_TAB : null),
-    select: () => useClickup.getState().show(""),
-    close: () => useClickup.getState().close(),
-    // One tab, so "close the others" closes nothing and "close all" closes it.
-    closeOthers: () => {},
-    closeAll: () => useClickup.getState().close(),
-    reorder: () => {},
-  },
 }
 
 /**
@@ -263,10 +242,6 @@ const STORES = {
   changes: useChanges,
   worktree: useWorktreeChats,
   board: useBoard,
-  // Subscribed like the rest and never acted on: this panel has no `groupOf`,
-  // so the loop below returns before it reads anything. Present because the
-  // loop walks `PANES`, and a pane missing here is a crash on launch.
-  clickup: useClickup,
 } as const
 
 /**
@@ -727,7 +702,6 @@ function usePanelActive(pane: Pane): string | null {
     changes: useChanges(changesActive),
     worktree: useWorktreeChats(worktreeChatActive),
     board: useBoard(boardActive),
-    clickup: useClickup((state) => (state.open ? CLICKUP_TAB : null)),
   }[pane]
 }
 

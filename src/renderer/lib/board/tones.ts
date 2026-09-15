@@ -25,8 +25,8 @@ import type { BoardPriority, BoardTone } from "@shared/api"
  *   something that already had its own.
  * - `text` is the hue on a glyph with nothing behind it, which is what a 12px
  *   icon in a dense row needs: `chip` would put a tinted box around it and
- *   `dot` is a background. Added for the ClickUp pane's list, where the row is
- *   too tight for a chip.
+ *   `dot` is a background. Added for a list whose rows are too tight for a
+ *   chip.
  *
  * `slate` is the neutral, and it is first in the picker for that reason: a
  * column with nothing to say about itself should be able to say nothing.

@@ -13,7 +13,6 @@ import type {
   AssistantMessage,
   BoardCard,
   BoardColumn,
-  ClickupWatch,
   ReviewThread,
   ClaudeProfile,
   WorktreeChat,
@@ -88,16 +87,6 @@ export const BOARD_FILE = "board.json"
 /** The columns those cards are filed in, per project — renamed, recoloured and
  * reordered without a card changing, which is why they are not on one. */
 export const BOARD_COLUMNS_FILE = "board-columns.json"
-
-/**
- * The ClickUp tasks this workspace is watching.
- *
- * The whole workspace's rather than a project's, and on disk rather than in
- * memory: what it holds is the last snapshot each task was seen in and what has
- * changed since somebody looked, and the point of the feature is being told
- * about a comment that arrived while the app was shut. See `ClickupWatch`.
- */
-export const CLICKUP_WATCHES_FILE = "clickup-watches.json"
 
 /**
  * The review's own threads, across every project.
@@ -494,14 +483,6 @@ export class Store {
 
   saveBoardColumns(columns: BoardColumn[]): Promise<void> {
     return this.writeList(BOARD_COLUMNS_FILE, columns)
-  }
-
-  listClickupWatches(): Promise<ClickupWatch[]> {
-    return this.readList(CLICKUP_WATCHES_FILE)
-  }
-
-  saveClickupWatches(watches: ClickupWatch[]): Promise<void> {
-    return this.writeList(CLICKUP_WATCHES_FILE, watches)
   }
 
   /** A drawing's scene, or "" for one that has never been saved. */

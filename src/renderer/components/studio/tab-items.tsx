@@ -1,5 +1,4 @@
 import {
-  ClipboardList,
   Columns3,
   GitCompare,
   Loader2,
@@ -7,10 +6,8 @@ import {
   ShieldQuestion,
 } from "lucide-react"
 
-import { waitingIn } from "@shared/clickup-agents"
 import { unfinishedCount } from "@/lib/board/cards"
 import { useBoard } from "@/lib/board/store"
-import { CLICKUP_TAB, unreadWatchCount, useClickup } from "@/lib/clickup/store"
 import { useChanges } from "@/lib/files/changes"
 import { isDeleted, isDirty, useFiles } from "@/lib/files/store"
 import { gitStateOf, GIT_TONES, useGitStatus } from "@/lib/files/git-status"
@@ -28,7 +25,7 @@ import type { TabStripItem } from "./tab-strip"
  *
  * The one thing about a tab that is genuinely its own panel's — its label, its
  * icon, the line it shows on hover, the dot on a file with unsaved edits. Both
- * strips draw from this: the workbench's, which holds a mixture of five
+ * strips draw from this: the workbench's, which holds a mixture of four
  * panels', and the one inside a folder's tab, which holds one panel's members.
  * They were the same code twice for as long as the second one existed.
  *
@@ -52,16 +49,6 @@ export function useTabItems(): Map<string, TabStripItem> {
 
   const changesOpenIds = useChanges((state) => state.openIds)
   const changesByRoot = useChanges((state) => state.byRoot)
-
-  const clickupOpen = useClickup((state) => state.open)
-  const clickupWatches = useClickup((state) => state.watches)
-  const clickupUnread = unreadWatchCount(clickupWatches)
-  // What is waiting on a press, which outranks what is merely unread: an offer
-  // is a thing to do, and a change is a thing to read.
-  const clickupWaiting = clickupWatches.reduce(
-    (total, watch) => total + waitingIn(watch),
-    0
-  )
 
   const boardOpenIds = useBoard((state) => state.openIds)
   const boardCards = useBoard((state) => state.cards)
@@ -163,30 +150,6 @@ export function useTabItems(): Map<string, TabStripItem> {
       icon: <Columns3 className="size-3.5 shrink-0" />,
       note: waiting ? String(waiting) : undefined,
       title: folder ?? "Board",
-    })
-  }
-
-  /*
-   * The ClickUp watcher: one tab, and no project on the hover line — unlike the
-   * three above it, this tab is the **workspace's**, and stays in the strip
-   * whichever project is being worked in.
-   *
-   * The count is watched tasks with something nobody has looked at, which is the
-   * same number the footer button draws. Two places showing it is deliberate:
-   * the button is how the tab is opened, and once it is open the button is
-   * behind whatever the reader is looking at.
-   */
-  if (clickupOpen) {
-    add({
-      id: PREFIX.clickup + CLICKUP_TAB,
-      label: "ClickUp",
-      icon: <ClipboardList className="size-3.5 shrink-0" />,
-      note: clickupWaiting
-        ? String(clickupWaiting)
-        : clickupUnread
-          ? String(clickupUnread)
-          : undefined,
-      title: "Watched ClickUp tasks",
     })
   }
 
@@ -307,8 +270,6 @@ function groupName(
     changes: [],
     // Nor has `board`, and for exactly that reason.
     board: [],
-    // Nor `clickup`: one tab for the whole workspace.
-    clickup: [],
     // Every chat is in a project, so the name above is always the answer and
     // this is never reached for one.
     worktree: [],
@@ -325,6 +286,5 @@ function groupName(
     worktree: "Chats",
     changes: "",
     board: "",
-    clickup: "",
   }[pane]
 }

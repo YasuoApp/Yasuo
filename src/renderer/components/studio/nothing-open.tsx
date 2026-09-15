@@ -29,7 +29,6 @@ const HINTS: Record<Pane, string> = {
   worktree:
     "Pick a chat under a project on the left, or start one from its row.",
   board: "Open a project's board from its row on the left.",
-  clickup: "Open the ClickUp watcher from the button under the projects.",
 }
 
 /**

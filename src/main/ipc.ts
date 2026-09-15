@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto"
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
@@ -17,8 +16,6 @@ import {
 import {
   CHAT_NOTIFICATIONS_KEY,
   CHAT_TRAY_KEY,
-  CLICKUP_NOTIFICATIONS_KEY,
-  CLICKUP_TOKEN_KEY,
   IPC,
   MCP_DISABLED_TOOLS_KEY,
   type BoardCard,
@@ -36,10 +33,6 @@ import { agentCommands } from "./agent-commands"
 import { agentModels } from "./agent-models"
 import { claudeAccount } from "./claude-auth"
 import { claudeBinary } from "./claude-bin"
-import { ClickupWatcher } from "./clickup-watch"
-import { newProposalId, runProposal } from "./clickup-agents"
-import type { ClickupAgentId } from "../shared/clickup-agents"
-import { seal, unseal } from "./token-store"
 import { WorktreeChats } from "./worktree-chat"
 import * as files from "./files"
 import { MAX_INDEXED_FILES } from "./files"
@@ -307,52 +300,6 @@ export function registerIpc(getWindow: () => BrowserWindow | null): {
   const revealChat = (chatId: string): void => {
     showWindow()?.webContents.send(IPC.revealWorktreeChat, chatId)
   }
-
-  /**
-   * The ClickUp tasks being watched, and the timer that reads them.
-   *
-   * The class is free of `electron` (see `clickup-watch.ts`), so the two things
-   * only this file can do are handed in: pushing the list at the window, and
-   * ringing the OS.
-   *
-   * **The notification rule is not the chats'.** A chat's notice is held back
-   * while the window is focused, because the thing it is about is already on
-   * screen — the row is right there with a spinner on it. A watched task is
-   * about something happening in *another app*, and the list is one column of
-   * this one that may well be folded shut, so it rings either way. What is
-   * shared is the setting: unset reads as on, and off means off.
-   */
-  const clickupWatcher = new ClickupWatcher({
-    newId: newProposalId,
-    token: async () => unseal(await store.getSetting(CLICKUP_TOKEN_KEY)),
-    read: () => store.listClickupWatches(),
-    write: (watches) => store.saveClickupWatches(watches),
-    onChange: (watches, announced) => {
-      send(IPC.onClickupWatches, watches)
-      void (async () => {
-        if (announced.length === 0) return
-        if (!Notification.isSupported()) return
-        if ((await store.getSetting(CLICKUP_NOTIFICATIONS_KEY)) === "off")
-          return
-
-        for (const { watch, text } of announced) {
-          const banner = new Notification({
-            // The task's own name, so a banner among five others says which
-            // task without being opened. The change is the body, which is the
-            // sentence `describeChanges` already wrote for the row.
-            title: watch.seen?.name || "ClickUp task",
-            body: text,
-          })
-          // Clicking opens the task where it lives rather than raising this
-          // app: what somebody wants after reading "Tanaka-san commented" is
-          // the comment, and it is not here.
-          banner.on("click", () => void shell.openExternal(watch.url))
-          banner.show()
-        }
-      })()
-    },
-  })
-  clickupWatcher.start()
 
   /**
    * Which draw of the tray is the current one.
@@ -1092,151 +1039,6 @@ export function registerIpc(getWindow: () => BrowserWindow | null): {
 
   ipcMain.handle(IPC.saveBoardColumns, (_event, columns: BoardColumn[]) =>
     store.saveBoardColumns(columns)
-  )
-
-  // The key is written through here and read nowhere else: `clickupTokenStatus`
-  // answers whether there is one, never what it is, so a personal token cannot
-  // be picked up by any renderer code that happens to call `getSetting`.
-  ipcMain.handle(IPC.clickupTokenStatus, async () => ({
-    present: unseal(await store.getSetting(CLICKUP_TOKEN_KEY)).length > 0,
-  }))
-
-  ipcMain.handle(IPC.setClickupToken, async (_event, token: string) => {
-    // The empty string clears it rather than sealing nothing, so the field in
-    // Settings emptied and saved is how somebody takes the key off this machine.
-    if (!token) return void (await store.setSetting(CLICKUP_TOKEN_KEY, ""))
-    const sealed = seal(token)
-    if ("error" in sealed) throw new Error(sealed.error)
-    await store.setSetting(CLICKUP_TOKEN_KEY, sealed.value)
-  })
-
-  ipcMain.handle(IPC.listClickupWatches, () => clickupWatcher.list())
-
-  ipcMain.handle(IPC.addClickupWatch, async (_event, url: string) => {
-    const answer = await clickupWatcher.add(url)
-    // The list is pushed on the way out rather than left to the caller's own
-    // re-read: adding one task is a change to the list every window holding it
-    // should see, and this is the one event that says so.
-    if ("watch" in answer)
-      send(IPC.onClickupWatches, await clickupWatcher.list())
-    return answer
-  })
-
-  ipcMain.handle(IPC.removeClickupWatch, async (_event, id: string) => {
-    await clickupWatcher.remove(id)
-    send(IPC.onClickupWatches, await clickupWatcher.list())
-  })
-
-  ipcMain.handle(IPC.refreshClickupWatches, () => clickupWatcher.poll())
-
-  ipcMain.handle(IPC.readClickupWatch, async (_event, id: string) => {
-    await clickupWatcher.markRead(id)
-    send(IPC.onClickupWatches, await clickupWatcher.list())
-  })
-
-  ipcMain.handle(
-    IPC.assignClickupAgents,
-    (_event, id: string, agents: ClickupAgentId[]) =>
-      clickupWatcher.assign(id, agents)
-  )
-
-  ipcMain.handle(
-    IPC.setClickupWatchProject,
-    (_event, id: string, folderId: string | null) =>
-      clickupWatcher.setProject(id, folderId)
-  )
-
-  ipcMain.handle(
-    IPC.dismissClickupProposal,
-    (_event, id: string, proposalId: string) =>
-      clickupWatcher.patchProposal(id, proposalId, { status: "dismissed" })
-  )
-
-  /**
-   * One agent, run because somebody pressed Run.
-   *
-   * **This is the only caller of `runProposal`**, and that is the feature's
-   * safety argument in one line: the poll writes offers and a person turns one
-   * into a turn. `main/clickup-agents.ts` says the same thing from its side.
-   *
-   * The card is marked `running` before the work starts rather than after,
-   * because the engineer's half takes a `git worktree add` and a chat before it
-   * has anything to report and a card that sat on `pending` through all of it
-   * would be pressed twice.
-   */
-  ipcMain.handle(
-    IPC.runClickupProposal,
-    async (
-      _event,
-      id: string,
-      proposalId: string,
-      model: string | null,
-      effort: string | null,
-      profileId: string | null
-    ) => {
-      const watch = (await clickupWatcher.list()).find(
-        (entry) => entry.id === id
-      )
-      const proposal = watch?.proposals?.find((one) => one.id === proposalId)
-      if (!watch || !proposal) return { error: "That offer has gone." }
-      if (proposal.status === "running") {
-        return { error: "That one is already running." }
-      }
-
-      await clickupWatcher.patchProposal(id, proposalId, {
-        status: "running",
-        error: undefined,
-      })
-
-      const outcome = await runProposal(
-        watch,
-        proposal,
-        {
-          folderDir: (folderId) =>
-            store.resolveFolderDir(folderId).catch(() => null),
-          workspaceDir: store.workspaceFilesDir,
-          addFolder: async (input) => {
-            const workspace = await store.addFolder(input)
-            const folder = workspace.folders.find(
-              (entry) => entry.path === input.path
-            )
-            if (!folder) throw new Error("The checkout could not be recorded.")
-            return folder.id
-          },
-          startChat: async (input) => {
-            // Saved rather than held unsaved, and the id is minted here: this
-            // proposal is about to record it, which is the case `ChatSeed`'s
-            // own doc names — a caller that writes the id down elsewhere gets a
-            // row, or its card comes back pointing at nothing.
-            const chat = await worktreeChats.create(
-              { folderId: input.folderId },
-              { id: randomUUID(), title: input.title }
-            )
-            // The message is sent from here rather than left to the renderer:
-            // what was pressed was Run, and a chat that opened empty would be
-            // an offer accepted and then not acted on. The renderer learns
-            // about the new folder and the new chat by re-reading both when
-            // this answers — there is no push channel for either, and adding
-            // two for one button is a worse trade than a re-read.
-            await worktreeChats.send(chat.id, input.prompt)
-            return chat.id
-          },
-          disabledTools,
-        },
-        { model, effort, configDir: await configDirOf(profileId) }
-      )
-
-      if ("error" in outcome) {
-        await clickupWatcher.patchProposal(id, proposalId, {
-          status: "failed",
-          error: outcome.error,
-        })
-        return { error: outcome.error }
-      }
-
-      await clickupWatcher.patchProposal(id, proposalId, outcome.patch)
-      return { chatId: outcome.chatId }
-    }
   )
 
   ipcMain.handle(IPC.readDrawing, (_event, id: string) => store.readDrawing(id))

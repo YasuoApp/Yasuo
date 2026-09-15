@@ -37,7 +37,6 @@ import { FileWorkspace } from "./files/file-workspace"
 import { AddFolderDialog } from "./add-folder-dialog"
 import { CommandPalette } from "./command-palette"
 import { NothingOpen } from "./nothing-open"
-import { ClickupPane } from "./clickup/clickup-pane"
 import { SettingsDialog } from "./settings-dialog"
 import { SystemBar } from "./system-bar"
 import {
@@ -62,8 +61,6 @@ function paneView(pane: Pane) {
       return <WorktreeChatPane />
     case "board":
       return <BoardPane />
-    case "clickup":
-      return <ClickupPane />
   }
 }
 
