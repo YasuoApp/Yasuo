@@ -15,7 +15,7 @@ area's behaviour. When the two disagree, `design.md` is the fuller account.
 
 **Yasuo**: an Electron studio for running several `claude` conversations
 against a project at once and reading what they did — its folders, its chats,
-its diffs and the board the work is tracked on, in one tab strip.
+its diffs and the chats that made them, in one tab strip.
 
 There is one **workspace**, holding any number of **folders** — directories
 already on this machine, worked on where they are. It is deliberately not
@@ -280,9 +280,9 @@ and `done` waits on it so the listing's re-read cannot race the write.
 at once — the renderer mints the id (which is the session id) and holds the chat
 in `unsaved` — and `createWorktreeChat` is called from `send`, carrying a
 `ChatSeed` of whatever the tab picked up meanwhile: its id, its name, its
-toolbar. So a `+` nobody spoke into leaves no row and no file. A caller that
-records the id elsewhere — the board's `startChat` — asks for `save: true`
-instead, or its card would come back `lost`.
+toolbar. So a `+` nobody spoke into leaves no row and no file. `create` used to
+take a `save` option for a caller that recorded the id elsewhere — the deleted
+board's `startChat` — and no longer does.
 
 No MCP config is passed, so whatever the user's own `claude` is configured with —
 `~/.claude.json`, a repository's `.mcp.json`, enabled plugins, claude.ai
@@ -374,41 +374,47 @@ one (`reveal`) — which is the only way to reach one from outside the diff: the
 two arrows that walked them and the Discard-the-lot button are gone from the
 header, and with them `step`, `stepThrough`, `orderedThreads`, `clear`and`isReviewStepShortcut`.
 
-A project also has a **board** — one tab per project whose id is the project's,
-so `rootOf` is the identity the way it is for `changes`. Its columns are the
-project's own (added, renamed, recoloured, dragged), seeded as `Todo` / `Doing` /
-`Done`, and their **ids are those words** so cards written before columns were
-records need no migration — so a column id is unique only **within one board**,
-and every write to one goes through `columnKey(folderId, id)`: matching on the
-id alone moved whichever project came first in the file and took every other
-project's column of that name out of the list on the way.
-A card may name one chat, and that link is **UI-level in both directions**: the card opens or starts the chat (through `create`'s
-existing draft argument) and shows whether it is answering; the chat's pane
-carries a chip naming its card. Deleting a column rewrites no cards — an orphan
-is drawn in the first column (`columnOf`), and `membership` in
-`lib/board/cards.ts` is why the drawing and the drop agree about that. The agent
-cannot write to the board — this app serves no MCP server of its own.
-A **click** on a card opens `card-drawer.tsx` — a drawer down the right-hand
-edge (`swipeDirection="right"`), the app's one use of `components/ui/drawer`,
-and the same form for adding a card as for editing one. It was a centred dialog
-behind a double click; the `⋯` and the chat footer stop the click reaching the
-card, or pressing either would open the drawer as well.
-A card also carries **tags, a priority and a due date**, all optional and all
-read through `tagsOf` / `priorityOf` / `dueOf` rather than off the record —
-board files predate the fields and main normalises nothing on the way through. A
-tag's colour comes from the tag's own text (`tagTone`), so there is no tag store.
-A due date is a **day** (`YYYY-MM-DD`), not an ISO instant, which is why it is
-compared as a string and never round-tripped through a local `Date`.
-`docs/design.md` § Board carries all of it, including the reversal of the
-"three fixed columns" decision, why this is not the deleted Tasks layer, and why
-there is no assignee, no comments and no attachments.
+**There is no board** — the kanban a project used to have is deleted: its pane,
+its cards and columns, the drawer behind a card, the chip on a chat naming its
+card, the four `board:*` channels and the `board` pane itself. `docs/design.md`
+§ Board, removed has the argument — a backlog is the one thing in this studio
+nobody can read off the repository, so it was either a duplicate of the tracker
+the team already keeps or the stale half of a pair. What stays on disk stays:
+nothing reads `workspace/board.json` or `workspace/board-columns.json` any more,
+and nothing deletes them either.
 
 **There is no ClickUp watcher** — the button, the panel, the poll, the sealed
 key and the agents a watched task could be assigned to are all deleted, along
-with `main/worktrees.ts` and the `readOnlyTurn` they were the only caller of.
-`docs/design.md` § Watching ClickUp tasks, removed has the argument. What stays
-on a user's disk stays: nothing reads `workspace/clickup-watches.json` or the
-`clickup.token` key any more, and nothing deletes them either.
+with the `readOnlyTurn` they were the only caller of. `docs/design.md` § Watching
+ClickUp tasks, removed has the argument. What stays on a user's disk stays:
+nothing reads `workspace/clickup-watches.json` or the `clickup.token` key any
+more, and nothing deletes them either.
+
+A project's row also makes a **`git worktree`** — the button beside its `+`,
+`main/worktrees.ts`, `test/worktrees.ts`. What it produces is an ordinary
+**workspace folder** pointed at the checkout, under
+`workspace/worktrees/<folderId>/<branch slug>`, so the worktree _layer_ that was
+deleted stays deleted: no `worktreeId`, nothing nullable in `FileRoot`, and every
+panel works on it as a project. Whether a folder **is** a checkout is asked of
+git per folder (`worktreeRepo`, beside the branch in the studio store) rather
+than written down, which is what makes `Remove worktree` correct for a checkout
+somebody made in their own shell — and what makes the `realpath` on both sides of
+that comparison load-bearing. `docs/design.md` § Worktrees, as projects has the
+argument, and § Worktrees, removed is the one it is held against.
+The **column** files a checkout one indent under the project it was cut from
+(`projectTree` in `lib/project-tree.ts`, tested) — the only nesting there is, and
+the column's alone: it pairs on that same `worktreeRepo` answer rather than on
+anything written down, so nothing in the data model nests and a checkout whose
+repository is not in the workspace keeps a top-level row. A shut project counts
+its checkouts' chats too, since folding it now hides them.
+
+**The branch field is optional**, and an empty one is the case to know: the
+checkout goes on `yasuo/untitled-<hex>` and the first chat in it that receives a
+title renames the branch _and_ the project (`nameWorktree` in `ipc.ts`, off the
+same CLI `ai-title` a chat names itself with, so it costs no turn). That
+`git branch -m` is the **one branch write in this app** — `git.ts` keeps branch,
+amend, log and push out — and it is narrow by construction: only a branch this
+app minted, only while `isUntitledBranch` still holds, never one the user named.
 
 ### Constraints that bite
 
@@ -481,7 +487,6 @@ Logic worth testing is split out from the drawing: `lib/worktree-chat/activity.t
 (`test/chat-activity.ts`), `lib/worktree-chat/usage.ts` (`test/chat-usage.ts`),
 `lib/files/review.ts` (`test/comments.ts`), `lib/tab-groups.ts`
 (`test/tab-groups.ts`), `lib/files/roots.ts` (`test/file-roots.ts`),
-`lib/board/cards.ts` (`test/board-cards.ts`),
 `lib/worktree-chat/running.ts` (`test/chat-running.ts`) with `main/notify.ts`'s
 own `ChatNotices` (`test/notify.ts`),
 `lib/worktree-chat/unread.ts` (`test/chat-unread.ts`),
@@ -489,6 +494,7 @@ own `ChatNotices` (`test/notify.ts`),
 `lib/worktree-chat/search.ts` (`test/chat-search.ts`),
 `lib/files/review.ts`'s `commentsPrompt` (`test/comments.ts`),
 `lib/files/change-tree.ts` (`test/change-tree.ts`),
+`lib/project-tree.ts` (`test/project-tree.ts`),
 `lib/files/git-diff.ts` with `main/git.ts`'s own `fileDiff` (`test/git-diff.ts`),
 `lib/files/block-doc.ts`, `lib/worktree-chat/mention-text.ts`
 (`test/chat-mentions.ts`), `lib/worktree-chat/mcp-servers.ts` with

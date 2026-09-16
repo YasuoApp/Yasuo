@@ -11,8 +11,6 @@ import path from "node:path"
 
 import type {
   AssistantMessage,
-  BoardCard,
-  BoardColumn,
   ReviewThread,
   ClaudeProfile,
   WorktreeChat,
@@ -36,14 +34,14 @@ export const DEFAULT_WORKSPACE_ID = "default"
  * any of the folders it points at.
  *
  * That separation is the whole rule: a folder is somebody's repository, and the
- * studio writes nothing into it that the user did not ask for. A chat's lines,
- * a board's cards and a Claude profile's config directory are the studio's, so
- * they live here.
+ * studio writes nothing into it that the user did not ask for. A chat's lines
+ * and a Claude profile's config directory are the studio's, so they live here.
  *
  * A workspace that ran an older build still has `requests.json`,
- * `environments.json`, `folders.json`, `cookies.json` and a `db/` directory
- * under here from the Database and API panels. Nothing reads them and nothing
- * deletes them, for the reason `mail.json` outlived its own panel.
+ * `environments.json`, `folders.json`, `cookies.json`, a `db/` directory and
+ * `board.json` / `board-columns.json` under here, from the Database and API
+ * panels and the board. Nothing reads them and nothing deletes them, for the
+ * reason `mail.json` outlived its own panel.
  */
 export const WORKSPACE_DIR = "workspace"
 
@@ -75,24 +73,9 @@ export const WORKTREE_CHATS_FILE = "worktree-chats.json"
 export const WORKTREE_CHATS_DIR = "worktree-chats"
 
 /**
- * Every project's board cards, in one file.
- *
- * Not split per project, unlike the chats' lines: a card is a title and a line,
- * so the whole workspace's boards are one small list, and one file is one read
- * at startup rather than one per folder. Its order is the order within each
- * column — see `BoardCard`.
- */
-export const BOARD_FILE = "board.json"
-
-/** The columns those cards are filed in, per project — renamed, recoloured and
- * reordered without a card changing, which is why they are not on one. */
-export const BOARD_COLUMNS_FILE = "board-columns.json"
-
-/**
  * The review's own threads, across every project.
  *
- * One file for the workspace rather than one per project, the way the board's
- * cards are: a thread carries the `rootId` it belongs to, and the pane reads the
+ * One file for the workspace rather than one per project: a thread carries the `rootId` it belongs to, and the pane reads the
  * lot once at boot to know a review exists in a file nobody has opened.
  *
  * This exists at all because a review stopped being a sitting — see
@@ -461,28 +444,12 @@ export class Store {
     return path.join(this.workspaceDir, WORKTREE_CHATS_DIR, `${ownId(id)}.json`)
   }
 
-  listBoardCards(): Promise<BoardCard[]> {
-    return this.readList(BOARD_FILE)
-  }
-
-  saveBoardCards(cards: BoardCard[]): Promise<void> {
-    return this.writeList(BOARD_FILE, cards)
-  }
-
   listReviewThreads(): Promise<ReviewThread[]> {
     return this.readList(REVIEW_FILE)
   }
 
   saveReviewThreads(threads: ReviewThread[]): Promise<void> {
     return this.writeList(REVIEW_FILE, threads)
-  }
-
-  listBoardColumns(): Promise<BoardColumn[]> {
-    return this.readList(BOARD_COLUMNS_FILE)
-  }
-
-  saveBoardColumns(columns: BoardColumn[]): Promise<void> {
-    return this.writeList(BOARD_COLUMNS_FILE, columns)
   }
 
   /** A drawing's scene, or "" for one that has never been saved. */

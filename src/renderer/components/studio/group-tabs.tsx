@@ -25,9 +25,6 @@ const LABELS: Record<Pane, string> = {
   // Never drawn: `Changes` has no `groupOf`, so its tabs never fold.
   changes: "Changed files",
   worktree: "Chats in this project",
-  // Never drawn either, for the same reason `changes` is not: one board per
-  // project, so a board tab has no group to fold into.
-  board: "Boards",
 }
 
 /** Where the `+` at the end of a chat group's strip would put a chat: the group

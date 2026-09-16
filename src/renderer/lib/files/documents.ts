@@ -214,6 +214,41 @@ export function editableViewOf(filePath: string): EditorView | null {
   return null
 }
 
+/**
+ * Puts a path's buffer back to what is on disk, in every view holding it.
+ *
+ * The store's own `docs` entry is not the thing on screen: an editor takes its
+ * document from this registry when it is built and from its own state after
+ * that, so a file re-read behind a mounted view — a build, an agent's edit —
+ * landed in the store and nowhere else. The diff is where that showed: its
+ * working side is this buffer, so it kept drawing the text the file was opened
+ * at while the `Changes` row beside it counted the new one.
+ *
+ * Only ever called for a file with no unsaved edits (`reloadOpen` is the one
+ * caller and it checks): this replaces the whole document, which is not a thing
+ * to do to text somebody typed.
+ */
+export function resetDoc(filePath: string, text: string): void {
+  const held = docs.get(filePath)
+  if (!held) return
+  if (held.doc.toString() === text) return
+
+  held.doc = Text.of(text.split("\n"))
+  // The handed-on editing session was taken against text that has since been
+  // overwritten, and `docState` would restore it over this one.
+  held.snapshot = null
+
+  for (const [view] of held.views) {
+    view.dispatch({
+      // Annotated the way a sibling's change is: this loop is already reaching
+      // every view, and without it each would forward the replacement to the
+      // others on top of the one they have just been given.
+      changes: { from: 0, to: view.state.doc.length, insert: text },
+      annotations: fromShare.of(true),
+    })
+  }
+}
+
 /** The text of an open buffer, for a caller that has no view of its own. */
 export function docTextOf(filePath: string): string | null {
   return docs.get(filePath)?.doc.toString() ?? null

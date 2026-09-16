@@ -20,6 +20,9 @@ import { check, finish, section } from "./harness"
  * question the test can put. */
 const calls = { image: [] as string[], text: [] as string[] }
 
+/** What the fake disk holds, for the files a test rewrites under the pane. */
+const disk: Record<string, string> = {}
+
 const remembered = {
   openIds: ["/w/logo.png", "/w/notes.md", "/w/gone.png"],
   selectedId: "/w/logo.png",
@@ -37,7 +40,7 @@ const remembered = {
     },
     readTextFile: async (filePath: string) => {
       calls.text.push(filePath)
-      return { kind: "text", text: `text of ${filePath}` }
+      return { kind: "text", text: disk[filePath] ?? `text of ${filePath}` }
     },
   },
 }
@@ -124,6 +127,51 @@ async function main() {
     "switching back reads nothing at all",
     calls.image.length === images,
     calls.image
+  )
+
+  section("a file rewritten under the pane")
+
+  /*
+   * The bug this is written for: a file opened from the `Changes` list and then
+   * edited again by the turn that was running kept drawing the text it was
+   * opened at, while the row's `+`/`-` counted the new one. The `Changes` pane
+   * shows a file without giving it a tab, and the watchers' re-read follows
+   * `openIds` — so nothing re-read it. `reload` is what the pane calls when git's
+   * answer for its checkout moves.
+   */
+  disk["/w/rewritten.ts"] = "one"
+  await useFiles.getState().ensureLoaded("/w/rewritten.ts", "text")
+  check(
+    "a file with no tab is still read",
+    !useFiles.getState().openIds.includes("/w/rewritten.ts"),
+    useFiles.getState().openIds
+  )
+
+  disk["/w/rewritten.ts"] = "two"
+  await useFiles.getState().reload("/w/rewritten.ts")
+  const reloaded = useFiles.getState().docs["/w/rewritten.ts"]
+  check(
+    "and re-read on demand, tab or no tab",
+    reloaded?.kind === "text" && reloaded.text === "two",
+    reloaded
+  )
+
+  useFiles.getState().setText("/w/rewritten.ts", "typed")
+  disk["/w/rewritten.ts"] = "three"
+  await useFiles.getState().reload("/w/rewritten.ts")
+  const dirty = useFiles.getState().docs["/w/rewritten.ts"]
+  check(
+    "an unsaved edit is not overwritten by what landed on disk",
+    dirty?.kind === "text" && dirty.text === "typed",
+    "the same bargain Refresh and the watchers make"
+  )
+
+  const reads = calls.text.length
+  await useFiles.getState().reload("/w/never-opened.ts")
+  check(
+    "a file nothing has read is not read by asking to re-read it",
+    calls.text.length === reads,
+    calls.text
   )
 
   section("the All changes tab's selection")

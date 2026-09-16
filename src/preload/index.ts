@@ -39,6 +39,11 @@ const api: DesktopApi = {
   addFolder: (input) => ipcRenderer.invoke(IPC.addFolder, input),
   renameFolder: (id, name) => ipcRenderer.invoke(IPC.renameFolder, id, name),
   removeFolder: (id) => ipcRenderer.invoke(IPC.removeFolder, id),
+  addWorktree: (input) => ipcRenderer.invoke(IPC.addWorktree, input),
+  removeWorktree: (folderId) =>
+    ipcRenderer.invoke(IPC.removeWorktree, folderId),
+  nameWorktree: (folderId, title) =>
+    ipcRenderer.invoke(IPC.nameWorktree, folderId, title),
 
   pickDirectory: () => ipcRenderer.invoke(IPC.pickDirectory),
   pickImages: () => ipcRenderer.invoke(IPC.pickImages),
@@ -53,6 +58,8 @@ const api: DesktopApi = {
     subscribe<MenuCommand>(IPC.menuCommand, listener),
 
   gitBranch: (folderId) => ipcRenderer.invoke(IPC.gitBranch, folderId),
+  gitWorktreeRepo: (folderId) =>
+    ipcRenderer.invoke(IPC.gitWorktreeRepo, folderId),
   gitStatus: (folderId) => ipcRenderer.invoke(IPC.gitStatus, folderId),
   gitChanges: (folderId) => ipcRenderer.invoke(IPC.gitChanges, folderId),
   gitStage: (folderId, paths) =>
@@ -152,11 +159,6 @@ const api: DesktopApi = {
   listReviewThreads: () => ipcRenderer.invoke(IPC.listReviewThreads),
   saveReviewThreads: (threads) =>
     ipcRenderer.invoke(IPC.saveReviewThreads, threads),
-  listBoardCards: () => ipcRenderer.invoke(IPC.listBoardCards),
-  saveBoardCards: (cards) => ipcRenderer.invoke(IPC.saveBoardCards, cards),
-  listBoardColumns: () => ipcRenderer.invoke(IPC.listBoardColumns),
-  saveBoardColumns: (columns) =>
-    ipcRenderer.invoke(IPC.saveBoardColumns, columns),
   readDrawing: (id) => ipcRenderer.invoke(IPC.readDrawing, id),
   writeDrawing: (id, scene) => ipcRenderer.invoke(IPC.writeDrawing, id, scene),
   writeDrawingSvg: (id, svg) =>

@@ -14,9 +14,6 @@ export const PREFIX: Record<Pane, string> = {
   // there is one `Changes` tab per project, and that is what it is about.
   changes: "changes:",
   worktree: "chat:",
-  // A **root** id too, for the same reason `changes` is: one board per project,
-  // and that is what it is about.
-  board: "board:",
 }
 
 /**

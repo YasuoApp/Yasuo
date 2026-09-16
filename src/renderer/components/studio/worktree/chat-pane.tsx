@@ -15,7 +15,6 @@ import { clearFind, paintFind, rectOfHit } from "@/lib/worktree-chat/find-marks"
 import { hitsIn } from "@/lib/worktree-chat/search"
 import { placeOf, useWorktreeChats } from "@/lib/worktree-chat/store"
 import { chatLine, totalOf, usageDetail } from "@/lib/worktree-chat/usage"
-import { ChatCardChip } from "../board/chat-card-chip"
 import { ChatAsk } from "./chat-ask"
 import { ChatFind } from "./chat-find"
 import { ChatComposer, type ChatComposerHandle } from "./chat-composer"
@@ -590,11 +589,6 @@ function Conversation({
           onClose={() => setFind(null)}
         />
       )}
-
-      {/* Above the transcript rather than beside the composer: it is a fact
-          about the conversation, not a control over the next turn. Draws
-          nothing at all for a chat no card names — see `ChatCardChip`. */}
-      <ChatCardChip chatId={chatId} />
 
       <div
         ref={box}

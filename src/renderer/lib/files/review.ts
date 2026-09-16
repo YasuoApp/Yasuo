@@ -335,14 +335,13 @@ type ReviewState = {
 /**
  * The review, written down.
  *
- * Fire-and-forget after every change, the way the board saves its cards: the
- * whole collection is a few dozen short records, and a review that is one write
- * behind at the moment the app is killed has lost the last remark rather than
- * the review.
+ * Fire-and-forget after every change: the whole collection is a few dozen short
+ * records, and a review that is one write behind at the moment the app is
+ * killed has lost the last remark rather than the review.
  *
- * Debounced, unlike the board's, because this store is written to by a **drag**:
- * every row a range crosses is a `set`, and a file write per row is a file write
- * per fifty milliseconds. What is saved is read at call time, so the last write
+ * Debounced, because this store is written to by a **drag**: every row a range
+ * crosses is a `set`, and a file write per row is a file write per fifty
+ * milliseconds. What is saved is read at call time, so the last write
  * in a burst is the one that lands.
  */
 let pendingWrite: ReturnType<typeof setTimeout> | null = null

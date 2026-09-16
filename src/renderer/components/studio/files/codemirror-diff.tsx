@@ -365,7 +365,20 @@ export default function CodeMirrorFileDiff({
     // threads and each filters by its own side, so neither has to be told twice
     // which it is.
     for (const view of viewsRef.current) view.dispatch({ effects: marks })
-  }, [threads, pending, path, reviewRootId, original, sideBySide, isDark])
+    // `patch` is here for the same reason it is a dependency of the builder: a
+    // file edited again under an open diff rebuilds the view on the new patch
+    // alone — `HEAD` did not move — and marks pushed into the views before that
+    // went with the ones they were pushed into.
+  }, [
+    threads,
+    pending,
+    path,
+    reviewRootId,
+    original,
+    patch,
+    sideBySide,
+    isDark,
+  ])
 
   /* Both texts, handed to the review.
    *
@@ -382,8 +395,12 @@ export default function CodeMirrorFileDiff({
     // `initialText` is the seed for a buffer that may already exist and is
     // deliberately not a dependency anywhere in this file — the buffer is read
     // here, not watched.
+    // `patch` is, and it is what re-anchors a review against a file that has
+    // been edited again since it was opened: the commit is unchanged, so this
+    // is the only thing that says the working side moved. `showing` is built to
+    // be run on every rebuild — see the guard on it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [path, original, reviewRootId])
+  }, [path, original, patch, reviewRootId])
 
   useEffect(() => {
     for (const view of viewsRef.current) {

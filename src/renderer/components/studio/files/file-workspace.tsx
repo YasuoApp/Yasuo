@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import {
   Empty,
   EmptyDescription,
@@ -192,6 +192,31 @@ export function FilePane({
   const label = (root && relativeTo(root.path, path)) || path
 
   const changed = useGitStatus((state) => hasGitChange(state, path))
+
+  /*
+   * Re-read the file when git's answer for its checkout moves.
+   *
+   * The watchers' own re-read (`syncDirs`) follows `openIds`, and the `Changes`
+   * pane deliberately shows a file without giving it a tab — so a file rewritten
+   * while its diff was on screen kept drawing the text it was opened at, while
+   * the row beside it counted the new one. This is the same signal the list
+   * re-reads off (`useWatchChanges`), so the two cannot disagree, and it works
+   * for a file whose directory the tree never had open.
+   *
+   * Against the record it was last called for rather than on every run: the
+   * store has read this file already, both on mount and on a switch to another
+   * path, and a second read for the answer that was already in hand is a round
+   * trip that says nothing.
+   */
+  const status = useGitStatus((state) =>
+    root ? state.byRoot[root.id] : undefined
+  )
+  const read = useRef(status)
+  useEffect(() => {
+    if (read.current === status) return
+    read.current = status
+    void useFiles.getState().reload(path)
+  }, [path, status])
 
   const write = useCallback(
     (text: string) => {

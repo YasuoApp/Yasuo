@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react"
 import { defaultFilter } from "cmdk"
-import { Columns3, MessageSquare } from "lucide-react"
+import { MessageSquare } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import {
@@ -14,8 +14,6 @@ import {
   CommandShortcut,
 } from "@/components/ui/command"
 import { FileIcon } from "./file-icon"
-import { unfinishedCount } from "@/lib/board/cards"
-import { useBoard } from "@/lib/board/store"
 import { useFiles } from "@/lib/files/store"
 import { shortlist } from "@/lib/files/search"
 import { nameOf } from "@/lib/files/paths"
@@ -43,10 +41,10 @@ type Entry = {
   /**
    * Opens it.
    *
-   * Nothing here can fail any more: opening a file is a read, and a chat or a
-   * board is a `select` on a store. It resolved to *why* it could not be
-   * opened while a table was a row — that one dialled a server first — and the
-   * Database panel is gone.
+   * Nothing here can fail any more: opening a file is a read and a chat is a
+   * `select` on a store. It resolved to *why* it could not be opened while a
+   * table was a row — that one dialled a server first — and the Database panel
+   * is gone.
    */
   open: () => Promise<void>
 }
@@ -78,9 +76,9 @@ type Notice = { text: string }
  *
  * The studio has one strip of tabs and two columns, so the thing being looked
  * for is only ever a few clicks away — but only if the column already has it on
- * screen. A file nobody has expanded a folder of, a chat from last week and
- * another project's board are each a trip through a list the user is not
- * currently in, and none of them is where they would go back to afterwards.
+ * screen. A file nobody has expanded a folder of and a chat from last week are
+ * each a trip through a list the user is not currently in, and neither is where
+ * they would go back to afterwards.
  * This is the way in that does not move the columns: type a name, get the tab.
  *
  * It listed tables and saved requests too, until the Database and API panels
@@ -122,7 +120,7 @@ export function CommandPalette() {
       open={open}
       onOpenChange={setOpen}
       title="Go to"
-      description="Search the workspace's files, chats and boards."
+      description="Search the workspace's files and chats."
       className="sm:max-w-xl"
     >
       {/* A child of the dialog, so the stores below are subscribed to
@@ -175,7 +173,7 @@ function Palette({ onOpened }: { onOpened: () => void }) {
 
   async function run(entry: Entry) {
     /*
-     * A chat and a board are a `select` on a store; a file is a read, which is
+     * A chat is a `select` on a store; a file is a read, which is
      * usually a microtask and occasionally a large file off a slow disk. The
      * wait is so the usual case never flashes a line it did not need.
      */
@@ -205,7 +203,7 @@ function Palette({ onOpened }: { onOpened: () => void }) {
     >
       <CommandInput
         autoFocus
-        placeholder="Search files, chats and boards…"
+        placeholder="Search files and chats…"
         // A failure is about the row that was picked, so the next keystroke —
         // which is on the way to picking another one — is what clears it.
         onValueChange={(value) => {
@@ -338,8 +336,6 @@ function useEntries(query: string): Group[] {
   }, [loadIndex])
 
   const chats = useWorktreeChats((state) => state.chats)
-  const boardCards = useBoard((state) => state.cards)
-  const boardColumns = useBoard((state) => state.columns)
   const folders = useStudio((state) => state.folders)
 
   return useMemo(() => {
@@ -398,29 +394,6 @@ function useEntries(query: string): Group[] {
     })
 
     /*
-     * One board per project — a thing to open, which is what this palette is
-     * for, rather than an action.
-     *
-     * Labelled by the project, because that is what a board *is* here: there is
-     * one per project and it has no name of its own to search for. The count of
-     * what is waiting rides along as the hint, so the row answers "is there
-     * anything on it" without being opened.
-     */
-    const boardEntries: Entry[] = folders.map((folder) => {
-      const waiting = unfinishedCount(boardCards, boardColumns, folder.id)
-      return {
-        value: PREFIX.board + folder.id,
-        label: folder.name,
-        hint: waiting ? `${waiting} waiting` : "Board",
-        keywords: [folder.name, "board", "kanban"],
-        icon: <Columns3 className="size-3.5 shrink-0" />,
-        open: async () => {
-          useBoard.getState().open(folder.id)
-        },
-      }
-    })
-
-    /*
      * Every kind, empty ones included — the tab row is drawn from this list and
      * has to know a kind exists before a query has matched any of it. What
      * `available` says is whether the workspace holds that kind at all, which
@@ -444,14 +417,8 @@ function useEntries(query: string): Group[] {
         entries: chatEntries,
         available: chatEntries.length > 0,
       },
-      {
-        kind: "boards",
-        heading: "Boards",
-        entries: boardEntries,
-        available: boardEntries.length > 0,
-      },
     ]
 
     return all
-  }, [files, query, chats, folders, boardCards, boardColumns])
+  }, [files, query, chats, folders])
 }

@@ -1680,165 +1680,6 @@ export type ReviewThread = {
 }
 
 /**
- * The hues a board column can be marked with.
- *
- * Ids and not classes: what a record on disk holds is which of a fixed set was
- * picked, and the two class strings that draws as belong to the renderer
- * (`lib/board/tones.ts`) — the same split `GitFileState` has from `GIT_TONES`. A
- * fixed set rather than a colour picker, so that every board in the app is drawn
- * from one palette that has been checked in both themes.
- */
-export type BoardTone =
-  "slate" | "blue" | "violet" | "amber" | "emerald" | "rose"
-
-/** Them in the order the picker offers them. */
-export const BOARD_TONE_IDS: BoardTone[] = [
-  "slate",
-  "blue",
-  "violet",
-  "amber",
-  "emerald",
-  "rose",
-]
-
-/**
- * How urgent a card is, or nothing.
- *
- * Three and not five, because the only thing a priority on a personal board is
- * read for is which card to pick up next, and a scale nobody can rank
- * consistently is a field that stops being maintained. **Absent is the
- * default** rather than `medium`: a board where every card claims a priority is
- * a board where the field says nothing, so it is set on the few that need it.
- */
-export type BoardPriority = "low" | "medium" | "high"
-
-/** Them in the order the picker offers them — loudest first, which is the order
- * they are worth scanning in. */
-export const BOARD_PRIORITY_IDS: BoardPriority[] = ["high", "medium", "low"]
-
-/**
- * One column of one project's board.
- *
- * **A record rather than a union**, which is what it was: `Todo` / `Doing` /
- * `Done` were fixed and not the user's to name, on the argument that a board
- * answers one question and every added column asks a second. That was wrong for
- * the way people actually keep a board — `Blocked` and `Review` are the two
- * every real one grows — so columns are the project's own to add, rename,
- * recolour and reorder. `docs/design.md` § Board carries the reversal.
- *
- * Per project, like the cards: two projects have nothing to say to each other
- * about what their stages are called.
- *
- * Order is **order in the list**, the way a card's is — one write for a
- * reordering, and no `order` field to keep dense.
- */
-export type BoardColumn = {
-  id: string
-  folderId: string
-  name: string
-  tone: BoardTone
-  createdAt: string
-  updatedAt: string
-}
-
-/**
- * What a project's board starts as, seeded the first time one is opened.
- *
- * The **ids are the words**, and that is load-bearing rather than tidy: a card
- * written while the columns were a union holds `"todo"`, `"doing"` or `"done"`
- * in its `column`, and seeding these ids means such a card points at a real
- * column without a migration pass over the file.
- */
-export const DEFAULT_BOARD_COLUMNS: {
-  id: string
-  name: string
-  tone: BoardTone
-}[] = [
-  { id: "todo", name: "Todo", tone: "slate" },
-  { id: "doing", name: "Doing", tone: "blue" },
-  { id: "done", name: "Done", tone: "emerald" },
-]
-
-/**
- * One card on a project's board.
- *
- * A **project's**, like a chat and unlike a request: the thing a card is about is
- * work in one repository, and a card whose chat ran in a different one is a
- * link across two working trees that nothing in this app could draw honestly.
- * `folderId` is what makes it per project, and it is the same id a chat's
- * `folderId`, a `FileRoot.id` and the dock's shell key all are.
- *
- * Deliberately **not** the task this app used to have (see `docs/design.md`
- * § Tasks, removed): that was a container of members drawn from every panel,
- * with a crumb across the title bar and a dashboard of its own. This holds a
- * title, a line, a column, its own marks and at most one chat, and nothing
- * outside the board and that chat's own header knows it exists. What the marks
- * are and what was refused beside them — an assignee, comments, attachments —
- * is `docs/design.md` § Board.
- *
- * The whole collection is one file and one save — a card is small and bounded,
- * so there is no body to keep out of the list, and **order within the list is order within the column**, which is
- * what makes a drag one write.
- */
-export type BoardCard = {
-  id: string
-  /** The project it belongs to. */
-  folderId: string
-  /**
-   * Which column it is in — a `BoardColumn.id`, and a plain string here.
-   *
-   * Not narrowed to the ids that exist, because they are the user's now: a card
-   * can name a column that has been deleted from under it (nothing rewrites
-   * cards on a delete), and `cardsOf` in `lib/board/cards.ts` files such a card
-   * into the first column rather than losing it. Cards written while the columns
-   * were a fixed union hold `"todo"`, `"doing"` or `"done"`, which are exactly
-   * the ids `DEFAULT_BOARD_COLUMNS` seeds.
-   */
-  column: string
-  title: string
-  /** One line about it, or empty. */
-  body: string
-  /**
-   * The chat this card's work is happening in, or null.
-   *
-   * Never trusted to still name one: a chat can be deleted from under it, and
-   * the card is not the place that owns the conversation. Read it through
-   * `linkedChat` in `lib/board/cards.ts`, which is null for a chat that has
-   * gone — the `chatRootId` idiom, and for the same reason.
-   */
-  chatId: string | null
-  /**
-   * Free labels, in the order they were typed.
-   *
-   * **Text and not records**, unlike the columns: a tag is written by typing it
-   * and there is nothing else about one to keep — no rename, no palette, no
-   * listing to maintain — so a tag store would be a second file to keep in
-   * agreement with the cards for no answer either could give alone. The hue is
-   * derived from the text (`tagTone` in `lib/board/tones.ts`), which is what
-   * makes the same word the same colour on every card without anything
-   * remembering that it is.
-   *
-   * Optional, because every card written before this field existed is on
-   * somebody's disk without it — read through `tagsOf`, never directly.
-   */
-  tags?: string[]
-  /** How urgent, or absent for the ordinary case. Read through `priorityOf`. */
-  priority?: BoardPriority | null
-  /**
-   * The day it is due as `YYYY-MM-DD`, or absent.
-   *
-   * A **day** and not an instant, which is why this is not the ISO timestamp
-   * every other date in this app is: a due date rendered from an instant is a
-   * day earlier or later depending on the reader's offset, and a board that
-   * says a card is overdue because the machine woke up in another timezone is
-   * a board that cannot be trusted. Read through `dueOf`.
-   */
-  due?: string | null
-  createdAt: string
-  updatedAt: string
-}
-
-/**
  * The language a fenced block carries when it holds a drawing.
  *
  * A drawing is a scene of shapes and images, which markdown has no syntax for,
@@ -1929,6 +1770,59 @@ export type DesktopApi = {
    * what goes is the studio's record of it, which is all the studio ever had.
    */
   removeFolder: (id: string) => Promise<WorkspaceRecord>
+
+  /**
+   * A second checkout of a project, added to the workspace as a project of its
+   * own.
+   *
+   * `git worktree add` under this app's data directory, then the same
+   * `addFolder` the dialog uses — see `main/worktrees.ts`, which opens with why
+   * this is not the worktree *layer* that was deleted. An existing branch is
+   * checked out rather than refused. Rejects with git's own sentence, the way
+   * `addFolder` rejects with the store's: the dialog that asked is where it can
+   * be corrected.
+   */
+  addWorktree: (input: {
+    folderId: string
+    branch: string
+    name: string
+  }) => Promise<WorkspaceRecord>
+  /**
+   * The checkout itself, removed, and the project dropped with it.
+   *
+   * The **branch is left alone** — it is the work. Rejects for a folder that is
+   * not a checkout at all, which is the renderer asking about a project it
+   * should not have offered this for.
+   */
+  removeWorktree: (folderId: string) => Promise<WorkspaceRecord>
+  /**
+   * Names a checkout nobody has named yet, after the chat running in it.
+   *
+   * A worktree cannot be created nameless the way a chat can — the branch and
+   * the directory have to exist before the first prompt — so one made with the
+   * branch field left empty is on a `yasuo/untitled-…` branch until this. It
+   * renames **that branch** and the project with it, off the title the CLI wrote
+   * for the conversation (`retitle` in `main/worktree-chat.ts`), which is why it
+   * costs no turn of its own.
+   *
+   * Resolves with `null` for everything that is not that narrow case — an
+   * ordinary project, a checkout on a branch somebody named, a title that slugs
+   * to nothing — because the renderer calls it on **every** chat that gets a
+   * title and the answer is normally "this was nothing to do with a worktree".
+   */
+  nameWorktree: (
+    folderId: string,
+    title: string
+  ) => Promise<WorkspaceRecord | null>
+  /**
+   * Which repository this folder is a `git worktree` checkout of, or null for
+   * an ordinary one.
+   *
+   * Asked of git per folder rather than recorded, so a checkout made in
+   * somebody's own shell answers the same as one this app made. It is what
+   * decides whether `Remove worktree` is on a project's menu.
+   */
+  gitWorktreeRepo: (folderId: string) => Promise<string | null>
 
   /** Opens a folder picker and resolves with the chosen path, or null. */
   pickDirectory: () => Promise<string | null>
@@ -2370,18 +2264,6 @@ export type DesktopApi = {
   onRevealWorktreeChat: (listener: (chatId: string) => void) => () => void
 
   /**
-   * Every board card in every project.
-   *
-   * One call for the whole workspace rather than per project, the way the chat
-   * listing is: the boards together are a few hundred short records, and the
-   * strip has to know a project has cards before its board has ever been
-   * opened.
-   */
-  listBoardCards: () => Promise<BoardCard[]>
-  /** Replaces the whole collection — the renderer owns the list and its
-   * order, the same way it owns the requests'. */
-  saveBoardCards: (cards: BoardCard[]) => Promise<void>
-  /**
    * What one chat taught about its project, proposed by the read-only
    * `claude` — never written. Asked for from the chat's own row, and each
    * proposal in the answer is saved or discarded by hand (`saveLearning`).
@@ -2412,19 +2294,14 @@ export type DesktopApi = {
   /**
    * Every review thread in the workspace.
    *
-   * One call for the lot rather than per project, the way the board's cards are:
-   * the pane has to know a review exists in a file nobody has opened, and the
-   * whole collection is a few dozen short records.
+   * One call for the lot rather than per project: the pane has to know a review
+   * exists in a file nobody has opened, and the whole collection is a few dozen
+   * short records.
    */
   listReviewThreads: () => Promise<ReviewThread[]>
-  /** Replaces the whole collection — the renderer owns the list and its order,
-   * the same bargain the board's cards make. */
+  /** Replaces the whole collection — the renderer owns the list and its
+   * order. */
   saveReviewThreads: (threads: ReviewThread[]) => Promise<void>
-
-  /** Every project's columns. Their own file rather than a field on a card:
-   * they are renamed, recoloured and reordered without any card changing. */
-  listBoardColumns: () => Promise<BoardColumn[]>
-  saveBoardColumns: (columns: BoardColumn[]) => Promise<void>
 
   /**
    * One drawing's scene, as the text of its `.excalidraw` file — Excalidraw's
@@ -2620,6 +2497,9 @@ export const IPC = {
   addFolder: "workspace:add-folder",
   renameFolder: "workspace:rename-folder",
   removeFolder: "workspace:remove-folder",
+  addWorktree: "workspace:add-worktree",
+  removeWorktree: "workspace:remove-worktree",
+  nameWorktree: "workspace:name-worktree",
   pickDirectory: "workspace:pick-directory",
   pickImages: "workspace:pick-images",
   pickFiles: "workspace:pick-files",
@@ -2627,6 +2507,7 @@ export const IPC = {
   clipboardImagePath: "files:clipboard-image-path",
   menuCommand: "menu:command",
   gitBranch: "git:branch",
+  gitWorktreeRepo: "git:worktree-repo",
   gitStatus: "git:status",
   gitChanges: "git:changes",
   gitStage: "git:stage",
@@ -2681,10 +2562,6 @@ export const IPC = {
   saveLearning: "agent:save-learning",
   listReviewThreads: "comments:list",
   saveReviewThreads: "comments:save",
-  listBoardCards: "board:list",
-  saveBoardCards: "board:save",
-  listBoardColumns: "board:list-columns",
-  saveBoardColumns: "board:save-columns",
   readDrawing: "drawings:read",
   writeDrawing: "drawings:write",
   writeDrawingSvg: "drawings:write-svg",

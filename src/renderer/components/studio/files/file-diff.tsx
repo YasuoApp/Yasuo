@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react"
 
+import { rootIdOf, useGitStatus } from "@/lib/files/git-status"
 import { useSettings } from "@/lib/settings"
 
 /**
@@ -70,7 +71,21 @@ export function FileDiff({
     docRef.current = { path, initialText }
   })
 
-  useHeadDiff(ready ? path : null, (read) => {
+  /*
+   * What git last said about this checkout, as the signal to ask it again.
+   *
+   * The committed side survives a file being rewritten — `HEAD` did not move —
+   * but **the patch does not**, and the view's ranges are read off it: a file
+   * edited again under an open diff was drawn through the ranges of the edit
+   * before it. The same record the pane re-reads the file off, so the two halves
+   * of the pair arrive for the same answer rather than one of them lagging.
+   */
+  const status = useGitStatus((state) => {
+    const rootId = rootIdOf(path)
+    return rootId ? state.byRoot[rootId] : undefined
+  })
+
+  useHeadDiff(ready ? path : null, status, (read) => {
     const doc = docRef.current
     if (doc.path !== read.path) return
     setHead({
@@ -149,6 +164,9 @@ type Head = {
 
 function useHeadDiff(
   path: string | null,
+  /** Whatever changing means "ask git again" — see the caller. Only its identity
+   * is read here. */
+  generation: unknown,
   onRead: (read: {
     path: string
     text: string | null
@@ -185,5 +203,5 @@ function useHeadDiff(
     return () => {
       alive = false
     }
-  }, [path])
+  }, [path, generation])
 }

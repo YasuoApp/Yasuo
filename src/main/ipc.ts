@@ -18,8 +18,6 @@ import {
   CHAT_TRAY_KEY,
   IPC,
   MCP_DISABLED_TOOLS_KEY,
-  type BoardCard,
-  type BoardColumn,
   type ChatPlace,
   type ChatSeed,
   type ClaudeProfile,
@@ -62,6 +60,16 @@ import { ChatTray } from "./tray"
 import { TsServers } from "./tsserver"
 import { checkForUpdate, downloadUpdate, startInstaller } from "./updater"
 import { DirectoryWatchers } from "./watch"
+import {
+  addWorktree,
+  branchFromTitle,
+  isUntitledBranch,
+  removeWorktree,
+  renameBranch,
+  untitledBranch,
+  worktreeDir,
+  worktreeRepo,
+} from "./worktrees"
 
 /** What `readImageDataUrl` will actually recognize — the same extensions
  * `pickImages`'s dialog filter offers. */
@@ -627,8 +635,98 @@ export function registerIpc(getWindow: () => BrowserWindow | null): {
     store.removeFolder(id)
   )
 
+  /*
+   * A second checkout of a project, which becomes a project.
+   *
+   * Two calls in one handler because half of it is not the studio's to undo: a
+   * `git worktree add` that lands and an `addFolder` that then refuses would
+   * leave a directory on disk that nothing in the app knows about. So the
+   * directory is named here, git makes it, and the folder record is the same
+   * `addFolder` the dialog uses — which is also the check that this checkout is
+   * not already open as a project.
+   */
+  ipcMain.handle(
+    IPC.addWorktree,
+    async (
+      _event,
+      input: { folderId: string; branch: string; name: string }
+    ) => {
+      // An empty field is deliberate and is the interesting case: the checkout
+      // goes on a placeholder branch and is named after the first chat that runs
+      // in it — see `nameWorktree` below.
+      const branch = input.branch.trim() || untitledBranch()
+
+      const repo = await store.resolveFolderDir(input.folderId)
+      const dir = worktreeDir(store.workspaceFilesDir, input.folderId, branch)
+
+      const made = await addWorktree({ repo, dir, branch })
+      if ("error" in made) throw new Error(made.error)
+
+      // The branch, when the field was left empty: a project row reading
+      // `yasuo/untitled-a1b2c3` for the minute before the first turn names it
+      // says what is happening, where the repository's own name said nothing.
+      return store.addFolder({
+        path: made.dir,
+        name: input.name.trim() || branch,
+      })
+    }
+  )
+
+  /*
+   * The name a checkout gets from the chat running in it.
+   *
+   * Three things have to be true and the first two are cheap, which is what
+   * makes this affordable on every chat that is ever titled: the folder is a
+   * checkout at all, and the branch it is on is still one this app minted. Only
+   * then does anything get written — and what is written is `git branch -m` in
+   * that checkout plus the folder's own name, which is the **title** rather
+   * than the slug: the branch is for git and the row is for reading.
+   */
+  ipcMain.handle(
+    IPC.nameWorktree,
+    async (_event, folderId: string, title: string) => {
+      const named = title.trim()
+      const wanted = named ? branchFromTitle(named) : null
+      if (!wanted) return null
+
+      const dir = await store.resolveFolderDir(folderId)
+      const branch = await currentBranch(dir)
+      if (!isUntitledBranch(branch) || !branch) return null
+      // Last, because it is the one that shells out twice.
+      if (!(await worktreeRepo(dir))) return null
+
+      // A rename git refused leaves the placeholder, and the project keeps the
+      // name it had: half of this landing would be worse than none of it.
+      if (!(await renameBranch(dir, branch, wanted))) return null
+
+      return store.renameFolder(folderId, named)
+    }
+  )
+
+  /*
+   * And back out: the checkout removed, then the project dropped.
+   *
+   * In that order, so a `git worktree remove` that refuses leaves the project
+   * where it is rather than hiding a directory somebody now has to find. The
+   * repository is asked for rather than remembered — see `worktreeRepo`.
+   */
+  ipcMain.handle(IPC.removeWorktree, async (_event, folderId: string) => {
+    const dir = await store.resolveFolderDir(folderId)
+    const repo = await worktreeRepo(dir)
+    if (!repo) throw new Error(`${dir} is not a git worktree checkout.`)
+
+    const failed = await removeWorktree(repo, dir)
+    if (failed) throw new Error(failed.error)
+
+    return store.removeFolder(folderId)
+  })
+
   ipcMain.handle(IPC.gitBranch, async (_event, folderId: string) =>
     currentBranch(await store.resolveFolderDir(folderId))
+  )
+
+  ipcMain.handle(IPC.gitWorktreeRepo, async (_event, folderId: string) =>
+    worktreeRepo(await store.resolveFolderDir(folderId))
   )
 
   ipcMain.handle(IPC.gitStatus, async (_event, folderId: string) =>
@@ -1027,18 +1125,6 @@ export function registerIpc(getWindow: () => BrowserWindow | null): {
 
   ipcMain.handle(IPC.saveReviewThreads, (_event, threads: ReviewThread[]) =>
     store.saveReviewThreads(threads)
-  )
-
-  ipcMain.handle(IPC.listBoardCards, () => store.listBoardCards())
-
-  ipcMain.handle(IPC.saveBoardCards, (_event, cards: BoardCard[]) =>
-    store.saveBoardCards(cards)
-  )
-
-  ipcMain.handle(IPC.listBoardColumns, () => store.listBoardColumns())
-
-  ipcMain.handle(IPC.saveBoardColumns, (_event, columns: BoardColumn[]) =>
-    store.saveBoardColumns(columns)
   )
 
   ipcMain.handle(IPC.readDrawing, (_event, id: string) => store.readDrawing(id))

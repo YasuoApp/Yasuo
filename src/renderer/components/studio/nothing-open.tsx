@@ -28,7 +28,6 @@ const HINTS: Record<Pane, string> = {
     "Pick a file under Changes in the Explorer to read what this project has changed.",
   worktree:
     "Pick a chat under a project on the left, or start one from its row.",
-  board: "Open a project's board from its row on the left.",
 }
 
 /**

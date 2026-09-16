@@ -164,278 +164,68 @@ Nothing reads it and nothing deletes it, for the reason `mail.json` survives its
 own panel: removing a feature is not a reason to throw away what somebody wrote
 with it.
 
-The **Board** below is not that layer coming back, and the difference is the
-reason it was worth building where the other was worth deleting — see the
-section for which of the two claims each makes.
+The **Board** below was built next, on the argument that the kanban idea was not
+what was wrong with the task — and is itself removed now, for a reason of its
+own; see the section.
 
-## Board
+## Board, removed
 
-A project's kanban board: columns it names itself — starting at `Todo`, `Doing`,
-`Done` — and cards that can each name the chat their work is happening in. Opened
-from the project's own row in the left column, a board mark beside the `+`, from
-that row's menu, or by name in `⌘P`, which lists one board per project.
+**There was a kanban board here**: one tab per project whose id was the
+project's, columns the project named itself (seeded `Todo` / `Doing` / `Done`,
+then added, renamed, recoloured and dragged), and cards carrying a title, a
+line, tags, a priority, a due day and at most one chat. It was opened from a
+mark beside the project row's `+`, from that row's menu, or by name in `⌘P`; a
+card opened a drawer down the right-hand edge; a card could start or open the
+chat its work was happening in, and that chat's pane carried a chip naming the
+card back.
 
-**It is a project's, not the workspace's.** The thing a card is about is work in
-one repository, and the chat a card links to runs in one directory; a board
-holding both projects' cards would be a board whose every card had to say which
-repository it meant, and a link that could cross between them. So `folderId` is
-on the card, and the board is **one tab per project whose id is the project's** —
-the shape the `Changes` tab already has, which is what puts it in the strip
-exactly while that project is the one being worked in and takes it out again on
-a switch. `rootOf` in `lib/panels.ts` is the identity function for both.
+### Why, when it worked
 
-### What it is not
+It was the one panel in this app that was **not about a repository**. Everything
+else on screen answers a question about the checkout in front of you — what is
+in it, what it has changed, what a chat did to it, what the shell says about it
+— and each of those is a thing this studio can see for itself. A board answers
+what somebody intends to do next, which is a thing only the user can put there,
+by hand, twice: once where they already track work, and once here.
 
-The **task** above (see Tasks, removed) was a container of members drawn from
-every panel — a request, a table, a file, a note — with a crumb across the title
-bar, a `Home` dashboard of cards, and `Add what is open`. What was wrong with it
-was not the kanban idea, which it did not have: it was that a task was a second
-place every other panel's contents were filed, so every panel had to know about
-it, and what it bought over simply having those things open was a name.
+That is the cost that decided it. Nobody keeps two backlogs in agreement, so the
+board was either a duplicate of the real one or the stale half of a pair — and a
+board that is out of date is worse than no board, because it is read as if it
+were true. The link to a chat was the part that earned its keep, and it earned
+it in one direction only: from the card to the conversation. The chip on the
+chat, pointing back, was the board asking to be maintained.
 
-A card here holds a **title, a line, a column, its own marks, and at most one
-chat**. Nothing else in the app is filed under it, and nothing outside the board
-and that chat's own header knows a card exists. That is the whole difference, and
-it is why this one is not on the path to being that one.
+The **agent could not write to it either**, which was deliberate (this app serves
+no MCP server of its own) and left the board the one surface in the studio that
+only ever moved when a human dragged something. A panel that costs manual upkeep
+and gives nothing back to the thing the app is for is the panel to delete.
 
-### What a card carries, and what it does not
+What stays is the shape of the answer, already here: a project's **chats** are
+the list of what is being worked on, `Changes` is what has come of it, and the
+board somebody actually keeps is in the tool their team already uses.
 
-Three marks were added on top of the title and the line: **tags**, a
-**priority**, and a **due date**. Each is drawn only when it is set, so a plain
-card is exactly as tall as it was.
+### What went with it
 
-They earn their place for the same reason and it is worth saying once: each is a
-thing about the work that a **person types once and reads at a glance
-afterwards**, and each has a place to be drawn that costs nothing when it is
-empty. The test for anything else proposed for a card is that one.
+Deleted rather than hidden, the way the Database, API, Notes and Mail panels
+went: `lib/board/` (`cards.ts`, `store.ts`, `tones.ts`),
+`components/studio/board/` (the pane, the card, the drawer, the chips and the
+chat's card chip), `test/board-cards.ts`, the `BoardCard` / `BoardColumn` /
+`BoardTone` / `BoardPriority` types and `DEFAULT_BOARD_COLUMNS` in the contract,
+the four `board:*` channels with their preload thunks, store methods and
+`BOARD_FILE` / `BOARD_COLUMNS_FILE`, and the `board` pane itself — out of
+`PANES`, out of `Pane`, out of `PANELS`, out of `PREFIX`, out of the tab
+strip's items, the group labels, the empty-pane hints and the palette's
+`Boards` group.
 
-- **Tags are text, not records.** There is nothing about a tag to keep beyond the
-  word — no rename, no palette, no listing — so a tag store would be a second
-  file to keep in agreement with the cards for no answer either could give alone.
-  The hue is derived from the text (`tagTone`), which is what makes the same word
-  the same colour on every card of every project without anything remembering
-  that it is. Two unrelated tags can collide on a hue; the chip carries the word
-  too, so what is lost is nothing.
-- **Priority is three levels and absent is the default.** Not five, because the
-  only thing a priority on a personal board is read for is which card to pick up
-  next, and a scale nobody can rank consistently stops being maintained. Not
-  defaulted to `medium`, because a board where every card claims a priority is a
-  board where the field says nothing.
-- **A due date is a day, not an instant** — `YYYY-MM-DD`, and the one date in
-  this app that is not an ISO timestamp. A due date rendered from an instant is a
-  day early or late depending on the reader's offset, and a board that calls a
-  card overdue because the machine woke up in another timezone is a board that
-  cannot be trusted. Its colour is `overdue` / `soon` / `later`, where `soon` is
-  today or tomorrow and nothing further: a week-wide window paints most of a
-  healthy board amber.
+The chat store's `create` loses its **`save` option** with it: the board's
+`startChat` was the one caller that recorded a chat's id somewhere else and so
+needed the record written before the first message. Every remaining caller
+opens a tab and lets `send` write it down, which is the rule a `+` nobody
+speaks into leaves no file.
 
-What was **refused** in the same pass, from a mock-up of a team board:
-**assignee and avatars**, **comments**, **attachments**, an **activity log**, and
-a `Status` field in the card's drawer.
-
-The first four are the same refusal: this app has one user, no accounts, and no
-server. There is nobody to assign a card to, nobody to comment to, and no event
-stream for an activity log to draw — the agent cannot write to the board either,
-because this app serves no MCP server of its own (below). The nearest honest
-thing to all of them already exists and is already on the card: the **linked
-chat**, which says who is on it, is where the discussion about it happens, and
-whose age says whether it is still moving.
-
-`Status` is refused for the reason the drawer has no column picker: the column
-_is_ the status, and a second control saying it is a second answer that can
-disagree with the board behind the drawer.
-
-### Opening a card
-
-A **click** on a card opens a **drawer down the right-hand edge** — Base UI's
-drawer with `swipeDirection="right"`, and the first use of that component in the
-app.
-
-It was a centred dialog behind a **double click**, and both halves were wrong for
-the same reason. A card is read against the board around it — which column it is
-in, what is beside it, what else is due that week — and a modal over the middle
-covers exactly the thing the card is being read against; a panel down one edge
-leaves the board legible behind it. Once opening a card is that cheap it can be
-what a plain click does, and a double click is a gesture nothing announces and
-that no card on this board looked like it wanted.
-
-Two consequences, both of which had to be handled rather than discovered: the
-`⋯` menu button and the chat footer live **inside** a card that now opens on a
-click, so both stop the click from reaching it — otherwise pressing `⋯` opens the
-drawer under its own menu, and following a card to its chat opens both. A drag
-does not fire a click at all, so letting a card go in another column cannot open
-it.
-
-An editor **in the column** was never the alternative: the point of the card on
-the board is that it is a few lines high, and one that grew a text area where it
-sat would push the rest of the column out of view every time somebody fixed a
-typo.
-
-Fields on `BoardCard` are **optional and read through functions** — `tagsOf`,
-`priorityOf`, `dueOf` — never off the record. Board files were on people's disks
-before these existed and nothing in main normalises one on the way through
-(`listBoardCards` is a read of the JSON), so each reader has to answer for a card
-written by an older build and by a newer one. That is `toneOf`'s rule, applied to
-three more fields, and `test/board-cards.ts` is where it is checked.
-
-### The columns are the project's own
-
-`Todo` / `Doing` / `Done` are what a board **starts** as — `DEFAULT_BOARD_COLUMNS`,
-seeded the first time one is opened — and from there they are added, renamed,
-recoloured and dragged.
-
-They were **fixed**, and the argument for that was that a board answers one
-question and every added column asks a second one. That was wrong about how a
-board is actually kept: `Blocked` and `Review` are the two every real one grows,
-and a board that cannot say "waiting on someone else" gets that said in card
-titles instead. So the reversal, and what it cost is what was predicted — a
-record type (`BoardColumn`), a file (`board-columns.json`), a rename, a reorder,
-and a rule for the cards in a column being deleted.
-
-**That rule is: nothing rewrites the cards.** Deleting a column leaves its cards
-naming a column that has gone, and `columnOf` draws such a card in the **first**
-column — visible, and one drag from wherever it belongs. A delete that silently
-moved eight cards somewhere else would be a delete that lost track of work, so
-the menu item says how many will turn up in the first column before it is
-picked. The last column standing cannot be deleted at all: a board with no
-columns has nowhere to draw a card and nowhere to put the button that would add
-one back.
-
-The seeded ids **are the words** — `todo`, `doing`, `done` — and that is
-load-bearing rather than tidy: cards written while the columns were a fixed union
-hold exactly those strings, so seeding them means a board written by the previous
-build needs no migration pass.
-
-One consequence worth naming: the tab's badge counts the cards **not in the last
-column**, since there is no longer a column called `Done` to ask about. Every
-board is read left to right and work ends at the right-hand end of it, whatever
-that column has been called.
-
-### Colour
-
-A column carries one of six hues (`BoardTone`), picked from its own menu, and the
-neutral is first because a column with nothing to say about itself should be able
-to say nothing. The record holds the **id** and `lib/board/tones.ts` holds what
-that is worth in pixels — the split `GitFileState` has from `GIT_TONES`, so a
-change of palette touches nothing that was saved.
-
-Five strengths per hue, and deliberately not one colour at five opacities: the
-dot in the header is the hue at full strength because it is the thing being read;
-the header tint behind it is faint, because a column is furniture and a card is
-content; the card's **left border** is what carries the hue down the column, so a
-card dragged into the wrong one reads as wrong without the header being in view;
-the insertion line while dragging takes the hue of the column it is in, so the
-gap being aimed at says which column it is in; and `chip` is a filled label on a
-card — a tag or a priority — which is the only one carrying a text colour as well
-as a tint, because it is read over the card's own background rather than tinting
-something that already had its own.
-
-The same six hues serve the tags, which is why there are not two palettes: a tag
-picks its hue from its own text (`tagTone`) out of the five that are not the
-neutral. A column may say nothing about itself; a tag somebody chose to type
-always has something to say.
-
-A card's marks are **shapes as well as colours** — the priority has an arrow and
-a word, the due date a calendar. Three chips in a row separated only by hue fails
-for anyone who cannot tell them apart, and fails for everyone at a glance, which
-is the only way a board is ever read.
-
-### Dragging
-
-Both a card and a column, with the platform's own `draggable` / `dragover` /
-`drop` rather than a library: a board moves one thing at a time to one insertion
-point. A column is dragged **by its header**, which is why cards are draggable
-separately — a column that could be picked up anywhere in its own body would
-swallow every attempt to pick up a card.
-
-The arithmetic is `moveCard` and `moveColumn`, and it is the one part of this
-panel worth a test (`test/board-cards.ts`). Two things there are easy to get
-wrong and invisible when wrong: the gaps on screen are counted against the column
-**as drawn**, which still holds the thing being carried, while the move counts
-against it taken out — one off, one direction only — and the file holds every
-project's records, so a drag on one board must not reorder another's.
-
-`membership` in `cards.ts` exists because of a third: the drawing filed an
-orphaned card into the first column and the drop did not, so a card let go beside
-an orphan landed a row off. One rule, read by both.
-
-The board scrolls **sideways**, with a fixed column width, rather than dividing
-the pane by however many columns there are: a tenth column that made the other
-nine unreadable would be a board that punished being used.
-
-### The link to a chat, in both directions
-
-Four things, and none of them is a fifth panel knowing about the board:
-
-- A card's **footer line** is its chat — the title, whether it is answering
-  right now (the `busy` event, the same one the projects column's spinner reads)
-  and how long ago it last did. The line is the click: it opens the chat. That is
-  a line of text per card rather than a control per card, because what somebody
-  wants off a glance at a board is which cards have an agent on them.
-- **Start chat from this card** creates a chat in the card's project and links
-  it, with the card's title and body as the composer's **draft** — `create` takes
-  one, and this is the only caller left that uses it. Not sent: the first turn is
-  still the user's to phrase and to
-  read before it runs, and a card that sent itself would be a board that starts
-  agents.
-- The chat's own pane carries a **chip** above the transcript naming its card,
-  with the column changeable from there — somebody finishes reading a turn and
-  knows the card is done, and the alternative is switching to the board to drag
-  a card whose chat they were just in. It draws nothing at all for a chat no
-  card names, which is most chats.
-  Beside the dropdown, once the chat has **stopped**, is the card's way to the
-  **last column in one click**. Two controls for one field is a repeat only on
-  paper: a dropdown answers "which column", and this answers the question
-  actually asked at the end of a turn, which is the whole of what makes the
-  board worth keeping up to date. The last column rather than one called `Done`,
-  because the names are the user's — the same reading `unfinishedCount` does,
-  and the two have to agree or this button would move a card the project's tab
-  still counts as unfinished. It is **absent** while the chat is answering or
-  waiting on a question, rather than disabled: mid-turn it is a button for a
-  fact nobody has yet, and a greyed control in a strip that thin is a smear
-  nobody can read the reason for. None of this is the agent writing to the
-  board — see below; it is a person pressing something, in the place they
-  already are.
-- A card whose chat has been **deleted** says so and offers to start another.
-  `linkedChat` resolves the link at read time and is null for exactly that, the
-  way `chatRootId` is null for a chat whose project has gone. Deleting a chat
-  therefore needs no write to the board, and there is no state in which the two
-  disagree about what exists.
-
-### The agent cannot move a card
-
-This app serves no MCP server of its own (see MCP), so there is no tool to hand
-a turn that would let it write to the board — and adding one would be reversing
-that decision for a panel that does not need it. The consequence to be clear
-about: a board is **the user's** account of what is being worked on, not a place
-the model keeps state, and it does not update itself when a turn finishes. What
-the model does know is whatever the chat was seeded with, which is the card's own
-text.
-
-### On disk, and what is not remembered
-
-Two files, both the whole workspace's and both read once at launch:
-`workspace/board.json` for the cards and `workspace/board-columns.json` for the
-columns — `board:list` / `board:save` and `board:list-columns` /
-`board:save-columns`, each replacing the whole collection the way the requests'
-listing is replaced. Two files rather than one, and the columns not a field on a
-card, for the reason a request folder is not a field on a request: a column is
-renamed, recoloured and reordered without any card changing.
-
-**Order in each list is order on the board** — within a column for a card, left
-to right for a column — so a drag of either is one write and there is no second
-ordering to keep in agreement. `moveCard` and `moveColumn` in
-`lib/board/cards.ts` are the only code that knows it, and `test/board-cards.ts`
-is why.
-
-The cards of a project that has **left the workspace** stay in that file. The
-board simply does not draw them, the way a chat whose folder has gone is dropped
-from the listing rather than deleted — see the `tasks.json` argument above.
-
-Which boards were open is **not** remembered across launches, unlike the API
-panel's tabs and like the `Changes` tab this copies: a board is one click from the
-project it belongs to, and restoring one would mean restoring a tab for every
-project somebody had glanced at.
+A workspace that used the feature still has `workspace/board.json` and
+`workspace/board-columns.json` on disk. Nothing reads them and nothing deletes
+them, for the reason `tasks.json` and `mail.json` survive their own panels.
 
 ## Watching ClickUp tasks, removed
 
@@ -464,7 +254,9 @@ may start a turn, and a feature whose correctness rests on one uncalled function
 is a feature that will eventually be called.
 
 What went with it: `main/clickup.ts`, `main/clickup-watch.ts`,
-`main/clickup-agents.ts`, `main/worktrees.ts` and `main/token-store.ts`;
+`main/clickup-agents.ts`, `main/worktrees.ts` and `main/token-store.ts`
+(`main/worktrees.ts` has since been written again, for the button beside a
+project's `+` — see § Worktrees, as projects; what it is not is the layer);
 `shared/clickup-agents.ts`; `lib/clickup/` and `components/studio/clickup/`;
 the twelve `clickup:*` channels; `ClickupWatch`, `ClickupChange`,
 `ClickupSnapshot`, `ClickupProposal` and the rest out of the contract, with
@@ -475,9 +267,10 @@ the twelve `clickup:*` channels; `ClickupWatch`, `ClickupChange`,
 
 `readOnlyTurn` went out of `one-turn-agent.ts` with the agents that were its only
 caller — `draftCommitMessage` and `distillLearnings` stay, and they remain the
-whole of what that module is for. The board is untouched: it never imported from
-ClickUp (see the import argument this section replaced, which was deleted before
-the watcher was) and the agent still cannot write to it.
+whole of what that module is for. The board that used to be named here never
+imported from ClickUp either (see the import argument this section replaced,
+which was deleted before the watcher was), and is itself gone now — see Board,
+removed.
 
 **What is on disk is left alone**, the way the notes and the mail were: a
 workspace that ran the old build still has `workspace/clickup-watches.json`, and
@@ -491,6 +284,10 @@ is all it ever was.
 A project's rows are its chats, and clicking one opens it.
 
 ### Worktrees, removed
+
+(The checkout itself came back afterwards, as a **project** rather than as a
+layer — § Worktrees, as projects, below. Everything here still holds: what was
+removed is what is described here, and none of it returned.)
 
 There was a layer between the two: a project's rows were its `git worktree`
 checkouts — a second working tree on a branch of its own, sharing the single
@@ -531,6 +328,135 @@ and this row names the absence of one. Clicking a chat under it moves nothing
 else: there is no project to point the dock's shell and the Explorer tree at,
 and pointing them at whichever project was last active would be this app
 guessing.
+
+### Worktrees, as projects
+
+The checkout came back; the **layer** did not, and the difference is the whole
+design. `main/worktrees.ts` makes a `git worktree`, and what it hands back is an
+ordinary **workspace folder** pointed at it. There is still no worktree in
+`ChatPlace`, no `worktreeId` anywhere, nothing nullable in `FileRoot` and no
+`??` chain deciding which of two directories a chat meant — the Explorer, the
+Changes tab, the dock's shell and the chats each work on it with
+nothing taught about any of this, because from where they sit it is a project
+like the one it was cut from.
+
+What the removal argued was that the cost — a branch to name, a directory to
+remove afterwards — was paid on **every** conversation while the isolation was
+wanted on almost none of them. That argument is about where the gesture sat, not
+about whether it is worth having: two agents working on one project without
+standing on each other's files, index and branch is a real thing to want a few
+times a week. So it is a **button beside the `+`** rather than the thing the `+`
+does. The row's hover strip is two, in the order they are reached for least to
+most — a checkout, a chat — and the same two are on the right-click menu.
+
+**Where they go**: `~/.yasuo/workspace/worktrees/<folder id>/<branch slug>`, the
+same place the deleted layer put them, so a workspace that used both has one
+place to look. Not beside the repository: a sibling directory of somebody's
+project is a thing their tooling finds — a watcher, a `find`, an editor's
+indexer — and this app does not get to litter there. Keyed by the folder id as
+well as the branch, since one branch name in two repositories is two checkouts.
+The dialog therefore has **no path field**, unlike `Add a folder`: the directory
+is this app's to name, and the renderer cannot see that path anyway — the same
+bargain a Claude profile's `CLAUDE_CONFIG_DIR` makes. It says where in words.
+
+**The branch field is optional, and that is the interesting half.** A chat is
+written down by its first message and named by what the CLI decided that message
+was about; a checkout cannot work that way, because its branch and its directory
+have to exist before any prompt does. So the closest thing to it is a
+**placeholder that gets replaced**: an empty field mints `yasuo/untitled-<hex>`,
+and the first chat in that checkout to receive a title renames both the branch
+(`git branch -m`) and the project. The title comes from the same place a chat's
+own does — the CLI's `ai-title`, read out of the session transcript by `retitle`
+— so this costs no turn and no tokens, which is the only reason it is allowed
+under the rule against features that call the CLI as a helper. The project takes
+the **title** and the branch takes its slug: the branch is for git, the row is
+for reading.
+
+**It is the one branch write in the app**, and `main/git.ts` deliberately keeps
+branch, amend, log and push out on the ground that the dock's shell is the git
+client. What makes this narrow enough to sit beside that: the branch being
+renamed was minted by this app minutes earlier, nobody has pushed it, no other
+checkout can be on it, and the rename is refused for anything that does not
+still match `isUntitledBranch` — a branch the user named is never touched.
+`nameWorktree` in `main/ipc.ts` is where those conditions are checked, and it is
+called on **every** chat that gets a title, so it answers `null` without writing
+anything for the ordinary case where none of it applies. A collision — two runs
+at one task slug identically — is resolved by keeping the placeholder's own
+suffix (`add-sso-login-a1b2c3`) rather than by giving up, since a checkout stuck
+on `yasuo/untitled-…` with nothing saying why is the worse end.
+
+The **directory** keeps the placeholder's slug. `git worktree move` is a second
+way for this to fail for a name nobody reads: it is under this app's data folder,
+addressed by the folder record, and the row in the column says the real name.
+
+Creating one therefore also **opens a chat in it** — and selects it in the tree
+and the dock's shell, the way clicking a project row moves those two. Without a
+conversation there is nothing to name an unnamed checkout after; and "make me
+somewhere else to work" is not the end of the gesture anyway. The chat writes
+nothing to disk until somebody speaks into it, so a worktree nobody used leaves
+no chat behind.
+
+**A branch that already exists is checked out rather than refused.** Coming back
+to work started last week is the same gesture as starting it, and the second
+attempt without `-b` is what makes both one button. What git refuses for real —
+a branch already checked out in another worktree, a name it will not take — is
+its own sentence, shown in the dialog, which stays open because the field
+holding the bad value is the only place it can be corrected.
+
+**Removing one is the one gesture in this app that deletes a directory**, and it
+is drawn as such: a second, separate menu item below `Remove project` — which
+still only forgets — and a confirmation that says what goes (the checkout, and
+uncommitted work in it, since the removal is forced) and what stays (the branch,
+every commit on it, and the project it was cut from). Forced because a checkout
+somebody has been working in is dirty by definition, and a refusal on that ground
+would strand every directory this app ever made under its own data folder. The
+`git worktree remove` runs **before** the folder is dropped, so a refusal leaves
+the project where it was rather than hiding a directory somebody now has to find.
+
+**Whether a project is a checkout is asked of git, not written down.** `git
+worktree list --porcelain` names the main worktree first, and that against the
+folder's own `--show-toplevel` is the whole test (`worktreeRepo`, with
+`mainWorktreeIn` split out and tested). So a checkout somebody made in their own
+shell and then added as a folder gets the same menu, a folder whose checkout has
+since been removed elsewhere says no rather than carrying a stale flag, and the
+manifest keeps holding a path and nothing else. It is read per folder beside the
+branch, in the studio store's one pass (`worktrees` there, pruned with
+`branches`). Both sides of the comparison go through `realpath`: a repository
+reached through a symlink is the ordinary case on macOS, and two spellings of
+one directory would make the **main** worktree look like a checkout of itself —
+which would put `Remove worktree` on the menu of the project the work is in.
+That is what `test/worktrees.ts` builds a real repository for.
+
+**The column files a checkout under the project it was cut from**, and that is
+the column's shape rather than a layer coming back. It was flat first, on the
+argument above — a checkout _is_ a project — and the argument was right about
+every panel and wrong about this one list: a second checkout of the repository
+somebody is working in landed at the bottom of the column, below the unrelated
+repositories they had added by hand, indistinguishable from one. Nothing said it
+was a checkout, and nothing said of _what_. So one indent, and the only nesting
+in the column: `projectTree` in `lib/project-tree.ts` (`test/project-tree.ts`)
+takes the folders and the `worktrees` map the store already reads and returns
+each project with its checkouts under it.
+
+What did **not** change is the thing the deleted layer was: there is still no
+`worktreeId`, nothing nullable in `FileRoot`, no worktree in `ChatPlace` and no
+`??` deciding which directory a chat meant. A checkout is still an ordinary
+workspace folder with its own chats, its own `+`, its own `New worktree…` and
+its own Explorer; the renderer draws one row an indent in, and every panel except
+this list is untouched. The parent is found by the same `worktreeRepo` answer
+that decides whether `Remove worktree` is on the menu — **asked of git, not
+written down** — so a checkout made in somebody's own shell files itself under
+its project exactly like one this app made, and a checkout whose repository is
+not in the workspace keeps a top-level row rather than being hidden under one
+that does not exist.
+
+Two consequences worth naming. A checkout takes a **branch mark** rather than a
+folder mark: the indent says it belongs to the project above it, and "a folder
+inside that project" is the wrong reading badly enough to be worth a glyph, since
+the directory is not inside it at all. And a **shut project answers for its
+checkouts** — folding it now hides them, so without that a turn running in a
+checkout would leave the column still in the only list that mentions it, which is
+the failure the count on a shut row was written against in the first place.
 
 **How the rows are drawn.** A folder mark, open or shut, where a disclosure
 chevron used to be: what this column lists is projects on disk, and the chevron
@@ -582,8 +508,8 @@ numbers are deliberately not words: this sits at the right-hand end of a row
 whose left-hand end is a project name that has to keep its width, and "2 chats
 running, 1 waiting" is a sentence that truncates the name. The spoken version is
 on the row's `title`, where width is not the constraint. It hides on hover,
-`invisible` rather than unmounted, because the `+` and the board button are
-positioned over exactly that spot — the same bargain the Changes list makes with
+`invisible` rather than unmounted, because the row's buttons are positioned
+over exactly that spot — the same bargain the Changes list makes with
 its `+112 −8`.
 
 **On the rail, while the whole column is shut**: a dot, and nothing more,
@@ -1623,11 +1549,11 @@ ordinary — and `/rename` is there for the same reason. An id already in the
 listing is returned as it stands rather than added twice, which is what two
 messages sent before the first write landed would otherwise do.
 
-The exception is a caller that records the chat's id somewhere else. The board's
-`startChat` links a card to the chat it starts, so it asks `create` to `save`
-straight away; without that, closing the app would bring the card back with its
-chat `lost` — which is what a card whose chat was _deleted_ says, and it would
-be saying it about a chat that was never written down at all.
+There was an exception, for a caller that recorded the chat's id somewhere
+else: the board's `startChat` asked `create` to `save` straight away, or closing
+the app would bring its card back with the chat `lost`. The board is gone (see
+Board, removed) and the `save` option with it — every caller now opens a tab and
+lets the first message write it down.
 
 **A chat is named twice, and the second name is the CLI's.** The first is the
 sentence that opened it, clipped to forty characters, which is what the tab says
@@ -1888,8 +1814,8 @@ to.
 ## The tab strip
 
 One strip for the whole workbench, above whichever panel is showing, rather
-than one per panel: a file, a diff, a chat and a project's board sit side by
-side, and clicking any of them goes to the pane that shows it. Leaving one panel
+than one per panel: a file, a diff and a chat sit side by side, and clicking
+any of them goes to the pane that shows it. Leaving one panel
 for another used to take the first panel's tabs off the screen — still open, but
 nothing said so. `components/studio/workspace-tabs.tsx` assembles it from the
 panel stores `PANES` names; the order across panels is `tabOrder` on the studio
@@ -2175,14 +2101,13 @@ strip comes back as the row.
 
 ## Search
 
-`⌘P` opens a search over everything **this window** can open — a file, a chat, a
-project's board — and picking one opens its tab and goes to the pane that shows
-it. `components/studio/command-palette.tsx` is the whole of it.
+`⌘P` opens a search over everything **this window** can open — a file or a chat
+— and picking one opens its tab and goes to the pane that shows it. `components/studio/command-palette.tsx` is the whole of it.
 
 It exists because the strip and the two columns only answer a question they are
-already pointed at. A file nobody has expanded a folder of, a chat from last
-week and another project's board are each a trip through a list the user is not
-in and is not going back to, and the list they moved to is still there when they
+already pointed at. A file nobody has expanded a folder of and a chat from last
+week are each a trip through a list the user is not in and is not going back
+to, and the list they moved to is still there when they
 arrive. The palette is the way in that leaves the columns where they were — for
 the same reason nothing else here switches them, `select` on each panel's own
 store is what it calls, so a chat opened from the palette behaves exactly like
@@ -2239,19 +2164,18 @@ cmdk scores every row it holds on every keystroke, which is right for a menu of
 commands and not for twenty thousand paths, so a cheap subsequence pass runs
 first — `slfs` finds `src/lib/files/store.ts`, and a typed `/` is not something
 the path has to match literally — and hands on forty rows to be ranked against
-the chats and boards beside them. Picking one opens the file **and** expands
+the chats beside them. Picking one opens the file **and** expands
 the
 tree down to it: somebody who found a file this way generally wants to see what
 sits next to it.
 
 What the palette lists otherwise is what the panels list, read from their stores
-rather than from an index — the chats and one board per project, both of which
-the studio already holds.
+rather than from an index — the chats, which the studio already holds.
 
 ### Finding a line in the chat on screen
 
 **`⌘F`, and it is a bar in the pane rather than anything in this palette.** `⌘P`
-is _go to_ — a file, a chat, a board, anywhere in the workspace — and it takes
+is _go to_ — a file or a chat, anywhere in the workspace — and it takes
 the screen because what it finds may be anywhere. `⌘F` is _find in this_, and
 what it finds is on the page behind it: a dialog would cover the one thing that
 has to stay readable while the arrows walk it. So the chat pane grows the bar
@@ -3068,8 +2992,8 @@ is both less code here and the only way those stay correct as the CLI changes
 them.
 
 The interception is in the **store's `send`**, not in the composer: the `Changes`
-pane, a board card and the composer all send through that one door, and a
-`/clear` typed into any of them has to mean the same thing. It is parsed from the
+pane and the composer both send through that one door, and a `/clear` typed into
+either has to mean the same thing. It is parsed from the
 draft rather than from the menu's pick, so `/clear` typed in full and never
 chosen from a row means what the row would have meant. The parse is deliberately
 exact — `/clearly` and `clear the cache` are messages, and reading either as
@@ -3933,8 +3857,7 @@ any selection somebody can drag.
 **A comment outlives the app.** It was a _sitting_ once — nothing written down,
 on the argument that what a review was for was the chat at the end of it. There
 is no chat at the end, so nothing was keeping it. They live in
-`workspace/review.json`, one file for the workspace the way the board's cards
-are, which is why `ReviewThread` and everything under it are in the contract
+`workspace/review.json`, one file for the whole workspace, which is why `ReviewThread` and everything under it are in the contract
 rather than in the renderer that draws them.
 
 What is stored is **not only line numbers**: each thread carries the lines it

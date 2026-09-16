@@ -22,7 +22,6 @@ import { useRun } from "@/lib/run/store"
 import { useProjects } from "@/lib/projects"
 import { useClaudeProfiles } from "@/lib/worktree-chat/claude-profiles"
 import { useWorktreeChats } from "@/lib/worktree-chat/store"
-import { useBoard } from "@/lib/board/store"
 import { useReview } from "@/lib/files/review"
 import { Dock } from "./dock"
 import { ProjectCrumbs } from "./project/project-crumbs"
@@ -32,7 +31,6 @@ import { WorktreeChatPane } from "./worktree/chat-pane"
 import { FileTree } from "./files/file-tree"
 import { ExplorerRail } from "./files/explorer-rail"
 import { ChangesPane } from "./files/changes-pane"
-import { BoardPane } from "./board/board-pane"
 import { FileWorkspace } from "./files/file-workspace"
 import { AddFolderDialog } from "./add-folder-dialog"
 import { CommandPalette } from "./command-palette"
@@ -59,8 +57,6 @@ function paneView(pane: Pane) {
       return <ChangesPane />
     case "worktree":
       return <WorktreeChatPane />
-    case "board":
-      return <BoardPane />
   }
 }
 
@@ -93,9 +89,6 @@ export function Studio() {
     void useRun.getState().restore()
     void useWorktreeChats.getState().refresh()
     void useClaudeProfiles.getState().refresh()
-    // Before any board is opened: a project's tab carries how many cards it has
-    // waiting, and the chat pane's chip asks which card a chat is the work of.
-    void useBoard.getState().refresh()
     // Before any diff is opened, for the same reason: the `Comments` tab counts
     // threads in files nobody has looked at yet. Each is put back on its lines
     // the first time its own file is shown — see `showing`.

@@ -228,21 +228,19 @@ type WorktreeChatState = {
    * reading `selectedId` back would be a guess at whether this call is what put
    * it there.
    *
-   * The chat is **not written down here** (see `unsaved`), which is why `save`
-   * exists: a caller that is about to record this id somewhere else needs the
-   * chat to outlive the window. Nothing else should set it — an unused chat is
-   * exactly what this stopped keeping.
+   * The chat is **not written down here** (see `unsaved`): the first message
+   * is what makes it a record, so a `+` nobody speaks into leaves no row and no
+   * file.
    */
   create: (
     place: ChatPlace,
-    options?: { draft?: string; save?: boolean }
+    options?: { draft?: string }
   ) => Promise<string | null>
   /**
    * Writes an unsaved chat down, and answers whether it is a record now.
    *
    * The moment a chat stops being this window's own — see `unsaved`. Called by
-   * `send` on the first message, which is the only time it normally happens,
-   * and by a `create` whose caller is about to record the id elsewhere. A chat
+   * `send` on the first message, which is the only time it happens. A chat
    * already written down answers true without a round trip, so it is safe to
    * call on every message.
    */
@@ -266,8 +264,8 @@ type WorktreeChatState = {
    * A message, or a command this app answers itself.
    *
    * The interception is here rather than in the composer because this is the one
-   * door: the `Changes` pane, a board card and the composer all send through it,
-   * and a `/clear` typed into any of them has to mean the same thing. See
+   * door: the `Changes` pane and the composer both send through it, and a
+   * `/clear` typed into either has to mean the same thing. See
    * `localCommand` for why only two commands are this app's and everything else
    * goes to the CLI verbatim.
    */
@@ -446,10 +444,6 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
     })
     get().select(chat.id)
 
-    // The tab stays either way — there is a chat on screen and the next message
-    // tries the write again. What the caller is told is whether the id is one it
-    // may write down somewhere else.
-    if (options?.save && !(await get().save(chat.id))) return null
     return chat.id
   },
 
@@ -819,11 +813,27 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
        * in an error and still have been titled.
        */
       if (event.type === "title") {
-        set({
-          chats: get().chats.map((chat) =>
-            chat.id === chatId ? { ...chat, title: event.title } : chat
-          ),
-        })
+        const chats = get().chats.map((chat) =>
+          chat.id === chatId ? { ...chat, title: event.title } : chat
+        )
+        set({ chats })
+
+        /*
+         * And the **checkout** this chat runs in takes the same name, if it is
+         * one nobody has named.
+         *
+         * Here because this is the moment the name exists, and it is the only
+         * one: a worktree cannot be opened nameless the way a chat can — its
+         * branch and directory are made before the first prompt — so one created
+         * with the branch field left empty waits for exactly this event. Main
+         * decides whether there is anything to do, since the three questions
+         * ("is this folder a checkout", "is it still on a placeholder branch")
+         * are git's to answer; the ordinary reply is that there was not.
+         */
+        const folderId = chats.find((chat) => chat.id === chatId)?.folderId
+        if (folderId) {
+          void useStudio.getState().nameWorktree(folderId, event.title)
+        }
         return
       }
 
