@@ -124,7 +124,7 @@ export default function CodeMirrorFileEditor({
     const target = pendingReveal.get(initial.path)
     if (target) {
       pendingReveal.delete(initial.path)
-      moveTo(view, target.line, target.column)
+      moveTo(view, target.line, target.column, target.length)
     }
 
     return () => {

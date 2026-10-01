@@ -14,6 +14,7 @@ import { watchExpandedDirectories } from "@/lib/files/watch"
 import { reconcileScope, useActiveTabId, useHasOpenTabs } from "@/lib/panels"
 import {
   isEditingRichText,
+  isSearchShortcut,
   isStudioShortcut,
   isTerminalShortcut,
 } from "@/lib/shortcuts"
@@ -22,6 +23,7 @@ import { useDock, DOCK_STRIP_HEIGHT } from "@/lib/dock"
 import { useStudio, RAIL_WIDTH, type Pane } from "@/lib/store"
 import { useRun } from "@/lib/run/store"
 import { useProjects } from "@/lib/projects"
+import { useWorkspaceSearch } from "@/lib/workspace-search"
 import { useClaudeProfiles } from "@/lib/worktree-chat/claude-profiles"
 import { useWorktreeChats } from "@/lib/worktree-chat/store"
 import { Dock } from "./dock"
@@ -296,6 +298,22 @@ function Workbench() {
       window.removeEventListener("keydown", onKeyDown, { capture: true })
     }
   }, [toggleSidebar])
+
+  // `⇧⌘F` — the left column on Search, caret in the field. Shows rather than
+  // toggles: the key is somebody about to type a query, not closing one.
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (!isSearchShortcut(event)) return
+      event.preventDefault()
+      useProjects.getState().showView("search")
+      useWorkspaceSearch.getState().focus()
+    }
+
+    window.addEventListener("keydown", onKeyDown, { capture: true })
+    return () => {
+      window.removeEventListener("keydown", onKeyDown, { capture: true })
+    }
+  }, [])
 
   /*
    * `⌃\`` — the dock's Terminal tab, the editors' key for it, and the View

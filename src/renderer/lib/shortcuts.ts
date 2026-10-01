@@ -42,6 +42,21 @@ export function isStudioShortcut(event: KeyboardEvent, key: string): boolean {
   return true
 }
 
+/**
+ * `⇧⌘F` — the left column's Search, which is the key the editors give `Find in
+ * files`. The one studio letter with Shift, so it cannot go through
+ * `isStudioShortcut`, which refuses Shift so that `⇧⌘W` is not read as `⌘W`.
+ * Nothing in CodeMirror's keymap uses it.
+ */
+export function isSearchShortcut(event: KeyboardEvent): boolean {
+  if (event.repeat) return false
+  if (event.key.toLowerCase() !== "f") return false
+  if (event.altKey || !event.shiftKey) return false
+  if (IS_MAC ? !event.metaKey || event.ctrlKey : !event.ctrlKey) return false
+  if (!IS_MAC && event.metaKey) return false
+  return IS_MAC || !inTerminal(event.target)
+}
+
 /** Whether the key was pressed inside a terminal, where xterm hands it to the
  * process. */
 function inTerminal(target: EventTarget | null): boolean {

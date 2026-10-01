@@ -58,6 +58,7 @@ export const IGNORED_DIRECTORIES = new Set([
   ".hg",
   ".next",
   ".nuxt",
+  ".output",
   ".parcel-cache",
   ".svn",
   ".turbo",

@@ -12,9 +12,10 @@ import type { AssistantMessage, ChatDigest } from "../shared/api"
  * Nothing here is written down: a stored copy would be a second account of the
  * same file, and the first thing a second account does is disagree.
  *
- * Searching what a chat *said* is not here and is not main's at all: it is asked
- * of the conversation on screen, whose lines the renderer already holds — see
- * `lib/worktree-chat/search.ts`.
+ * Searching what a chat *said* is not here: `⌘F` over the conversation on
+ * screen is the renderer's (`lib/worktree-chat/search.ts`), and the left
+ * column's search of every chat is `WorktreeChats.search` over
+ * `content-search.ts`.
  */
 
 /**

@@ -26,6 +26,16 @@ export type SidebarSection = "projects"
  */
 export const SIDEBAR_SECTIONS: SidebarSection[] = ["projects"]
 
+/**
+ * What the left column is showing: its sections, or the workspace's Search.
+ *
+ * One or the other rather than Search stacked as a section, which is the
+ * editors' activity bar: a search's results are a list as long as the projects'
+ * and as worth the whole height, and two of them sharing it evenly would halve
+ * both. The `NavRail` button for each is the switch.
+ */
+export type SidebarView = "projects" | "search"
+
 type RememberedColumn = {
   sidebar: boolean
   collapsed: string[]
@@ -34,6 +44,8 @@ type RememberedColumn = {
   activeFolderId?: string | null
   /** Optional for the same reason: the column held only the projects then. */
   shutSections?: string[]
+  /** Optional: the column had no Search before. */
+  view?: string
 }
 
 function isRememberedColumn(value: unknown): value is RememberedColumn {
@@ -44,7 +56,8 @@ function isRememberedColumn(value: unknown): value is RememberedColumn {
     (record.activeFolderId === undefined ||
       record.activeFolderId === null ||
       typeof record.activeFolderId === "string") &&
-    (record.shutSections === undefined || isStringArray(record.shutSections))
+    (record.shutSections === undefined || isStringArray(record.shutSections)) &&
+    (record.view === undefined || typeof record.view === "string")
   )
 }
 
@@ -60,6 +73,15 @@ type ProjectsState = {
    */
   sidebar: boolean
   toggleSidebar: () => void
+
+  view: SidebarView
+  /**
+   * A `NavRail` button: shows the column on `view`, or — already showing it —
+   * hides the column, which is how the editors' activity bar behaves.
+   */
+  toggleView: (view: SidebarView) => void
+  /** Shows the column on `view` whatever it was doing — `⇧⌘F`. */
+  showView: (view: SidebarView) => void
 
   /**
    * Which of the column's sections are folded shut.
@@ -105,8 +127,14 @@ export const useProjects = create<ProjectsState>((set, get) => {
   let restorePromise: Promise<void> | null = null
 
   function rememberColumn() {
-    const { sidebar, collapsed, activeFolderId, shutSections } = get()
-    remember(COLUMN_KEY, { sidebar, collapsed, activeFolderId, shutSections })
+    const { sidebar, collapsed, activeFolderId, shutSections, view } = get()
+    remember(COLUMN_KEY, {
+      sidebar,
+      collapsed,
+      activeFolderId,
+      shutSections,
+      view,
+    })
   }
 
   return {
@@ -124,6 +152,21 @@ export const useProjects = create<ProjectsState>((set, get) => {
 
     toggleSidebar() {
       set({ sidebar: !get().sidebar })
+      rememberColumn()
+    },
+
+    view: "projects",
+
+    toggleView(view) {
+      const { sidebar, view: shown } = get()
+      set(
+        sidebar && shown === view ? { sidebar: false } : { sidebar: true, view }
+      )
+      rememberColumn()
+    },
+
+    showView(view) {
+      set({ sidebar: true, view })
       rememberColumn()
     },
 
@@ -162,6 +205,7 @@ export const useProjects = create<ProjectsState>((set, get) => {
             // a tree that opens on another one rather than on an error.
             activeFolderId: stored.activeFolderId ?? null,
             shutSections: stored.shutSections ?? [],
+            view: stored.view === "search" ? "search" : "projects",
           })
         }
       })()

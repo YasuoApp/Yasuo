@@ -8,6 +8,7 @@ import {
 import { IconButton } from "./icon-button"
 import { PanelHeader, type Fold } from "./panel-header"
 import { ProjectsSection } from "./project/projects-section"
+import { SearchSection } from "./search-section"
 
 /**
  * The window's left column: whatever `SIDEBAR_SECTIONS` lists.
@@ -38,8 +39,22 @@ export function WorkspaceSidebar({
   onAddFolder: () => void
 }) {
   const shut = useProjects((state) => state.shutSections)
+  const view = useProjects((state) => state.view)
   /** Whether there is anything to fold *against* — see `Section`. */
   const alone = SIDEBAR_SECTIONS.length === 1
+
+  // Instead of the sections rather than stacked with them — see `SidebarView`.
+  // Unmounted while the projects show: what it holds is its store's.
+  if (view === "search") {
+    return (
+      <nav
+        aria-label="Search"
+        className="flex h-full min-h-0 flex-col overflow-hidden"
+      >
+        <SearchSection />
+      </nav>
+    )
+  }
 
   return (
     <nav

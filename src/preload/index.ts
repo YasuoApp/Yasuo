@@ -134,6 +134,8 @@ const api: DesktopApi = {
     ipcRenderer.invoke(IPC.createWorktreeChat, place, seed),
   readWorktreeChat: (id) => ipcRenderer.invoke(IPC.readWorktreeChat, id),
   chatDigests: () => ipcRenderer.invoke(IPC.chatDigests),
+  searchWorkspace: (query, options) =>
+    ipcRenderer.invoke(IPC.searchWorkspace, query, options),
   deleteWorktreeChat: (id) => ipcRenderer.invoke(IPC.deleteWorktreeChat, id),
   clearWorktreeChat: (id) => ipcRenderer.invoke(IPC.clearWorktreeChat, id),
   renameWorktreeChat: (id, title) =>

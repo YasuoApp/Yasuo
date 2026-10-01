@@ -14,6 +14,7 @@ import {
   type ChatImage,
   type ChatPermission,
   type ChatPlace,
+  type ChatSearchResult,
   type ChatSeed,
   type ClaudeProfile,
   type WorktreeChat,
@@ -23,6 +24,7 @@ import {
   type WorktreeChatOptions,
 } from "../shared/api"
 import { digestOf } from "./chat-digest"
+import { chatMatchesIn } from "./content-search"
 import {
   AGENT_TOOLS,
   collapse,
@@ -464,6 +466,18 @@ export class WorktreeChats {
   >()
 
   /**
+   * What `search` keeps of a chat nobody has open: the two voices and nothing
+   * else, against the `updatedAt` they were read at — the same bargain as
+   * `digested`. Tool output is most of a transcript and none of what is
+   * searched, so this is a small fraction of the file it saves re-reading on
+   * every keystroke.
+   */
+  private readonly said = new Map<
+    string,
+    { at: string; messages: AssistantMessage[] }
+  >()
+
+  /**
    * Questions a turn has stopped on, keyed by ask id.
    *
    * By ask rather than by chat, even though a chat has one at a time: an answer
@@ -593,6 +607,54 @@ export class WorktreeChats {
   }
 
   /**
+   * Every chat with a match in what was said, the most recently active first —
+   * the left column's Search (`content-search.ts`).
+   *
+   * Not `read`, for the reason `digests` is not: that keeps a whole transcript
+   * resident for the rest of the run. The lines already held are used as they
+   * are; the rest go through `said`.
+   */
+  async search(
+    matcher: RegExp,
+    limit: number,
+    stale: () => boolean
+  ): Promise<{ chats: ChatSearchResult[]; matches: number }> {
+    const chats = [...(await this.source.chats())].sort((a, b) =>
+      b.updatedAt.localeCompare(a.updatedAt)
+    )
+
+    const found: ChatSearchResult[] = []
+    let matches = 0
+    for (const chat of chats) {
+      if (matches >= limit || stale()) break
+
+      let messages = this.messages.get(chat.id)
+      if (!messages) {
+        const cached = this.said.get(chat.id)
+        if (cached && cached.at === chat.updatedAt) messages = cached.messages
+        else {
+          messages = (await this.source.readChat(chat.id)).filter(
+            (line) => line.role === "user" || line.role === "assistant"
+          )
+          this.said.set(chat.id, { at: chat.updatedAt, messages })
+        }
+      }
+
+      const hits = chatMatchesIn(messages, matcher, limit - matches)
+      if (hits.length === 0) continue
+      matches += hits.length
+      found.push({
+        chatId: chat.id,
+        folderId: chatRootId(chat),
+        title: chat.title,
+        matches: hits,
+      })
+    }
+
+    return { chats: found, matches }
+  }
+
+  /**
    * Empties a chat and closes the CLI behind it — the composer's `/clear`.
    *
    * **The session goes with the lines, and that is the whole point.** A chat's
@@ -644,6 +706,7 @@ export class WorktreeChats {
 
     this.messages.delete(id)
     this.digested.delete(id)
+    this.said.delete(id)
     this.startedIn.delete(id)
     this.autoTitled.delete(id)
 

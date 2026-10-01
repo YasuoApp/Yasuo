@@ -24,6 +24,8 @@ import {
   type ClaudeProfile,
   type FileDiff,
   type FileIndexEntry,
+  type SearchOptions,
+  type WorkspaceSearch,
   type WorktreeChatAnswer,
   type WorktreeChatOptions,
 } from "../shared/api"
@@ -34,6 +36,7 @@ import { claudeBinary } from "./claude-bin"
 import { WorktreeChats } from "./worktree-chat"
 import * as files from "./files"
 import { MAX_INDEXED_FILES } from "./files"
+import { matcherOf, MAX_SEARCH_MATCHES, searchFiles } from "./content-search"
 import {
   changes,
   log,
@@ -525,6 +528,53 @@ export function registerIpc(getWindow: () => BrowserWindow | null): {
   )
 
   ipcMain.handle(IPC.chatDigests, () => worktreeChats.digests())
+
+  /*
+   * The left column's Search. `searching` is the generation: each call takes
+   * the next one, and an older call still walking sees it has moved and stops,
+   * so typing a word is one search finishing rather than one per letter.
+   *
+   * Chats before files, because they are the cheaper read and the rows that
+   * this app alone can answer — an editor's search already finds the files.
+   */
+  let searching = 0
+  ipcMain.handle(
+    IPC.searchWorkspace,
+    async (
+      _event,
+      query: string,
+      options: SearchOptions
+    ): Promise<WorkspaceSearch> => {
+      const generation = (searching += 1)
+      const stale = () => generation !== searching
+      const none: WorkspaceSearch = {
+        files: [],
+        chats: [],
+        truncated: false,
+        error: null,
+      }
+
+      const built = matcherOf(query, options)
+      if (!built) return none
+      if ("error" in built) return { ...none, error: built.error }
+
+      const chats = await worktreeChats.search(
+        built.matcher,
+        MAX_SEARCH_MATCHES,
+        stale
+      )
+      const found = await searchFiles(await fileRoots(), built.matcher, {
+        limit: MAX_SEARCH_MATCHES - chats.matches,
+        stale,
+      })
+      return {
+        files: found.files,
+        chats: chats.chats,
+        truncated: found.truncated || chats.matches >= MAX_SEARCH_MATCHES,
+        error: null,
+      }
+    }
+  )
 
   ipcMain.handle(IPC.deleteWorktreeChat, (_event, id: string) => {
     // Before the delete rather than after: a chat killed mid-turn emits no

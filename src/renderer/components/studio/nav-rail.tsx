@@ -3,8 +3,8 @@ import { MessageSquare, Search, Settings, SquareTerminal } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { useDock } from "@/lib/dock"
-import { usePalette } from "@/lib/palette"
 import { useProjects } from "@/lib/projects"
+import { useWorkspaceSearch } from "@/lib/workspace-search"
 import { useWorktreeChats } from "@/lib/worktree-chat/store"
 import {
   activityOf,
@@ -27,8 +27,13 @@ import { IconButton } from "./icon-button"
  * workspace's projects — Search, the dock and Settings are the window's.
  */
 export function NavRail({ onOpenSettings }: { onOpenSettings: () => void }) {
-  const sidebar = useProjects((state) => state.sidebar)
-  const toggleSidebar = useProjects((state) => state.toggleSidebar)
+  // "Showing" is the column open *on that view*: Search open hides the
+  // projects as surely as a shut column does.
+  const column = useProjects((state) => state.sidebar)
+  const view = useProjects((state) => state.view)
+  const toggleView = useProjects((state) => state.toggleView)
+  const sidebar = column && view === "projects"
+  const searching = column && view === "search"
   const dockOpen = useDock((state) => state.open)
   const dockTab = useDock((state) => state.tab)
   const toggleDockTab = useDock((state) => state.toggleTab)
@@ -69,7 +74,7 @@ export function NavRail({ onOpenSettings }: { onOpenSettings: () => void }) {
                 : "Show projects"
         }
         pressed={sidebar}
-        onClick={toggleSidebar}
+        onClick={() => toggleView("projects")}
         dot={
           running
             ? activity.waiting > 0
@@ -82,9 +87,15 @@ export function NavRail({ onOpenSettings }: { onOpenSettings: () => void }) {
       >
         <MessageSquare />
       </RailButton>
+      {/* The workspace's `Find in files`, in the left column — `⌘P` (the title
+          bar's field) is still the way to go to a file or a chat by name. */}
       <RailButton
-        label="Search"
-        onClick={() => usePalette.getState().setOpen(true)}
+        label={searching ? "Hide search" : "Search files and chats"}
+        pressed={searching}
+        onClick={() => {
+          toggleView("search")
+          if (!searching) useWorkspaceSearch.getState().focus()
+        }}
       >
         <Search />
       </RailButton>

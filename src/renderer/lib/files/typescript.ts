@@ -219,21 +219,31 @@ export function typeScriptFeatures(filePath: string): Extension {
  * the position cannot be applied to it here. It is left here instead, and the
  * editor takes it on mount.
  */
-export const pendingReveal = new Map<string, { line: number; column: number }>()
+export const pendingReveal = new Map<
+  string,
+  { line: number; column: number; length?: number }
+>()
 
-function revealAt(filePath: string, line: number, column: number) {
+/** Also the left column's Search, which hands a `length` so the match itself
+ * is selected rather than a caret put in front of it. */
+export function revealAt(
+  filePath: string,
+  line: number,
+  column: number,
+  length?: number
+) {
   const files = useFiles.getState()
 
   // Already the file on screen: the editor is mounted, so it can be moved
   // directly rather than through a tab that is already open.
   const view = editableViewOf(filePath)
   if (view) {
-    moveTo(view, line, column)
+    moveTo(view, line, column, length)
     files.select(filePath)
     return
   }
 
-  pendingReveal.set(filePath, { line, column })
+  pendingReveal.set(filePath, { line, column, length })
   void files.open(filePath)
   // The tree follows, so a file arrived at this way is also somewhere the user
   // can see it sits.
@@ -249,13 +259,21 @@ function revealAt(filePath: string, line: number, column: number) {
  * a stale buffer does not have, and CodeMirror throws on a position out of range
  * rather than moving to the end.
  */
-export function moveTo(view: EditorView, line: number, column: number): void {
+export function moveTo(
+  view: EditorView,
+  line: number,
+  column: number,
+  length = 0
+): void {
   const doc = view.state.doc
   const target = doc.line(Math.min(Math.max(line, 1), doc.lines))
   const pos = Math.min(target.from + Math.max(column - 1, 0), target.to)
 
   view.dispatch({
-    selection: { anchor: pos },
+    selection: {
+      anchor: pos,
+      head: Math.min(pos + length, doc.length),
+    },
     effects: EditorView.scrollIntoView(pos, { y: "center" }),
   })
   view.focus()

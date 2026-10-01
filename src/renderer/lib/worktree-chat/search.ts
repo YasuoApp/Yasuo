@@ -14,8 +14,8 @@ import type { AssistantMessage } from "@shared/api"
  * There is no channel behind it. The lines of the chat on screen are already in
  * the renderer's own store — `select` read them once — so this is a pass over an
  * array: nothing is read from disk, nothing is cached, and nothing has to be
- * kept in step. A search of *every* chat was built first and deleted; see
- * `docs/design.md` § Finding a line in the chat on screen.
+ * kept in step. A search of *every* chat is the left column's, in main
+ * (`main/content-search.ts`); `hitAt` below is where it lands in this bar.
  */
 
 /**
@@ -56,6 +56,44 @@ export type ChatHit = { messageId: string; nth: number }
  * only way a match inside a collapsed fold can be counted at all — the fold has
  * no text on screen for the painter to find.
  */
+/**
+ * The left column's Search landing in this bar: which query and which `at`
+ * stand for the match that starts at `offset` in one message's text.
+ *
+ * The column's match may have been a pattern or case-sensitive, and this bar
+ * knows neither, so the query handed over is the **text that matched** — which
+ * this bar's literal, case-ignoring rule finds again — and `at` is that
+ * occurrence among all of them, counted the way `hitsIn` counts. Null for a
+ * message this chat no longer has.
+ */
+export function hitAt(
+  messages: AssistantMessage[],
+  messageId: string,
+  offset: number,
+  length: number
+): { query: string; at: number } | null {
+  const message = messages.find((entry) => entry.id === messageId)
+  if (!message || (message.role !== "user" && message.role !== "assistant"))
+    return null
+
+  const query = message.text.slice(offset, offset + length)
+  if (!query) return null
+
+  const wanted = query.toLowerCase()
+  const haystack = message.text.toLowerCase()
+  let nth = 0
+  let at = haystack.indexOf(wanted)
+  while (at !== -1 && at < offset) {
+    nth += 1
+    at = haystack.indexOf(wanted, at + wanted.length)
+  }
+
+  const index = hitsIn(messages, query).findIndex(
+    (hit) => hit.messageId === messageId && hit.nth === nth
+  )
+  return { query, at: Math.max(index, 0) }
+}
+
 export function hitsIn(messages: AssistantMessage[], query: string): ChatHit[] {
   if (!query) return []
   const wanted = query.toLowerCase()

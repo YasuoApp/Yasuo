@@ -1540,6 +1540,76 @@ export type ChatImage = {
 }
 
 /**
+ * The three toggles beside the left column's search field — the editors' own
+ * `Aa`, `ab` and `.*`. Unlike `⌘F` over one chat, which takes the query as
+ * typed and nothing else, a search of the whole workspace is where somebody
+ * reaches for a pattern.
+ */
+export type SearchOptions = {
+  matchCase: boolean
+  wholeWord: boolean
+  regex: boolean
+}
+
+/**
+ * The line a match sits on, cut to what a row in a narrow column can show, with
+ * the match itself at `from`–`to` inside `text`.
+ *
+ * Cut in main rather than sent whole, because a minified file is one line of a
+ * megabyte and a thousand matches in it would be a thousand copies of it.
+ */
+export type SearchPreview = { text: string; from: number; to: number }
+
+export type FileSearchMatch = {
+  /** One-based, the way `revealAt` and every editor count. */
+  line: number
+  column: number
+  length: number
+  preview: SearchPreview
+}
+
+export type FileSearchResult = {
+  path: string
+  folderId: string
+  /** Relative to its folder, with forward slashes — as the palette shows it. */
+  relative: string
+  matches: FileSearchMatch[]
+}
+
+export type ChatSearchMatch = {
+  messageId: string
+  /** Where in the message's own text the match starts, which is what landing
+   * on it in the chat's find bar is worked out from (`hitAt`). */
+  offset: number
+  length: number
+  preview: SearchPreview
+}
+
+export type ChatSearchResult = {
+  chatId: string
+  /** Null for a chat whose folder has left the workspace — `chatRootId`. */
+  folderId: string | null
+  title: string
+  matches: ChatSearchMatch[]
+}
+
+/**
+ * What the left column's Search found: the files under every folder in the
+ * workspace, and what was said in every chat.
+ *
+ * `truncated` once the matches reached the cap — the search stopped there
+ * rather than reading the rest of the workspace for rows nobody will scroll to.
+ * `error` is a pattern that does not compile, said under the field rather than
+ * thrown.
+ */
+export type WorkspaceSearch = {
+  files: FileSearchResult[]
+  chats: ChatSearchResult[]
+  truncated: boolean
+  error: string | null
+}
+
+/**
  * What one chat did, folded out of its lines — the two questions asked *about* a
  * conversation rather than inside it.
  *
@@ -2149,6 +2219,17 @@ export type DesktopApi = {
    * answer costs no disk at all.
    */
   chatDigests: () => Promise<ChatDigest[]>
+  /**
+   * The left column's Search: `query` across every file in the workspace and
+   * everything said in every chat — see `WorkspaceSearch`.
+   *
+   * A newer call makes an older one stop where it is; the renderer drops what
+   * the older one answers with anyway, since it has typed past it.
+   */
+  searchWorkspace: (
+    query: string,
+    options: SearchOptions
+  ) => Promise<WorkspaceSearch>
   deleteWorktreeChat: (id: string) => Promise<void>
   /**
    * Empties a chat and closes the CLI behind it — the composer's `/clear`.
@@ -2494,6 +2575,7 @@ export const IPC = {
   createWorktreeChat: "worktree-chats:create",
   readWorktreeChat: "worktree-chats:read",
   chatDigests: "worktree-chats:digests",
+  searchWorkspace: "search:workspace",
   deleteWorktreeChat: "worktree-chats:delete",
   clearWorktreeChat: "worktree-chats:clear",
   renameWorktreeChat: "worktree-chats:rename",

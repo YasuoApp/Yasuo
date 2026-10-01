@@ -126,6 +126,8 @@ activity dot — and is deleted: the `NavRail` is on screen whatever the column 
 doing, so its first button is the toggle and carries the dot. Search moved off
 the top of the column into the title bar's field, and Settings off its footer
 onto the foot of the rail; both are the window's rather than the workspace's.
+The rail's Search button is not the palette: it turns the column over to the
+workspace's `Find in files` (§ Searching inside the files and the chats).
 
 The dock — `Run` and `Terminal` — is under the **pane**, spanning its width; it
 used to be the lower half of this column, and see The dock for why it moved.
@@ -2321,9 +2323,66 @@ failure channel was there for the one row that dialled a server: a table in a
 database the workspace was not on had to move there first. That row is gone with
 the pane, and so is the channel.
 
+### Searching inside the files and the chats
+
+**The `NavRail`'s Search button is `Find in files`**, the editors' panel, in the
+left column — and `⇧⌘F`, the editors' key for it. It used to open the `⌘P`
+palette, which the title bar's field already does. One field with `Aa`, `ab`
+and `.*`, and the results under it grouped by where they are: **Chats** first,
+then **Files**, each group folding, each line a row with the match painted in
+the find amber. `components/studio/search-section.tsx`, `lib/workspace-search.ts`
+for its store, `main/content-search.ts` for the search itself
+(`test/content-search.ts`).
+
+**This reverses two deletions, on purpose.** A code search panel went with the
+git and specs panels, and a search of every chat went with the palette group
+above — on the argument that it needed a channel, a walk of every transcript and
+a cap, to find a conversation whose title had been forgotten. The user asked for
+both back as one panel, and the argument does not survive the shape: the
+question is no longer "which chat was that" but "where in this workspace did
+anybody — a file or a turn — say this", which neither `⌘P` (names) nor `⌘F` (one
+chat) can answer. The costs that argument named are paid deliberately here:
+
+- **One channel**, `search:workspace`, with a **generation** in `ipc.ts`: each
+  call takes the next one and an older call still walking stops between
+  batches, so a word typed is one search finishing rather than one per letter.
+  The renderer debounces (250ms) and drops any answer older than the last
+  question.
+- **A list and a read per search, nothing indexed.** In a repository the list
+  is **what git does not ignore** — `git ls-files --cached --others
+--exclude-standard`, git's own reading of `.gitignore` rather than ours — with
+  `IGNORED_DIRECTORIES` on top for a committed `vendor`; anywhere else it is the
+  palette's own walk. The palette keeps its fixed list (§ Search says why), but
+  for a search of contents that list was always one directory short —
+  `.output`, `out`, a generated `src/gen` — and a page of hits in minified
+  bundles is the first thing every editor's `Find in files` is set up not to
+  do. Files over 1 MB or with a NUL in their first 8 KB are skipped, and the
+  20,000-file cap holds. An index of contents would be every repository in the
+  workspace copied and watched.
+- **A cap of 2,000 matches**, across chats and files, and it stops the reading
+  too: a query of `e` should not read every file for rows nobody scrolls to. The
+  summary says when it stopped.
+- **Transcripts are not made resident.** `WorktreeChats.search` uses the lines
+  already held for an open chat, and for the rest keeps only the two voices
+  against the chat's `updatedAt` (`said`) — the bargain `digests` makes.
+
+What a chat row searches is what `⌘F` searches — the two voices, not tool
+summaries or thinking — for the same reason. **A file row** opens the file with
+the match selected, through `revealAt`, the jump go-to-definition already makes.
+**A chat row** opens the chat with its `⌘F` bar already on that occurrence: the
+column's match may have been a pattern or case-sensitive, so what is handed over
+is the **text that matched**, which the bar's literal rule finds again, and
+which occurrence of it that was (`hitAt` in `lib/worktree-chat/search.ts`).
+
+The column shows **Search or the projects, not both** (`SidebarView` in
+`lib/projects.ts`, remembered with the rest of the column) — the activity bar's
+bargain: results are a list as long as the projects' and as worth the height.
+Each rail button shows the column on its view, and pressed again hides it.
+
 ## The window shortcuts
 
-`⌘P` opens the search above, `⌘F` opens the chat pane's own find bar (§ Finding a
+`⌘P` opens the search above, `⇧⌘F` the left column's Search (§ Searching
+inside the files and the chats), `⌘F` opens the chat pane's own find bar (§ Finding a
 line in the chat on screen — the one of these that is conditional, since inside
 an editor that key is the editor's), `⌘W` closes the tab the pane is showing,
 `⌘S` writes the Explorer's open file, `⌘B` shows or hides the sidebar and

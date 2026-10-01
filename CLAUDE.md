@@ -170,6 +170,15 @@ handler and the long-lived managers (`Store`, `SqlConnections`, `DockerRuntime`,
   `docs/design.md` § Committing and § Distilling learnings have the argument;
   `proposalsIn` is checked in `test/learnings.ts`.
 
+- **`content-search.ts`** — the left column's Search (`Find in files`): a query
+  with `Aa` / `ab` / `.*` over every file under the workspace's folders and what
+  was said in every chat (`WorktreeChats.search`), one channel
+  (`search:workspace`) whose **generation** in `ipc.ts` stops an older search
+  typed past. A walk and a read per search, nothing indexed; capped at 2,000
+  matches. It **reverses** two deletions — `docs/design.md` § Searching inside
+  the files and the chats has the argument. Free of `electron`
+  (`test/content-search.ts`).
+
 - **`chat-digest.ts`** — a chat read as a whole rather than as a conversation:
   which files its edit tools wrote to, and what its turns were billed. Pure and
   free of `electron` (`test/chat-digest.ts`); `WorktreeChats.digests` holds the
@@ -316,7 +325,9 @@ studio-wide state and `lib/workspace.ts` the thin repo over the workspace calls.
 dialog`), not by hand. Vite's root is `src/renderer`, so `index.html` and
 `public/` are there too.
 
-The shape, in one pass: the **left column** (`workspace-sidebar.tsx`) holds
+The shape, in one pass: the **left column** (`workspace-sidebar.tsx`) shows
+either its sections or **Search** (`SidebarView` in `lib/projects.ts`, switched
+by the `NavRail`'s two buttons and `⇧⌘F`; `search-section.tsx`). Its sections are
 `Projects` and nothing else — `SIDEBAR_SECTIONS` in `lib/projects.ts` is
 the one line saying which sections are drawn, and the next to arrive is an id
 added to it. It stacked three once: the **Database and API panels are deleted**,

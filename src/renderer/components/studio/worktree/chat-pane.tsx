@@ -20,7 +20,8 @@ import { cn } from "@/lib/utils"
 import { blockOf, blocksOf } from "@/lib/worktree-chat/activity"
 import { clearFind, paintFind, rectOfHit } from "@/lib/worktree-chat/find-marks"
 import { readImage } from "@/lib/worktree-chat/images"
-import { hitsIn } from "@/lib/worktree-chat/search"
+import { hitAt, hitsIn } from "@/lib/worktree-chat/search"
+import { useWorkspaceSearch } from "@/lib/workspace-search"
 import { placeOf, useWorktreeChats } from "@/lib/worktree-chat/store"
 import { chatLine, totalOf, usageDetail } from "@/lib/worktree-chat/usage"
 import { IconButton } from "../icon-button"
@@ -320,6 +321,40 @@ function Conversation({
       window.removeEventListener("keydown", onKeyDown, { capture: true })
     }
   }, [openFind, showing])
+
+  /*
+   * A row in the left column's Search, landing here: the bar opened on the
+   * occurrence that was clicked (`hitAt`). Waits for the lines — a chat opened
+   * from there is usually one nobody had open, read off disk a moment later.
+   *
+   * Taken during the render that can first take it rather than in an effect,
+   * the way `mounted` is in the workbench: an effect would paint one frame of
+   * the chat with no bar. `taken` is what makes it land once; the store's copy
+   * is cleared afterwards, since that is another component's state.
+   */
+  const landing = useWorkspaceSearch((state) => state.landing)
+  const [taken, setTaken] = useState<typeof landing>(null)
+  if (landing && landing !== taken && landing.chatId === chatId && messages) {
+    setTaken(landing)
+    const target = hitAt(
+      messages,
+      landing.messageId,
+      landing.offset,
+      landing.length
+    )
+    if (target) {
+      setFind((held) => ({
+        chatId,
+        query: target.query,
+        at: target.at,
+        opened: (held?.opened ?? 0) + 1,
+      }))
+    }
+  }
+  useEffect(() => {
+    const search = useWorkspaceSearch.getState()
+    if (taken && search.landing === taken) search.clearLanding()
+  }, [taken])
 
   /**
    * A file dropped anywhere over the conversation, typed in as its path.
