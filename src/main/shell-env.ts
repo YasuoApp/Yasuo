@@ -145,75 +145,124 @@ export function withoutAgentSession<T extends NodeJS.ProcessEnv>(env: T): T {
 
 /** Asked once per run: a login shell's startup is the expensive part, and the
  * answer cannot change while the app is up. */
-let shellPathOnce: Promise<string | null> | null = null
+let shellEnvOnce: Promise<Record<string, string> | null> | null = null
 
 /**
- * The PATH the user's own login shell exports, or null.
+ * Everything the user's own login shell exports, or null.
  *
  * The counterpart to `locate` above, and written against the same fact from the
  * other side: `locate` finds `claude` through the user's shell, but the process
- * spawned at that path is handed `process.env`, whose PATH from launchd is the
- * bare `/usr/bin:/bin:/usr/sbin:/sbin`. The CLI itself runs — it was located by
- * absolute path — and then every MCP server it spawns for itself dies ENOENT
- * looking for `node` or `npx`, which is not a failure of any one server: they
- * all go at once. A pty never sees this because `shell()` gives it `-l -i`.
+ * spawned at that path is handed `process.env`, which from launchd is close to
+ * empty. It was PATH alone at first — every MCP server the CLI spawns dying
+ * ENOENT looking for `node` — and the same gap is behind every other "works in
+ * the terminal, not in the app": a token exported in `.zshrc` that a
+ * `.mcp.json` names as `${VAR}`, a proxy, a `CLAUDE_CODE_*` the CLI reads. A
+ * pty never sees this because `shell()` gives it `-l -i`.
  */
-function shellPath(): Promise<string | null> {
-  shellPathOnce ??= readShellPath()
-  return shellPathOnce
+function shellEnv(): Promise<Record<string, string> | null> {
+  shellEnvOnce ??= readShellEnv()
+  return shellEnvOnce
 }
 
-async function readShellPath(): Promise<string | null> {
+async function readShellEnv(): Promise<Record<string, string> | null> {
   if (process.platform === "win32") return null
 
-  // Fenced by a marker rather than read as the last line: an interactive rc file
-  // is free to print anything, and unlike `command -v` the answer here is not
-  // recognisable on its own.
-  const marker = "__yasuo_path__"
-  const { file, args } = shell(`printf '${marker}%s${marker}' "$PATH"`)
+  // Fenced by a marker rather than read as the whole output: an interactive rc
+  // file is free to print anything. NUL-separated, since a value may hold a
+  // newline and no value can hold a NUL.
+  const marker = "__yasuo_env__"
+  const { file, args } = shell(`printf '${marker}'; env -0; printf '${marker}'`)
 
   try {
     const { stdout } = await run(file, args, {
+      // Started without the marks of an agent session that spawned us, so what
+      // comes back is the profile's own — see `withoutAgentSession`.
+      env: withoutAgentSession({ ...process.env }),
       timeout: 10_000,
-      maxBuffer: 1024 * 1024,
+      maxBuffer: 4 * 1024 * 1024,
       windowsHide: true,
     })
-    const [, value] = stdout.split(marker)
-    return value?.includes(path.delimiter) ? value : null
+    const [, block] = stdout.split(marker)
+    return block ? parseEnv(block) : null
   } catch {
     // Same bargain as `locate`: no shell, a profile that hangs, a non-zero exit.
-    // Falling back to the inherited PATH is what the app did before this existed.
+    // Falling back to the inherited env is what the app did before this existed.
     return null
   }
 }
 
+/** `env -0`'s output, as a record. */
+export function parseEnv(block: string): Record<string, string> {
+  const env: Record<string, string> = {}
+  for (const entry of block.split("\0")) {
+    const at = entry.indexOf("=")
+    if (at > 0) env[entry.slice(0, at)] = entry.slice(at + 1)
+  }
+  return env
+}
+
+/** Set by the probe shell itself, and describing it rather than the user. */
+const SHELL_OWN_VARS = new Set(["_", "PWD", "OLDPWD", "SHLVL"])
+
 /**
- * `environment`, with the user's own PATH merged in — for a process spawned
- * *without* a shell in between, which is every `claude` this app starts.
+ * What a spawned `claude` is handed: the inherited env, with the login shell's
+ * filled in under it.
  *
- * Merged rather than replaced: what launchd gave us is a subset in the ordinary
- * case, but an app launched *from* a terminal already has a good PATH, and a
- * plugin's own bin directory arrives that way and is on no profile.
+ * Filled in rather than laid over: for an app launched from the Dock the shell's
+ * is a superset and every key is new, while one launched *from* a terminal
+ * already has the user's env and may carry something newer than the profile
+ * says. PATH is the exception and is merged, the shell's first: a plugin's bin
+ * directory arrives inherited and is on no profile, and launchd's bare PATH must
+ * not shadow the profile's.
+ */
+export function mergeShellEnv(
+  inherited: Record<string, string | undefined>,
+  fromShell: Record<string, string>
+): Record<string, string | undefined> {
+  const env = { ...inherited }
+  for (const [key, value] of Object.entries(fromShell)) {
+    if (SHELL_OWN_VARS.has(key) || key === "PATH") continue
+    if (env[key] === undefined) env[key] = value
+  }
+
+  if (fromShell.PATH) {
+    const seen = new Set(fromShell.PATH.split(path.delimiter))
+    const rest = (inherited.PATH ?? "")
+      .split(path.delimiter)
+      .filter((entry) => entry !== "" && !seen.has(entry))
+    env.PATH = [fromShell.PATH, ...rest].join(path.delimiter)
+  }
+  return env
+}
+
+/**
+ * `environment`, with the user's own login shell merged in — for a process
+ * spawned *without* a shell in between, which is every `claude` this app starts.
+ * `extra` still wins over both, as it does in `environment`.
  */
 export async function spawnEnvironment(
   extra: Record<string, string> = {}
 ): Promise<Record<string, string | undefined>> {
-  const env = environment(extra)
-  const fromShell = await shellPath()
-  if (!fromShell || extra.PATH) return env
-
-  const seen = new Set(fromShell.split(path.delimiter))
-  const rest = (env.PATH ?? "")
-    .split(path.delimiter)
-    .filter((entry) => entry !== "" && !seen.has(entry))
-
-  return { ...env, PATH: [fromShell, ...rest].join(path.delimiter) }
+  const fromShell = await shellEnv()
+  const inherited = withoutAgentSession({ ...process.env })
+  // Merged before `environment`'s defaults, so a profile's own LANG is kept
+  // rather than losing to the fallback.
+  return environment(
+    extra,
+    fromShell ? mergeShellEnv(inherited, fromShell) : inherited
+  )
 }
 
+/**
+ * `base` is taken as already clean of an agent session's marks — it is
+ * `spawnEnvironment`'s merge, whose shell half may carry a `CLAUDE_CODE_*` the
+ * user exports on purpose and the plain CLI would read.
+ */
 export function environment(
-  extra: Record<string, string> = {}
+  extra: Record<string, string> = {},
+  base?: Record<string, string | undefined>
 ): Record<string, string | undefined> {
-  const env = withoutAgentSession({ ...process.env })
+  const env = base ? { ...base } : withoutAgentSession({ ...process.env })
 
   // Set for Electron's own child processes; inside a shell it would make any
   // `electron` the user runs behave as a bare Node instead.

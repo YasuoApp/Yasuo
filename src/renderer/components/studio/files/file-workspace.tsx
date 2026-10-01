@@ -150,14 +150,10 @@ export function FilePane({
   path,
   visible,
   preferred,
-  reviewRootId,
 }: {
   path: string
   visible: boolean
   preferred?: Viewer
-  /** The checkout whose review this pane is part of, for the diff's comment
-   * column. Only the `Changes` pane has one — see `CodeMirrorFileDiff`. */
-  reviewRootId?: string | null
 }) {
   const doc = useFiles((state) => state.docs[path])
   const image = useFiles((state) => state.images[path])
@@ -321,7 +317,6 @@ export function FilePane({
             doc={doc}
             viewer={viewer}
             visible={visible}
-            reviewRootId={reviewRootId}
             onChange={write}
             onSave={commit}
           />
@@ -339,7 +334,6 @@ function Body({
   doc,
   viewer,
   visible,
-  reviewRootId,
   onChange,
   onSave,
 }: {
@@ -350,9 +344,6 @@ function Body({
    * the stacked editors share the drawing event and only the visible one may
    * answer it. */
   visible: boolean
-  /** Passed through to the diff, which is the only viewer that has anything to
-   * do with a review. */
-  reviewRootId?: string | null
   onChange: (text: string) => void
   onSave: () => void
 }) {
@@ -401,7 +392,6 @@ function Body({
         // A deleted file reads as an error and is ready: its right-hand side is
         // empty and its left is what was committed, which is what its diff is.
         ready={doc !== undefined && doc.kind !== "loading"}
-        reviewRootId={reviewRootId}
         // No writers: a diff takes no keystrokes, and the buffer it shows is the
         // path's own — whichever editor *can* be typed into is the one that tells
         // the store what is in it (`lib/files/documents.ts`). ⌘S is claimed by

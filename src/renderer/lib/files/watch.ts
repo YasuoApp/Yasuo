@@ -1,6 +1,7 @@
 import { useStudio } from "../store"
-import { rootIdOf, useGitStatus } from "./git-status"
+import { gitStateOf, rootIdOf, useGitStatus } from "./git-status"
 import { nameOf } from "./paths"
+import { fileRoots } from "./roots"
 import { useFiles } from "./store"
 
 /**
@@ -26,7 +27,12 @@ export function watchExpandedDirectories(): () => void {
     // Sorted, so the same set of folders reached in a different order (a
     // reveal from the palette opens a chain from the top) is the same message.
     const dirs = [...expanded].sort()
-    const key = dirs.join("\n")
+    // The roots are in the key too: main watches each one recursively off this
+    // same call, so a folder added with nothing expanded must still send one.
+    const roots = fileRoots()
+      .map((root) => root.id)
+      .sort()
+    const key = [...roots, "", ...dirs].join("\n")
     if (key === sent) return
     sent = key
     void window.desktop.watchDirectories(dirs)
@@ -34,6 +40,32 @@ export function watchExpandedDirectories(): () => void {
 
   push(useFiles.getState().expanded)
   const stopFollowing = useFiles.subscribe((state) => push(state.expanded))
+  const stopFollowingRoots = useStudio.subscribe((studio, previous) => {
+    if (studio.folders !== previous.folders) push(useFiles.getState().expanded)
+  })
+
+  /*
+   * Anything under a root, expanded or not — what keeps the `Changes` list
+   * current without Refresh. A path git already calls ignored is dropped, so a
+   * build rewriting `dist/` is not a `git status` per save; a path git has not
+   * seen yet (a new file) is not ignored, and does schedule one.
+   */
+  const stopListeningTree = window.desktop.onTreeChanged(
+    ({ root, paths, overflow }) => {
+      const git = useGitStatus.getState()
+      const roots = new Set<string>()
+      for (const changed of paths) {
+        if (gitStateOf(git, changed) === "ignored") continue
+        const rootId = rootIdOf(changed)
+        if (rootId !== null) roots.add(rootId)
+      }
+      if (overflow) {
+        const rootId = rootIdOf(root)
+        if (rootId !== null) roots.add(rootId)
+      }
+      for (const rootId of roots) git.schedule(rootId)
+    }
+  )
 
   const stopListening = window.desktop.onDirectoryChanged(({ dir }) => {
     void useFiles.getState().syncDirs([dir])
@@ -53,7 +85,9 @@ export function watchExpandedDirectories(): () => void {
 
   return () => {
     stopFollowing()
+    stopFollowingRoots()
     stopListening()
+    stopListeningTree()
     // Nothing is left watching a directory nobody is listening about — which
     // is also what makes Strict Mode's double mount harmless, since the set is
     // sent again on the way back in.

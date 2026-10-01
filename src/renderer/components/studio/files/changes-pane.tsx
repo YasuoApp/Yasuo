@@ -15,7 +15,6 @@ import { isStudioShortcut } from "@/lib/shortcuts"
 import { useStudio } from "@/lib/store"
 import { SECTION_ACCENT } from "../section-marks"
 import { FilePane } from "./file-workspace"
-import { ReviewPanel } from "./review-panel"
 
 /**
  * The diff of whichever changed file the Explorer's `Changes` tab has picked.
@@ -99,36 +98,17 @@ export function ChangesPane() {
     )
   }
 
-  return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="min-h-0 flex-1">
-        {/*
-          Only the diff is swapped for the notice: `ReviewPanel` is drawn either
-          way. It has nothing in flow to lose by it — the bar that used to sit
-          under here is gone, and what is left is portals into the diff plus the
-          strip a stranded composer needs — but a pane that unmounted it would
-          be one that dropped every thread's host node on the way past.
-        */}
-        {path ? (
-          <FilePane
-            path={path}
-            visible={shown}
-            preferred="diff"
-            reviewRootId={root.id}
-          />
-        ) : (
-          <Notice
-            title="Nothing selected"
-            detail={
-              count
-                ? "Pick a file under Changes in the Explorer to read what changed in it."
-                : "Nothing has changed in this checkout."
-            }
-          />
-        )}
-      </div>
-      <ReviewPanel rootId={root.id} rootPath={root.path} />
-    </div>
+  return path ? (
+    <FilePane path={path} visible={shown} preferred="diff" />
+  ) : (
+    <Notice
+      title="Nothing selected"
+      detail={
+        count
+          ? "Pick a file under Changes in the Explorer to read what changed in it."
+          : "Nothing has changed in this checkout."
+      }
+    />
   )
 }
 

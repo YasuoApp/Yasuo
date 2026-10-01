@@ -72,10 +72,11 @@ async function main() {
   await writeFile(path.join(root, "fresh.ts"), "a\nb\n")
   await mkdir(path.join(root, "dist"))
   await writeFile(path.join(root, "dist", "bundle.js"), "// built\n")
-  // A wholly untracked directory, which git reports as one entry rather than as
-  // the files under it — `?? assets/`.
-  await mkdir(path.join(root, "assets"))
+  // A wholly untracked directory, which plain `git status` reports as one entry
+  // — `?? assets/` — and this list must not: the files are what gets read.
+  await mkdir(path.join(root, "assets", "icons"), { recursive: true })
   await writeFile(path.join(root, "assets", "logo.svg"), "<svg/>\n")
+  await writeFile(path.join(root, "assets", "icons", "x.svg"), "<svg/>\n<g/>\n")
 
   const rows = await rowsIn(root)
 
@@ -111,17 +112,17 @@ async function main() {
   )
 
   check(
-    // Without this the list draws it as a file with no line counts, and the row
-    // opens a diff of a path that is not a file.
-    "a wholly untracked directory says it is one",
-    rows["assets"]?.directory === true && rows["assets"]?.state === "untracked",
-    rows["assets"]
+    "a wholly untracked directory is its files, not one row for the folder",
+    rows["assets"] === undefined &&
+      rows["logo.svg"]?.state === "untracked" &&
+      rows["x.svg"]?.state === "untracked",
+    Object.keys(rows)
   )
 
   check(
-    "with no line counts, since a directory is in no diff and is not read",
-    rows["assets"]?.added === null && rows["assets"]?.removed === null,
-    rows["assets"]
+    "each counted like any other new file, nested ones included",
+    rows["logo.svg"]?.added === 1 && rows["x.svg"]?.added === 2,
+    [rows["logo.svg"], rows["x.svg"]]
   )
 
   check(
@@ -133,7 +134,7 @@ async function main() {
   check(
     "rows are ordered by path, so the list does not move under a click",
     (await changes(root)).map((change) => path.basename(change.path)).join() ===
-      "assets,edited.ts,fresh.ts,removed.ts"
+      "x.svg,logo.svg,edited.ts,fresh.ts,removed.ts"
   )
 
   section("the committed side")

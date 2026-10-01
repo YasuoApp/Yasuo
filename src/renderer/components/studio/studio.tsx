@@ -22,7 +22,6 @@ import { useRun } from "@/lib/run/store"
 import { useProjects } from "@/lib/projects"
 import { useClaudeProfiles } from "@/lib/worktree-chat/claude-profiles"
 import { useWorktreeChats } from "@/lib/worktree-chat/store"
-import { useReview } from "@/lib/files/review"
 import { Dock } from "./dock"
 import { ProjectCrumbs } from "./project/project-crumbs"
 import { ProjectRail } from "./project/project-rail"
@@ -89,10 +88,6 @@ export function Studio() {
     void useRun.getState().restore()
     void useWorktreeChats.getState().refresh()
     void useClaudeProfiles.getState().refresh()
-    // Before any diff is opened, for the same reason: the `Comments` tab counts
-    // threads in files nobody has looked at yet. Each is put back on its lines
-    // the first time its own file is shown — see `showing`.
-    void useReview.getState().load()
   }, [])
 
   // A run outlives the dock being closed and the tab being switched away from,

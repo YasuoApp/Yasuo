@@ -434,10 +434,22 @@ export function saveKeymap(onSave: () => void): Extension {
   ])
 }
 
-/** A view that takes no keystrokes, for a response and for both sides of a
- * diff. Read-only rather than merely uneditable: `editable` off also takes the
- * element out of the tab order and stops the caret being drawn, and
- * `readOnly` is what the commands and the input handlers check. */
+/** A view that takes no edit, for both sides of a diff.
+ *
+ * `editable` off **and** a `tabindex`, and both are load-bearing. Off, the
+ * content is `contenteditable="false"` like the widgets inside it, and that is
+ * what lets a selection begun on a removed row run on into the rows below:
+ * Blink will not let a selection cross from non-editable content into
+ * editable, so with the content editable a drag from a red line stopped dead
+ * at the widget's edge (`lib/files/diff-selection.ts`). The `tabindex` is the
+ * other half — `contenteditable="false"` cannot take focus on its own, so a
+ * drag the editor runs had nowhere to put it and ⌘C went to the body, past
+ * the editor's copy handler. `readOnly` is what the commands, paste, drop and
+ * cut check. */
 export function readOnly(): Extension[] {
-  return [EditorView.editable.of(false), EditorState.readOnly.of(true)]
+  return [
+    EditorView.editable.of(false),
+    EditorState.readOnly.of(true),
+    EditorView.contentAttributes.of({ tabindex: "0" }),
+  ]
 }

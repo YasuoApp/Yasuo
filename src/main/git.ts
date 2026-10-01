@@ -107,8 +107,16 @@ export type StatusEntry = GitStatusEntry & {
  *
  * A folder that is not a repository at all is not an error: it is the ordinary
  * case for a directory somebody keeps notes in, and it has no state to report.
+ *
+ * `expandUntracked` is `changes()`'s: a list of changes that says `?? src/new/`
+ * hides the files somebody has to read, so there every new file is its own row.
+ * It drops `--ignored` in the same breath — `traditional` paired with `all`
+ * expands every ignored directory too, which is `node_modules` file by file.
  */
-export async function workingTree(dir: string): Promise<StatusEntry[]> {
+export async function workingTree(
+  dir: string,
+  { expandUntracked = false }: { expandUntracked?: boolean } = {}
+): Promise<StatusEntry[]> {
   let root: string
   try {
     root = (await git(dir, ["rev-parse", "--show-toplevel"])).trim()
@@ -135,11 +143,15 @@ export async function workingTree(dir: string): Promise<StatusEntry[]> {
       "status",
       "--porcelain=v1",
       "-z",
-      "--ignored",
-      // Explicit rather than inherited: `status.showUntrackedFiles=all` in
-      // somebody's config would expand every ignored directory into its files,
-      // which is the one output size this cannot afford.
-      "--untracked-files=normal",
+      ...(expandUntracked
+        ? ["--untracked-files=all"]
+        : [
+            "--ignored",
+            // Explicit rather than inherited: `status.showUntrackedFiles=all`
+            // in somebody's config would expand every ignored directory into
+            // its files, which is the one output size this cannot afford.
+            "--untracked-files=normal",
+          ]),
     ])
   } catch {
     return []
@@ -205,7 +217,7 @@ const MAX_COUNTED_BYTES = 2 * 1024 * 1024
  * twice.
  */
 export async function changes(dir: string): Promise<GitChange[]> {
-  const entries = (await workingTree(dir)).filter(
+  const entries = (await workingTree(dir, { expandUntracked: true })).filter(
     (entry) => entry.state !== "ignored"
   )
   if (entries.length === 0) return []
@@ -566,9 +578,10 @@ export async function discard(dir: string, paths: string[]): Promise<string[]> {
   const wanted = new Set(pathspecs(dir, paths).map((spec) => spec))
   if (wanted.size === 0) return []
 
-  const entries = (await workingTree(dir)).filter(
-    (entry) => entry.state !== "ignored" && wanted.has(specOf(dir, entry.path))
+  const tree = (await workingTree(dir)).filter(
+    (entry) => entry.state !== "ignored"
   )
+  const entries = tree.filter((entry) => wanted.has(specOf(dir, entry.path)))
 
   const restore: string[] = []
   const drop: string[] = []
@@ -593,6 +606,25 @@ export async function discard(dir: string, paths: string[]): Promise<string[]> {
     // or where a rename landed.
     drop.push(specOf(dir, entry.path))
     trash.push(entry.path)
+  }
+
+  // A file inside a wholly untracked directory: the Changes list draws it as
+  // its own row (`expandUntracked`), where this status says only `?? assets/`,
+  // so nothing above matched it. It is untracked either way — the trash.
+  const untrackedDirs = tree.filter(
+    (entry) => entry.x === "?" && entry.directory
+  )
+  for (const target of paths) {
+    if (trash.includes(target)) continue
+    const inNew = untrackedDirs.some((entry) => {
+      const relative = path.relative(entry.path, target)
+      return (
+        relative !== "" &&
+        !relative.startsWith("..") &&
+        !path.isAbsolute(relative)
+      )
+    })
+    if (inNew && wanted.has(specOf(dir, target))) trash.push(target)
   }
 
   // The index first: a path that is dropped and then restored would be

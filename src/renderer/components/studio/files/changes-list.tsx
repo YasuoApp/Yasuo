@@ -1,4 +1,4 @@
-import { useMemo, useState, type MouseEvent, type ReactNode } from "react"
+import { useState, type MouseEvent, type ReactNode } from "react"
 import {
   ChevronRight,
   Copy,
@@ -30,14 +30,12 @@ import {
 import {
   changeTree,
   changesUnder,
-  commentCountsUnder,
   type ChangeTreeNode,
 } from "@/lib/files/change-tree"
 import { splitChanges, useChanges } from "@/lib/files/changes"
 import { GIT_LABELS, GIT_LETTERS, GIT_TONES } from "@/lib/files/git-status"
 import { nameOf } from "@/lib/files/paths"
 import type { FileRoot } from "@/lib/files/roots"
-import { openThreads, threadsOf, useReview } from "@/lib/files/review"
 import { useFiles } from "@/lib/files/store"
 import { useStudio } from "@/lib/store"
 import { cn } from "@/lib/utils"
@@ -96,24 +94,6 @@ import { CommitBox } from "./commit-box"
 export function ChangesList({ root }: { root: FileRoot }) {
   const changes = useChanges((state) => state.byRoot[root.id])
   const loading = useChanges((state) => state.loading.includes(root.id))
-
-  /* How many comment threads sit on each changed file, so a remark left in a
-   * file nobody has open is still visible — see the badge in
-   * `ChangeRow`/`DirRow`. Reduced to a `Map<path, count>` once per render
-   * rather than handed the threads themselves, so `change-tree.ts` stays free
-   * of the comment's own shape (`commentCountsUnder`).
-   *
-   * The **open** ones: the badge is read as "this file still wants looking at",
-   * and a resolved conversation is the opposite of that. It is not gone —
-   * opening the file still draws it, folded. */
-  const threads = useReview((state) => state.threads)
-  const commentCounts = useMemo(() => {
-    const counts = new Map<string, number>()
-    for (const thread of openThreads(threadsOf({ threads }, root.id))) {
-      counts.set(thread.path, (counts.get(thread.path) ?? 0) + 1)
-    }
-    return counts
-  }, [threads, root.id])
 
   /** Which row the menu is about, or null for the list as a whole — the same
    * shape the tree's one menu uses, and for the same reason: a trigger per row
@@ -211,7 +191,6 @@ export function ChangesList({ root }: { root: FileRoot }) {
         root={root}
         indent={0}
         shut={shut}
-        commentCounts={commentCounts}
         onFold={(key) =>
           setShut((state) =>
             state.includes(key)
@@ -471,7 +450,6 @@ function Nodes({
   root,
   indent,
   shut,
-  commentCounts,
   onFold,
   onMenu,
   onDiscard,
@@ -481,7 +459,6 @@ function Nodes({
   root: FileRoot
   indent: number
   shut: string[]
-  commentCounts: Map<string, number>
   onFold: (key: string) => void
   onMenu: (target: RowTarget) => void
   onDiscard: (target: RowTarget) => void
@@ -496,7 +473,6 @@ function Nodes({
               change={node.change}
               root={root}
               indent={indent}
-              commentCount={commentCounts.get(node.change.path) ?? 0}
               onMenu={onMenu}
               onDiscard={onDiscard}
             />
@@ -514,7 +490,6 @@ function Nodes({
               indent={indent}
               open={open}
               staged={pile === "staged"}
-              commentCount={commentCountsUnder(node, commentCounts)}
               onToggle={() => onFold(key)}
               onMenu={onMenu}
               onDiscard={onDiscard}
@@ -527,7 +502,6 @@ function Nodes({
                   root={root}
                   indent={indent + 1}
                   shut={shut}
-                  commentCounts={commentCounts}
                   onFold={onFold}
                   onMenu={onMenu}
                   onDiscard={onDiscard}
@@ -542,8 +516,7 @@ function Nodes({
 }
 
 /**
- * A folder in the tree: the chevron, the collapsed name, and how many comments
- * are under it.
+ * A folder in the tree: the chevron and the collapsed name.
  *
  * **No state letter and no `+`/`−`.** A folder holding an added file and a
  * deleted one has no single state, so picking one would be the row asserting
@@ -551,8 +524,6 @@ function Nodes({
  * and were drawn for a while, then removed: down a chain of folders they are a
  * second column of numbers beside the one that answers the question being asked
  * — which *file* changed, and by how much — and the file rows say that already.
- * The comment badge stays, because a comment in a folded folder has nothing
- * else to announce it.
  */
 function DirRow({
   node,
@@ -560,7 +531,6 @@ function DirRow({
   indent,
   open,
   staged,
-  commentCount,
   onToggle,
   onMenu,
   onDiscard,
@@ -570,9 +540,6 @@ function DirRow({
   indent: number
   open: boolean
   staged: boolean
-  /** Comment threads on the files under this folder, summed — see
-   * `commentCountsUnder`. */
-  commentCount: number
   onToggle: () => void
   onMenu: (target: RowTarget) => void
   onDiscard: (target: RowTarget) => void
@@ -602,13 +569,6 @@ function DirRow({
         />
         <span className="min-w-0 flex-1 truncate text-left text-xs">
           {node.label}
-        </span>
-        {/* Steps aside for the actions the way a file's badge does. */}
-        <span
-          aria-hidden
-          className="flex shrink-0 items-center gap-1.5 group-focus-within/row:invisible group-hover/row:invisible"
-        >
-          <CommentBadge count={commentCount} />
         </span>
       </SideRow>
 
@@ -697,16 +657,12 @@ function ChangeRow({
   change,
   root,
   indent,
-  commentCount,
   onMenu,
   onDiscard,
 }: {
   change: GitChange
   root: FileRoot
   indent: number
-  /** Comment threads left on this file — see `commentCounts` in
-   * `ChangesList`. */
-  commentCount: number
   onMenu: (target: RowTarget) => void
   onDiscard: (target: RowTarget) => void
 }) {
@@ -827,7 +783,6 @@ function ChangeRow({
           <span className="text-center font-mono text-[0.65rem]">
             {GIT_LETTERS[change.state]}
           </span>
-          <CommentBadge count={commentCount} />
           <Counts change={change} />
         </span>
       </SideRow>
@@ -944,24 +899,6 @@ function RowAction({
  * mode or its line endings, and it is the row that would otherwise look like a
  * bug.
  */
-/**
- * How many comment threads sit on a row, drawn with the icon `review-panel.tsx`
- * uses — so a remark left in a file nobody has open is still findable: click the
- * row, the checkout's diff tab opens on this file, and the thread is right
- * there. See `commentCounts` in `ChangesList`, and the `Comments` tab for the
- * listing that answers "where are they all".
- */
-function CommentBadge({ count }: { count: number }) {
-  if (count === 0) return null
-
-  return (
-    <span className="flex items-center gap-0.5 text-muted-foreground">
-      <MessageSquare aria-hidden className="size-2.5" />
-      <span className="font-mono text-[0.65rem] tabular-nums">{count}</span>
-    </span>
-  )
-}
-
 function Counts({ change }: { change: GitChange }) {
   if (change.added === null || change.removed === null) return null
 

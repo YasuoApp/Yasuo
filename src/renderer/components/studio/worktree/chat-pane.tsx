@@ -133,7 +133,7 @@ function captionFor(permission: ChatPermission): string | null {
     case "read":
       return "Read only: this turn reads and changes nothing"
     case "ask":
-      return "Reading runs freely; edits and commands will stop and ask you"
+      return "Like the claude CLI: anything your settings do not allow will ask you"
     // Nothing for `edits`: it is the mode a chat is normally in, so its caption
     // was under the composer of every chat all day saying what the toolbar
     // above it already says. The modes that still speak are the ones somebody

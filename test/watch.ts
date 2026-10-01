@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 
-import { DirectoryWatchers } from "../src/main/watch"
+import { DirectoryWatchers, RootWatchers } from "../src/main/watch"
 import { check, finish, section } from "./harness"
 
 /**
@@ -101,6 +101,41 @@ async function main() {
   await writeFile(path.join(docs, "last.md"), "")
   await new Promise((resolve) => setTimeout(resolve, SETTLE_MS / 3))
   check("leaves nothing reporting", seen.length === 0, seen)
+
+  // The `Changes` list's watcher: one per root, recursive, and only where that
+  // is one native handle — elsewhere it is deliberately inert.
+  if (process.platform === "darwin" || process.platform === "win32") {
+    section("a root, watched whole")
+
+    const deep = path.join(root, "folded", "deeper")
+    await mkdir(deep, { recursive: true })
+    await mkdir(path.join(root, ".git"))
+
+    const reported: string[] = []
+    const roots = new RootWatchers((_root, paths) => reported.push(...paths))
+    roots.set([root])
+    // Give FSEvents a moment to start before the writes it should see.
+    await new Promise((resolve) => setTimeout(resolve, 100))
+
+    const written = path.join(deep, "made-by-a-chat.ts")
+    await writeFile(written, "")
+    check(
+      "reports a file written in a folder nobody expanded",
+      await waitFor(reported, written),
+      reported
+    )
+
+    reported.length = 0
+    await writeFile(path.join(root, ".git", "index"), "")
+    await new Promise((resolve) => setTimeout(resolve, SETTLE_MS / 3))
+    check(
+      "and says nothing about `.git`, which has its own watcher",
+      reported.every((entry) => !entry.includes(`${path.sep}.git`)),
+      reported
+    )
+
+    roots.closeAll()
+  }
 
   await rm(root, { recursive: true, force: true })
   finish()

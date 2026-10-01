@@ -109,15 +109,12 @@ export type Pane = Section | "worktree" | "changes"
  * is the diff. A list in both places is one question answered twice, which is
  * what the old `Files | Changes` toggle under the header was.
  *
- * `comments` is the third, and it is the same bargain a third time: the
- * comments left on a diff live *in* the diff, under the lines they are about,
- * which is where they belong and also means "where are they all" had no answer
- * short of opening every changed file. That question is a list, and this is the
- * column lists live in.
+ * A third, `comments`, went with the comments on a diff (`docs/design.md`
+ * § Comments, removed); a strip saved with it open reads back as `files`.
  */
-export type ExplorerTab = "files" | "changes" | "comments"
+export type ExplorerTab = "files" | "changes"
 
-const EXPLORER_TABS: ExplorerTab[] = ["files", "changes", "comments"]
+const EXPLORER_TABS: ExplorerTab[] = ["files", "changes"]
 
 type StudioState = {
   /** Storage is open and the workspace has been read. */

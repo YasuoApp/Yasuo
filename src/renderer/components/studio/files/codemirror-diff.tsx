@@ -26,9 +26,8 @@ import {
   githubDiffTheme,
 } from "@/lib/files/diff-chrome"
 import { languageExtension, languageForFile } from "@/lib/editor-languages"
+import { diffSelection } from "@/lib/files/diff-selection"
 import { gitDiffRanges } from "@/lib/files/git-diff"
-import { reviewGutter, setReviewMarks } from "@/lib/files/review-marks"
-import { useReview, type ReviewSide } from "@/lib/files/review"
 import {
   acquireDoc,
   docSharing,
@@ -86,7 +85,6 @@ export default function CodeMirrorFileDiff({
   whitespace,
   original,
   patch,
-  reviewRootId = null,
 }: {
   path: string
   /** The working tree's text as the tab read it. Only used if no pane is already
@@ -104,16 +102,6 @@ export default function CodeMirrorFileDiff({
   /** Git's own patch between the two, or null when there is none to be had —
    * see `gitDiffConfig` below. */
   patch: string | null
-  /**
-   * The checkout being reviewed, or null for a diff that is not a review.
-   *
-   * A root id, not a flag, because a comment belongs to one: the `Changes` pane
-   * hands its own down, and the `Diff` half of a file tab's toggle hands
-   * nothing — the same diff, without the column. Reviewing is what the
-   * `Changes` tab is *for*, and a `+` in every diff in the app would offer a
-   * review with nowhere to submit it.
-   */
-  reviewRootId?: string | null
 }) {
   const hostRef = useRef<HTMLDivElement>(null)
   /** Every view this diff is made of — one for inline, two for side by side —
@@ -122,19 +110,9 @@ export default function CodeMirrorFileDiff({
   const { resolvedTheme } = useTheme()
   const isDark = resolvedTheme === "dark"
 
-  /*
-   * The review column, and what it is drawing.
-   *
-   * The id goes through a ref for the same reason the theme does: it is read
-   * while the view is built, and a change to it has to rebuild the view — which
-   * the effect's own dependency below is what does — rather than re-run the
-   * builder on every render.
-   */
-  const reviewRef = useRef(reviewRootId ?? null)
   const themeRef = useRef(isDark)
   const whitespaceRef = useRef(whitespace)
   useEffect(() => {
-    reviewRef.current = reviewRootId ?? null
     themeRef.current = isDark
     whitespaceRef.current = whitespace
   })
@@ -159,47 +137,6 @@ export default function CodeMirrorFileDiff({
       optionsConf.of(marks ? highlightWhitespace() : []),
       languageConf.of([]),
     ]
-
-    /**
-     * The review column, for one editor of this diff.
-     *
-     * `side` is what a document line of *that* editor is a line of, and
-     * `removals` whether its deleted lines are block widgets in it — which is
-     * the whole difference between the two layouts: the unified diff draws the
-     * removed rows inside the working editor, and the split one puts them on the
-     * commit's own, where they are ordinary lines. `overlay` follows from that:
-     * only the unified diff has a `+`/`-` column for the marks to sit over, and
-     * the split view's editors would have them over CodeMirror's fold arrows.
-     * Empty for a diff that is not a review, which is what keeps the `+` out of
-     * a file tab's `Diff`.
-     */
-    const rootId = reviewRef.current
-    const review = (
-      side: ReviewSide,
-      removals: boolean,
-      overlay: boolean
-    ): Extension[] =>
-      rootId === null
-        ? []
-        : [
-            reviewGutter({
-              side,
-              removals,
-              overlay,
-              // The anchor arrives worked out, both sides of it: only the editor
-              // can say which rows a gesture crossed, and a run through a hunk
-              // crosses two files.
-              pick: (anchor) =>
-                useReview.getState().pick({ rootId, path }, anchor),
-              drag: (anchor) =>
-                useReview.getState().stretch({ rootId, path }, anchor),
-              settle: () => useReview.getState().settle(),
-              // Where the range is on screen, so the composer can be drawn
-              // against it. Guarded in the store, since this arrives on every
-              // frame of a scroll.
-              locate: (spot) => useReview.getState().locate(spot),
-            }),
-          ]
 
     // The unchanged bands, folded away. A file where every line moved is a file
     // whose diff is the file, and folding it is what makes the handful of real
@@ -239,15 +176,7 @@ export default function CodeMirrorFileDiff({
         // and the word-level highlighting are Primer's here.
         a: {
           doc: committed,
-          extensions: [
-            ...panelChrome(),
-            ...common(),
-            githubDiffTheme(dark),
-            // The commit's own editor, so every line in it is a line of the
-            // commit — which is where a deleted line lives in this layout, and
-            // therefore where a comment on one is left.
-            ...review("old", false, false),
-          ],
+          extensions: [...panelChrome(), ...common(), githubDiffTheme(dark)],
         },
         b: {
           doc: working,
@@ -255,9 +184,6 @@ export default function CodeMirrorFileDiff({
             ...panelChrome(),
             ...common(),
             githubDiffTheme(dark),
-            // After the number column, so it sits against the code the way a
-            // forge draws it — a gutter's place is where it appears.
-            ...review("new", false, false),
             docSharing(path, { editable: false }),
           ],
         },
@@ -277,9 +203,10 @@ export default function CodeMirrorFileDiff({
             // number column beside the old and new ones.
             githubDiffGutters(),
             githubDiffTheme(dark),
-            // One editor holding both sides: its own lines are the working
-            // file's, and the removed rows drawn between them are the commit's.
-            ...review("new", true, true),
+            // The removed rows are widgets, not text: selecting across them
+            // and copying what was selected are both assembled rather than
+            // read off the document.
+            diffSelection(),
             docSharing(path, { editable: false }),
             unifiedMergeView({
               original: committed,
@@ -335,72 +262,7 @@ export default function CodeMirrorFileDiff({
     // draw the new file through the old file's ranges — which `gitDiffRanges`
     // would refuse, quietly costing the thing this was done for.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [path, original, patch, sideBySide, isDark, reviewRootId])
-
-  /*
-   * What the review column draws, pushed in.
-   *
-   * Declared after the builder above and depending on everything it depends on,
-   * which is what puts the marks back after a rebuild: React runs a component's
-   * effects in order, so the view exists by the time this one asks for it. The
-   * alternative was a generation counter and a render to carry it.
-   */
-  const threads = useReview((state) => state.threads)
-  const pending = useReview((state) => state.pending)
-  useEffect(() => {
-    if (!reviewRootId) return
-
-    const marks = setReviewMarks.of({
-      threads: threads.filter(
-        (thread) => thread.rootId === reviewRootId && thread.path === path
-      ),
-      // Only while it is about *this* file: one range is picked at a time
-      // across the whole review, and a range picked in the file before this
-      // one is not a range to tint in this one.
-      pending: pending && pending.path === path ? pending : null,
-    })
-
-    // Every view rather than the working one: in the split layout the commit's
-    // editor is the one drawing the deleted lines. Both are handed the same
-    // threads and each filters by its own side, so neither has to be told twice
-    // which it is.
-    for (const view of viewsRef.current) view.dispatch({ effects: marks })
-    // `patch` is here for the same reason it is a dependency of the builder: a
-    // file edited again under an open diff rebuilds the view on the new patch
-    // alone — `HEAD` did not move — and marks pushed into the views before that
-    // went with the ones they were pushed into.
-  }, [
-    threads,
-    pending,
-    path,
-    reviewRootId,
-    original,
-    patch,
-    sideBySide,
-    isDark,
-  ])
-
-  /* Both texts, handed to the review.
-   *
-   * The commit is the one thing a review cannot read off the buffer — a comment
-   * on a deleted line quotes lines that are only there (see `committed` on the
-   * store) — and the working side is what a **kept** review is put back on: this
-   * fires when a file is shown, which is the one moment both halves exist, and
-   * `showing` re-anchors every thread in this file against them. */
-  useEffect(() => {
-    if (!reviewRootId) return
-    useReview
-      .getState()
-      .showing(path, original ?? "", docTextOf(path) ?? initialText)
-    // `initialText` is the seed for a buffer that may already exist and is
-    // deliberately not a dependency anywhere in this file — the buffer is read
-    // here, not watched.
-    // `patch` is, and it is what re-anchors a review against a file that has
-    // been edited again since it was opened: the commit is unchanged, so this
-    // is the only thing that says the working side moved. `showing` is built to
-    // be run on every rebuild — see the guard on it.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [path, original, patch, reviewRootId])
+  }, [path, original, patch, sideBySide, isDark])
 
   useEffect(() => {
     for (const view of viewsRef.current) {
@@ -435,8 +297,8 @@ const DEFAULT_DIFF_CONFIG: DiffConfig = { scanLimit: 500 }
  *
  * `DiffConfig.override` is the whole of the seam: `@codemirror/merge` funnels
  * every diff it computes through one function, and everything built on top of
- * the result — the chunking, the folded unchanged bands, the gutters, the
- * review column, both layouts — is the same code either way. Nothing about the
+ * the result — the chunking, the folded unchanged bands, the gutters, both
+ * layouts — is the same code either way. Nothing about the
  * view changes; only who decided where the changed lines are.
  *
  * **The override has to answer synchronously, and git does not.** So the patch

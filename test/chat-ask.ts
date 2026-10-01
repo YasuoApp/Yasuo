@@ -1,5 +1,11 @@
 import type { WorktreeChatAsk } from "../src/shared/api"
-import { asked, decided, said, titleFor } from "../src/main/worktree-chat"
+import {
+  asked,
+  decided,
+  isMcpTool,
+  said,
+  titleFor,
+} from "../src/main/worktree-chat"
 import { check, finish, section } from "./harness"
 
 /**
@@ -226,6 +232,21 @@ check(
   // glance before deciding.
   "a long command is collapsed",
   titleFor("Bash", { command: "x".repeat(400) }).length < 160
+)
+
+section("what Edits asks about rather than refusing")
+
+check(
+  // Wire names, as the CLI normalises them — a connector's and a plugin's.
+  "a connector's or a plugin's tool is an MCP tool",
+  isMcpTool("mcp__claude_ai_Figma__get_screenshot") &&
+    isMcpTool("mcp__plugin_context7_context7__query-docs")
+)
+
+check(
+  // Edits leaves these out on purpose; asking about them would undo that.
+  "a built-in is not, so Edits still refuses one it never listed",
+  !isMcpTool("KillShell") && !isMcpTool("ExitPlanMode")
 )
 
 finish()

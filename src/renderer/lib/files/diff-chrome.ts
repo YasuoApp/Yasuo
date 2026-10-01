@@ -340,49 +340,6 @@ function removedColumns(model: DiffModel, block: BlockInfo) {
   return model.removed.get(block.from) ?? null
 }
 
-/**
- * The removed chunk whose widget sits at `pos`: which line of the commit its
- * first row is, and how many rows it draws. Null for anything else.
- *
- * Exported for the review column, which asks the same two questions the number
- * gutters do — a comment on a deleted line is a comment on a row this file
- * numbered. Keyed by the widget's position, which is also the start of the line
- * *after* the deletion, so a caller must ask only about block widgets: a text
- * block at the same position is a different row.
- */
-export function removedChunkAt(
-  state: EditorState,
-  pos: number
-): { firstOld: number; lines: number } | null {
-  return modelOf(state).removed.get(pos) ?? null
-}
-
-/**
- * The same map read the other way: where the chunk holding one line of the
- * commit sits in this document.
- *
- * For the one caller that has a line number and needs a position — the review's
- * inline threads, which have to attach a block widget beneath a comment on
- * **deleted** lines. Those rows are inside another widget and are not addressable
- * as document positions, so the nearest thing that is, is the chunk's own
- * position: the widget lands directly under the rows it is about.
- *
- * A linear scan, which is what the shape allows and what the size makes fine: a
- * file's removed chunks number in the tens, and this is asked once per thread per
- * redraw of the decorations rather than once per row.
- */
-export function removedChunkOf(
-  state: EditorState,
-  oldLine: number
-): { pos: number; firstOld: number; lines: number } | null {
-  for (const [pos, chunk] of modelOf(state).removed) {
-    if (oldLine >= chunk.firstOld && oldLine < chunk.firstOld + chunk.lines) {
-      return { pos, ...chunk }
-    }
-  }
-  return null
-}
-
 function rangeOf(first: number, count: number) {
   return Array.from({ length: count }, (_, at) => first + at)
 }
@@ -459,28 +416,8 @@ const hunkBlankSign = new Cell("", SIGN, "cm-diffCell-hunk")
  * uncollapse a region that is not there.
  */
 function isHunkBar(model: DiffModel, block: BlockInfo): boolean {
-  // Elimination only works over the widgets this module knows about, and the
-  // review's inline threads are a third kind it does not — see `FOREIGN_WIDGET`.
-  if (block.widget && FOREIGN_WIDGET in block.widget) return false
   return !model.widgets.has(block.from)
 }
-
-/**
- * A block widget that belongs to somebody else.
- *
- * `isHunkBar` above identifies a collapsed region **by elimination**, which was
- * exact while this configuration had two kinds of block widget and became wrong
- * the moment the review added a third: a thread drawn under its lines is not a
- * removed chunk, so every gutter here decided it was a collapsed bar and drew the
- * expander beside it — a control that would have tried to uncollapse a region
- * that is not there.
- *
- * A symbol on the widget rather than a class this module imports, because the
- * import would go the wrong way: `review-marks.ts` already reads this file, and
- * this file has no business knowing what a review is. Anything adding a block
- * widget to a diff should carry it.
- */
-export const FOREIGN_WIDGET: unique symbol = Symbol("not the diff's own widget")
 
 /**
  * The three columns down the left: old number, new number, `+`/`-`.
@@ -693,6 +630,43 @@ export function githubDiffTheme(isDark: boolean): Extension {
         lineHeight: `${DIFF_ROW_HEIGHT}px`,
       },
       ".cm-content": { padding: "0" },
+      // The selection drawn **over** the code rather than under it. CodeMirror
+      // puts its layer at `z-index: -1`, behind the lines, and hides the native
+      // selection — so the opaque tint on an added row below covered it, and a
+      // selection there was invisible. The removed rows never had the problem:
+      // they are a widget, selected natively. The gutters sit at 200 and stay
+      // above.
+      ".cm-selectionLayer": { zIndex: "100 !important", pointerEvents: "none" },
+      // And translucent, with `!important`, because over the text an opaque
+      // one hides it: `editorTheme`'s colour loses on specificity to the base
+      // theme's focused `#233` (`&dark.cm-focused > .cm-scroller > …`), which
+      // was harmless only while the layer was underneath.
+      ".cm-selectionLayer .cm-selectionBackground": {
+        backgroundColor:
+          "color-mix(in oklch, var(--primary) 28%, transparent) !important",
+      },
+      // The browser's own selection, which the editor hides on its lines and
+      // this diff shows again for as long as a removed run holds focus — the
+      // one time it is the selection somebody is making (`diff-selection.ts`).
+      // In the editor's colour, so the two selections read as one; and no
+      // ring on the run, which is focused as a side effect and not a control.
+      // The run's own rows are the second selector, at the same weight: the
+      // editor's base theme paints `.cm-content :focus ::selection` in the
+      // system `Highlight`, and the run *is* the focused element, so a lighter
+      // selector lost to it and the red rows selected in a different blue.
+      "&.cm-editor .cm-content:has(.cm-deletedChunk:focus) .cm-line ::selection, &.cm-editor .cm-content .cm-deletedChunk:focus ::selection":
+        {
+          backgroundColor:
+            "color-mix(in oklch, var(--primary) 28%, transparent) !important",
+        },
+      ".cm-deletedChunk:focus": { outline: "none" },
+      // A removed row the selection has taken in — see `diff-selection.ts`.
+      // Layered over the
+      // row's red rather than replacing it, so it still reads as removed.
+      ".cm-deletedLine.cm-deletedLine-selected": {
+        backgroundImage:
+          "linear-gradient(color-mix(in oklch, var(--primary) 28%, transparent), color-mix(in oklch, var(--primary) 28%, transparent))",
+      },
 
       ".cm-diffGutter": {
         backgroundColor: "transparent",

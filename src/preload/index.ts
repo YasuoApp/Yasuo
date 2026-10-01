@@ -9,6 +9,7 @@ import {
   IPC,
   type DesktopApi,
   type DirectoryChange,
+  type TreeChange,
   type MenuCommand,
   type ProcessExit,
   type ProcessOutput,
@@ -100,6 +101,7 @@ const api: DesktopApi = {
   watchDirectories: (dirs) => ipcRenderer.invoke(IPC.watchDirectories, dirs),
   onDirectoryChanged: (listener) =>
     subscribe<DirectoryChange>(IPC.directoryChanged, listener),
+  onTreeChanged: (listener) => subscribe<TreeChange>(IPC.treeChanged, listener),
 
   tsOpen: (filePath, text) => ipcRenderer.invoke(IPC.tsOpen, filePath, text),
   tsChange: (filePath, text) =>
@@ -156,9 +158,6 @@ const api: DesktopApi = {
     ),
   saveLearning: (folderId, proposal) =>
     ipcRenderer.invoke(IPC.saveLearning, folderId, proposal),
-  listReviewThreads: () => ipcRenderer.invoke(IPC.listReviewThreads),
-  saveReviewThreads: (threads) =>
-    ipcRenderer.invoke(IPC.saveReviewThreads, threads),
   readDrawing: (id) => ipcRenderer.invoke(IPC.readDrawing, id),
   writeDrawing: (id, scene) => ipcRenderer.invoke(IPC.writeDrawing, id, scene),
   writeDrawingSvg: (id, svg) =>

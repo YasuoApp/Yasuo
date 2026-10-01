@@ -193,6 +193,21 @@ async function main() {
     addedTrash
   )
 
+  // The list draws each file of a new directory as its own row, where plain
+  // status says only `?? nested/` — so the row's path has to be found anyway.
+  await mkdir(path.join(root, "nested", "deeper"), { recursive: true })
+  await writeFile(path.join(root, "nested", "deeper", "one.ts"), "a\n")
+  const nestedTrash = await discard(root, [
+    path.join(root, "nested", "deeper", "one.ts"),
+  ])
+
+  check(
+    "a file inside a wholly new directory is handed back on its own",
+    nestedTrash.join() === path.join(root, "nested", "deeper", "one.ts"),
+    nestedTrash
+  )
+  await rm(path.join(root, "nested"), { recursive: true })
+
   section("a rename")
 
   await git(root, "mv", "edited.ts", "renamed.ts")
@@ -233,7 +248,13 @@ async function main() {
 
   check(
     "and nothing tracked is left in the list once they are gone",
-    (await changes(root)).every((change) => allTrash.includes(change.path)),
+    // A row may be a file inside a directory handed back whole.
+    (await changes(root)).every((change) =>
+      allTrash.some(
+        (trashed) =>
+          change.path === trashed || change.path.startsWith(trashed + path.sep)
+      )
+    ),
     await changes(root)
   )
 

@@ -159,8 +159,8 @@ handler and the long-lived managers (`Store`, `SqlConnections`, `DockerRuntime`,
   for the project's `CLAUDE.md` — each written only when its Save is pressed
   (`main/learnings.ts`, shapes in `shared/learnings.ts`). It was
   `review-agent.ts` and had two more, `reviewReply` and `reviewChanges`: **the
-  agent half of the review is deleted** and what stayed is the comments somebody
-  writes by hand — `docs/design.md` § Comments has what went and why. The rule
+  agent half of the review is deleted**, and so are the hand-written comments
+  that outlived it — `docs/design.md` § Comments, removed. The rule
   below still holds — a feature calling the CLI as a helper is refused — and
   neither of the two is one: each is asked for out loud by a button or a menu
   item, and each answers in the place it was asked from, as proposals somebody
@@ -234,9 +234,15 @@ and whether it may stop to ask. Plan mode is a permit list, **not**
 `--permission-mode plan`: that mode ends by asking, `ExitPlanMode` is a prompt,
 and a turn started that way spends itself trying to leave.
 
-`Ask` is the mode that stops: an unpermitted call comes back through
+`Ask` is **the plain CLI, exactly**: it permits nothing itself and asks about
+every call `canUseTool` sees, ask rules included (`asksRules`) — the CLI's own
+settings have already approved the rest. Its other half is `mergeShellEnv` in
+`shell-env.ts`: a spawned `claude` gets the login shell's whole env, not only
+PATH. `Ask` is the mode that stops: an unpermitted call comes back through
 `canUseTool` as a card above the composer, and the promise `WorktreeChats.ask`
-returns **is** the pause — nothing times it out. `endTurn` and `dispose` both
+returns **is** the pause — nothing times it out. `Edits` stops too, for an MCP
+tool alone (`asks` on `PERMISSIONS` is a predicate): refusing one there meant a
+Figma frame the plain CLI fetches after one prompt. `endTurn` and `dispose` both
 settle outstanding asks, or the CLI waits on a promise nobody will resolve.
 
 **A chat is one CLI held open, not a process per message.** `query()` is given
@@ -364,15 +370,15 @@ rather than an `h-9` beside a `36`. `⌃\`` toggles the Terminal tab
 inside a pty. A project's rows are its **chats**.
 The `Changes` list carries a **chip per chat** that wrote some of what is on it
 (`touchesIn`/`keptBy`in`lib/worktree-chat/digests.ts`), drawn only when more
-than one did, and the piles are split *after* that filter — so `Stage everything`and the discard act on what is shown and say`shown`while it is up. The`Comments`tab carries the one button back from the deleted agent review:`commentsPrompt` into a **new** chat's composer, unsent (`docs/design.md`§ Comments has why a new one and not the chat on screen).
-The Explorer's tab row is **three**:`All files`, `Changes`and`Comments`
-(`ExplorerTab`in`lib/store.ts`is the one list saying so). The third is the
-listing of the remarks left on a diff — they live *in* the diff, under the lines
-they are about, so "where are they all" had no answer short of opening every
-changed file.`comments-list.tsx` groups them by file and a row is a way *to*
-one (`reveal`) — which is the only way to reach one from outside the diff: the
-two arrows that walked them and the Discard-the-lot button are gone from the
-header, and with them `step`, `stepThrough`, `orderedThreads`, `clear`and`isReviewStepShortcut`.
+than one did, and the piles are split *after* that filter — so `Stage everything`and the discard act on what is shown and say`shown`while it is up.
+
+The Explorer's tab row is **two**: `All files` and `Changes` (`ExplorerTab` in
+`lib/store.ts`). **There are no comments on a diff** — the `+` column, the
+threads, the `Comments` tab and the badges are deleted (`docs/design.md`
+§ Comments, removed); nothing reads `workspace/review.json` any more.
+A project's chat list shows the newest **20** (`CHAT_LIMIT` in
+`projects-section.tsx`) and a `View all` row; the selected chat stays listed
+past the cut.
 
 **There is no board** — the kanban a project used to have is deleted: its pane,
 its cards and columns, the drawer behind a card, the chip on a chat naming its
@@ -485,17 +491,17 @@ app minted, only while `isUntitledBranch` still holds, never one the user named.
 
 Logic worth testing is split out from the drawing: `lib/worktree-chat/activity.ts`
 (`test/chat-activity.ts`), `lib/worktree-chat/usage.ts` (`test/chat-usage.ts`),
-`lib/files/review.ts` (`test/comments.ts`), `lib/tab-groups.ts`
+`lib/tab-groups.ts`
 (`test/tab-groups.ts`), `lib/files/roots.ts` (`test/file-roots.ts`),
 `lib/worktree-chat/running.ts` (`test/chat-running.ts`) with `main/notify.ts`'s
 own `ChatNotices` (`test/notify.ts`),
 `lib/worktree-chat/unread.ts` (`test/chat-unread.ts`),
 `lib/worktree-chat/digests.ts` with `main/chat-digest.ts` (`test/chat-digest.ts`),
 `lib/worktree-chat/search.ts` (`test/chat-search.ts`),
-`lib/files/review.ts`'s `commentsPrompt` (`test/comments.ts`),
 `lib/files/change-tree.ts` (`test/change-tree.ts`),
 `lib/project-tree.ts` (`test/project-tree.ts`),
 `lib/files/git-diff.ts` with `main/git.ts`'s own `fileDiff` (`test/git-diff.ts`),
+`lib/files/diff-copy.ts` (`test/diff-copy.ts`),
 `lib/files/block-doc.ts`, `lib/worktree-chat/mention-text.ts`
 (`test/chat-mentions.ts`), `lib/worktree-chat/mcp-servers.ts` with
 `main/mcp-servers.ts`'s own `readServer` (`test/mcp-servers.ts`),

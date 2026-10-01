@@ -204,6 +204,14 @@ export type FileDiff = {
 export type DirectoryChange = { dir: string }
 
 /**
+ * Something changed somewhere under a workspace folder, watched recursively for
+ * the `Changes` list — `RootWatchers` in `main/watch.ts`. Paths rather than
+ * directories so the renderer can drop the ones git ignores; `overflow` says
+ * more arrived than were carried.
+ */
+export type TreeChange = { root: string; paths: string[]; overflow: boolean }
+
+/**
  * What hovering a symbol in the editor says.
  *
  * The pieces tsserver hands back, kept apart rather than pre-rendered into one
@@ -1571,115 +1579,6 @@ export type DistillAnswer =
 export type SaveLearningAnswer = { path: string } | { error: string }
 
 /**
- * Which file a thread's line numbers are in.
- *
- * `new` is the working file — the diff's right-hand side, and every kept or
- * added line. `old` is the commit, which is where a deleted line still exists:
- * in the unified diff those rows are the merge extension's block widgets, and in
- * the split one they are the left-hand editor.
- */
-export type ReviewSide = "new" | "old"
-
-/** A run of one file's lines, inclusive of both ends. A single line is
- * `fromLine === toLine`. */
-export type LineRange = { fromLine: number; toLine: number }
-
-/**
- * What one comment is about, in one or both files.
- *
- * At least one of the two is set — an anchor naming nothing is not a comment.
- * Both being set is a remark about a hunk: these lines went, those replaced
- * them, and the opinion is about the swap rather than about either half.
- *
- * Two ranges rather than a list of rows, which is what a truly faithful record of
- * a selection would be. A diff's rows are contiguous per side within any
- * selection somebody can make by dragging, so the extremes are the whole of it,
- * and two pairs of numbers is what a heading and a `Read` call can both use.
- */
-export type ReviewAnchor = {
-  /** Lines of the committed file — what the change removed. */
-  old: LineRange | null
-  /** Lines of the working file — kept, or added. */
-  new: LineRange | null
-}
-
-/**
- * The lines an anchor quoted, per side, as they read when the thread was opened.
- *
- * Kept apart rather than run together, because the two are lines of different
- * files and a reader — human or model — that could not tell which was which
- * would be reading a diff with the signs rubbed off.
- */
-export type ReviewSnippet = {
-  old: string | null
-  new: string | null
-}
-
-/** One thing said in a thread. */
-export type ReviewNote = {
-  id: string
-  body: string
-}
-
-/**
- * A range of a diff's lines, and the conversation about it.
- *
- * **Written to disk**, in `REVIEW_FILE` — which is why these types are in the
- * contract rather than in the renderer that draws them. A review used to be a
- * sitting: nothing was kept, on the argument that what a review was *for* was
- * the chat at the end of it. There is no chat at the end any more, so there was
- * nothing keeping it. `docs/design.md` § Changes has the reversal.
- */
-export type ReviewThread = {
-  id: string
-  /** `FileRoot.id`: the checkout this review is of. */
-  rootId: string
-  /** Absolute, as every path in the Explorer is. */
-  path: string
-  /** Which lines of which of the two files — see `ReviewAnchor`. */
-  anchor: ReviewAnchor
-  /**
-   * The lines as they read when the thread was opened.
-   *
-   * Kept rather than resolved when it is read back, and that is deliberate
-   * twice over. It is what an agent is told the reviewer was looking at — lines
-   * move, and a snippet read later would quote something the remark was never
-   * about. And now that a thread outlives the app, it is the thread's **real**
-   * address: `settle` in `lib/files/review.ts` finds these lines again in the
-   * file and puts the comment back on them, or says the code has gone.
-   *
-   * Capped, so a comment on a 400-line block is still a prompt.
-   */
-  snippet: ReviewSnippet
-  /** At least one, oldest first: a thread is opened by something being said. */
-  notes: ReviewNote[]
-  /**
-   * Whether the lines this was written about are still findable in the file.
-   *
-   * Absent on a thread that has not been checked, and on every thread written
-   * before there was anything to check — a review kept across a restart is read
-   * back against a file that has moved on, and `settle` sets this when the
-   * snippet is nowhere to be found. Drawn as *outdated* rather than deleted: a
-   * remark whose code has gone is still something somebody said, and quietly
-   * dropping it would be this app deciding a review was finished.
-   */
-  stale?: boolean
-  /**
-   * Whether this conversation has been settled — a forge's *Resolve
-   * conversation*, and the same bargain.
-   *
-   * **Absent is open**, so every thread written before there was such a thing
-   * reads as one, and nothing on disk needs migrating. Resolving neither deletes
-   * the thread nor moves it: it is drawn collapsed on its own lines, still
-   * openable, still repliable — a remark somebody dealt with is the record of
-   * how it was dealt with, which is the whole reason a forge keeps it. What it
-   * *does* buy is the count: the bar and the Changes list count the threads
-   * still asking for something, so a diff worked through reads as done.
-   */
-  resolved?: boolean
-}
-
-/**
  * The language a fenced block carries when it holds a drawing.
  *
  * A drawing is a scene of shapes and images, which markdown has no syntax for,
@@ -2056,6 +1955,9 @@ export type DesktopApi = {
   /** Subscribes to those directories changing. Returns an unsubscribe
    * function. */
   onDirectoryChanged: (listener: (event: DirectoryChange) => void) => () => void
+  /** Subscribes to anything under a workspace folder changing, folded or not.
+   * Only on platforms with a native recursive watch; elsewhere it never fires. */
+  onTreeChanged: (listener: (event: TreeChange) => void) => () => void
 
   /**
    * The models the user's own `claude` offers, for the composer's picker.
@@ -2292,18 +2194,6 @@ export type DesktopApi = {
   ) => Promise<SaveLearningAnswer>
 
   /**
-   * Every review thread in the workspace.
-   *
-   * One call for the lot rather than per project: the pane has to know a review
-   * exists in a file nobody has opened, and the whole collection is a few dozen
-   * short records.
-   */
-  listReviewThreads: () => Promise<ReviewThread[]>
-  /** Replaces the whole collection — the renderer owns the list and its
-   * order. */
-  saveReviewThreads: (threads: ReviewThread[]) => Promise<void>
-
-  /**
    * One drawing's scene, as the text of its `.excalidraw` file — Excalidraw's
    * own format, so a scene can be opened at excalidraw.com or in the editor's
    * desktop app without this studio.
@@ -2532,6 +2422,7 @@ export const IPC = {
   listWorkspaceFiles: "files:index",
   watchDirectories: "files:watch",
   directoryChanged: "files:changed",
+  treeChanged: "files:tree-changed",
   tsOpen: "ts:open",
   tsChange: "ts:change",
   tsClose: "ts:close",
@@ -2560,8 +2451,6 @@ export const IPC = {
   revealWorktreeChat: "worktree-chats:reveal",
   distillLearnings: "agent:distill",
   saveLearning: "agent:save-learning",
-  listReviewThreads: "comments:list",
-  saveReviewThreads: "comments:save",
   readDrawing: "drawings:read",
   writeDrawing: "drawings:write",
   writeDrawingSvg: "drawings:write-svg",

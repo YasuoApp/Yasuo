@@ -1332,7 +1332,7 @@ const PERMISSION_MARKS: Record<
   ask: {
     label: "Ask",
     short: "Ask",
-    detail: "Reads freely, and stops to ask before it writes or runs anything.",
+    detail: "Asks exactly what the claude CLI would, under your own settings.",
     icon: MessageCircleQuestion,
   },
   edits: {

@@ -1350,7 +1350,12 @@ whatever this says, and `Edits` is what it says until somebody changes it. The
 effort picker has since gone the same way, for the same reason — see above.
 
 Four of the five decide up front, which is what print mode forced and what a
-chat that never interrupts still wants. **Read only** is what `default` used to
+chat that never interrupts still wants — with one exception in **Edits**: an MCP
+tool (`mcp__*`) is asked about there rather than refused. Refusing it made a mode
+that runs any `curl` unasked unable to fetch a Figma frame through the server the
+user's own `claude` already has, where the plain CLI asks once and remembers.
+Built-ins off `ALLOWED_TOOLS` are still refused; `asks` on `PERMISSIONS` is a
+predicate now rather than a flag for exactly this. **Read only** is what `default` used to
 have to become, back when a turn that may not write without a prompt may as well
 have been told so up front; it is still the right mode for a question, and now
 it is a choice rather than a workaround.
@@ -1413,11 +1418,22 @@ field's own placeholder follow the picker, because a line that says edits run
 without asking is a lie about a turn that cannot make one — and so is the
 reverse.
 
-**Asking.** `Ask` is the mode that stops. `READ_TOOLS` stay pre-approved under
-it, so reading never interrupts — the difference between a mode somebody can work
-in and one that asks four times before it has finished reading a file — and what
-reaches the screen is the writes, the shell, and anything this app never listed,
-which is the set worth being asked about. `manual` is the `--permission-mode`
+**Asking.** `Ask` is the mode that stops, and it is **the plain CLI, exactly**:
+it permits nothing of its own and puts every call `canUseTool` sees on screen,
+an account's `matchedAskRule` included (`asksRules`). That does not mean four
+prompts before a file is read, because the callback is only reached for a call
+the CLI would itself have prompted on — the session loads every settings
+source, so the user's allow and deny rules and the CLI's own read-inside-`cwd`
+approval are applied first. It used to pre-approve `READ_TOOLS` and let ask
+rules through, which made it the CLI plus a list, and a list is exactly what
+makes "it works in the terminal and not here" possible. An "Always allow"
+returns the CLI's own `suggestions`, so it is the rule the terminal would have
+written. The other half of that parity is the environment: a `claude` spawned
+here gets the login shell's **whole** env filled in under the inherited one
+(`mergeShellEnv` in `main/shell-env.ts`), not only its PATH — a token in
+`.zshrc` that a `.mcp.json` names as `${VAR}` was the other way the two parted.
+What stays different is the terminal's own UI — `/mcp`'s OAuth, interactive
+slash commands — and the one sentence this app appends. `manual` is the `--permission-mode`
 every mode now runs at, and it was `Ask`'s first: this CLI's mode list no longer
 has a `default` (it is `manual` for "prompt about everything" and `auto` for the
 classifier), and the SDK passes whichever string it is handed straight through,
@@ -3633,7 +3649,7 @@ looking at.
 The seam that makes this cost nothing is `DiffConfig.override` in
 `@codemirror/merge`: the package funnels every diff it computes through one
 function, and everything built on the result — the chunking, the folded
-unchanged bands, the gutters, the review column, both layouts — is the same code
+unchanged bands, the gutters, both layouts — is the same code
 either way. **Not one line of the view changed.** The ranges still go through the
 package's own `makePresentable`, so changes a line or two apart still merge into
 one band rather than becoming one band per `@@`; the pane looks exactly as it
@@ -3709,231 +3725,35 @@ has nothing left to guard against and is gone. Whitespace is now all or nothing
 no selection-scoped equivalent, and somebody who turned the toggle on to find a
 stray tab wanted all of them anyway.
 
-### Comments
+### Comments, removed
 
-**Comments are left on the diff, and stay there.** Reading a turn's work is
-where the remarks happen — "this leaks", "wrong error path", "rename this" — and
-before this they had to be retyped into a chat with the file and the line named
-by hand, which is both the tedious part and the part that goes wrong. So the
-`Changes` pane takes them where they occur: a `+` in a column against the code
-picks a line — **held down and dragged** for a range, the way a forge does it —
-a box opens against those lines, and what is written becomes a **thread** pinned
-to them. `lib/files/review.ts` is the store, `lib/files/review-marks.ts` the
-column, `review-panel.tsx` the threads themselves, `comments-list.tsx` the
-listing. The files are still named `review*`: that is what this was, and
-renaming five modules to rename a feature is a diff nobody can read.
+**There were comments on the diff.** The `Changes` pane had a `+` in a column
+against the code; it picked a line, or a range when dragged, and opened a box
+whose text became a **thread** pinned to those lines — repliable, resolvable,
+kept across restarts in `workspace/review.json` with a quote of the lines so it
+could be put back after the file moved under it. The Explorer had a third tab,
+`Comments`, listing them by file, a badge on each changed row counted the open
+ones, and the tab carried one button that sent the open threads into a **new**
+chat's composer, unsent. The agent half — `Review` running the read-only
+`claude` over each changed file and turning its answer into threads — had gone
+before this did.
 
-**The agent half is gone.** For a while `Review` in this header ran the
-read-only `claude` once per changed file, four at a time, and turned what came
-back into threads with a `critical`/`high`/`medium`/`low` chip on each; a row
-had `Review this file`; writing `@claude-review` in a comment opened one
-read-only turn on that thread and answered as a note by `agent`; a dialog listed
-the tool calls as they went out. All of it is deleted — `reviewReply`,
-`reviewChanges`, `findingsIn`, `REVIEW_CONCURRENCY`, `PATCH_LIMIT`,
-`review-progress-dialog.tsx`, `ReviewFinding`, `ReviewSeverity`,
-`REVIEW_SEVERITY_IDS`, `ReviewAuthor`, `ReviewProgressEvent`,
-`replyToReviewComment`, `reviewChanges` and `reviewProgress`, `severityRank` /
-`severityAtRank` / `severitySummary`, `worstUnder`, `threadPrompt` and
-`threadBlock`, and the severity chip and badge tones that drew them. What
-survives is what a **person** writes, which is what the feature was before the
-agent was added to it. Consequences worth stating:
+**What was left did not earn its weight.** It was the largest thing in the
+Explorer — a store, a CodeMirror gutter and its marks, a panel portalled into
+the diff, a listing, two IPC channels and a symbol in `diff-chrome.ts` so its
+block widgets were not mistaken for collapsed bars — for a gesture that ended,
+at best, as a prompt in a chat. The chat composer already takes `@` mentions of
+a file, and a remark typed there is one somebody sends rather than one that
+waits in a column to be sent. So the diff is a thing to read again, and the
+remarks go where the work is done.
 
-- **A note has no author.** `ReviewNote` is an id and a body. With no second
-  voice, a name beside every remark is a column saying "you" forty times, and
-  keeping a two-author renderer for notes nothing can create would be hiding the
-  feature rather than deleting it. A `author: "agent"` already on disk is
-  ignored on read and dropped the next time the list is written whole.
-- **A thread has no severity.** It was the model's judgement of a defect, and
-  there is no model. A person typing a remark is not filling in a form — which
-  was already the rule for `severity` being absent on anything hand-written.
-- **`main/review-agent.ts` is `main/one-turn-agent.ts`.** Two of its four turns
-  were never the review's: `draftCommitMessage` (§ Committing) and
-  `distillLearnings` (§ Distilling learnings). `oneTurn` is theirs now.
-  `ReviewReplyAnswer` in the contract is `AgentTurnAnswer`.
-- **`reviewModel` / `reviewEffort` / `reviewProfileId` keep their names**, and
-  Settings calls the row `Helper turns`. They are what is already written in
-  `workbench.settings`, and renaming them would silently reset the choice for
-  everybody who had made one — the same bargain the manifest's
-  `databases?: unknown` makes.
-
-**`Ask AI to fix…` is gone too**, and with it `reviewPrompt`. It opened a chat
-with every comment written into its composer, unsent. What it was for is real —
-handing the whole pile over in one go — and what it did wrong was decide that a
-comment's _destination_ is a chat. It is a `⌘A` and a copy away from being back,
-and until somebody asks for it there is no button whose only purpose is to move
-remarks out of the pane they belong in.
-
-#### Handing the pile over, which was asked for
-
-**Somebody asked for it, so it is back** — one row at the head of the `Comments`
-tab, `Send N comments to a new chat`, over `commentsPrompt` in
-`lib/files/review.ts`. The sentence above is the standing test and this is what
-passing it looks like; what is deliberately _not_ back is the claim it was
-deleted for. The remarks stay where they are: a thread is a record on disk, this
-is a **copy** of it, and pressing the button resolves nothing, moves nothing and
-deletes nothing. Pressing it twice sends them twice, which is what it says.
-
-Three decisions in it, each one the thing the old version got argued about.
-
-**Unsent.** The message lands in the composer and the last word is the reader's.
-A prompt assembled by a button is exactly the kind that wants a sentence added
-before it goes, and a turn nobody typed is a turn nobody asked for — the rule at
-the top of `one-turn-agent.ts`, which this does not bend, because the turn here
-is the ordinary one somebody presses Send on.
-
-**A new chat, not one of the project's existing ones.** This is a constraint
-before it is a preference: the composer is uncontrolled and keyed by chat (see
-`initialDraft`), so writing into a conversation already on screen means
-remounting its field, which throws away whatever was half-typed in it. A new tab
-has no field to lose. It is also usually the right shape — a fix-up pass reads
-better as its own conversation — and the `⌘A` that was the whole argument for
-deleting this is still there for the times it is not.
-
-**Only the open ones**, which is why the count on the button can differ from the
-count on the tab. That list is everything ever said; this is a list of things to
-do, and a settled conversation is not one.
-
-Each remark carries the three things that would otherwise be retyped by hand —
-which file, which lines, and what was said, replies included — because that
-retyping is the whole tedium the feature exists to remove. The quoted lines are
-the thread's **own snippet** rather than the file as it reads now: that is what
-the reviewer was looking at, and it is already capped (`SNIPPET_LIMIT`), so eight
-comments are still one prompt. Checked in `test/comments.ts`.
-
-#### Where they are drawn
-
-**In the diff, under the lines they are about.** A thread is a block widget
-beneath its own rows — `lib/files/review-hosts.ts` holds the host node so a
-widget rebuilt by any change to the review does not take the reply box's focus
-with it, and `review-panel.tsx` portals React into it. The composer is
-**positioned, not laid out** (`ReviewSpot`, pushed by `codemirror-diff.tsx`,
-re-pushed as the diff scrolls): picking a range at the top of a file and typing
-about it four hundred pixels below in a strip was the single thing that made
-this tiring to use, and a box that inserted height between the rows moved them
-out from under the pointer still choosing them. The strip at the foot of the
-pane survives for exactly one case — a range scrolled off screen has no rows to
-hang a box from.
-
-The column itself is `reviewGutter`, and the two layouts are why it takes three
-arguments rather than one: the unified diff draws removed rows as block widgets
-_inside_ the working editor, and the split one puts them on the commit's editor
-where they are ordinary lines. So `side` says what a document line is a line
-_of_, `removals` whether deleted rows are widgets here, and `overlay` whether
-there is a `+`/`-` column for the marks to sit over. `FOREIGN_WIDGET` in
-`lib/files/diff-chrome.ts` is what keeps `isHunkBar` — which identifies a
-collapsed region by elimination — from calling a thread's widget a collapsed
-bar and drawing an expander beside it.
-
-**`⌥`-drag is the way out of that column.** Laying it over the `+`/`-` column
-buys the sixteen pixels a column of its own would cost on every diff in the app,
-and the price is that all fourteen pixels of the strip are the comment control:
-a press there is a range being picked, so selecting the code from its left edge
-had nowhere to start. `⌥` is the discriminator — no guessing at whether a drag
-was meant vertically or horizontally, which is the thing this column was a gutter
-to avoid — and what it starts is **the browser's own selection**, which is what a
-selection in this read-only diff is everywhere else.
-
-Driven by hand (`startSelecting`) rather than by letting the press through, and
-the reason is DOM order: a drag the browser anchors in a gutter cell covers every
-cell of every column before it reaches the first line of code, so a copy would
-carry the whole margin. So the anchor is set into the content at the row's first
-character and the focus follows the pointer through `caretRangeFromPoint`, both
-ends inside `.cm-content` — which is also what makes `⌘C` copy the code and not
-the numbers: `@codemirror/view`'s observer reads a non-editable view's DOM
-selection back into the state as long as it is in the content, and the copy
-handler works off the state. Deleted rows are deliberately not part of the
-gesture: they are inside a block widget whose `ignoreEvent` is true, so a
-selection anchored there is dropped by that same observer and the copy would take
-some other line entirely.
-
-An anchor is a `ReviewAnchor`: a run of the commit's lines, a run of the working
-file's, or one of each. Both being set is a remark about a **hunk** — these
-lines went, those replaced them, and the opinion is about the swap. Two ranges
-rather than a list of rows, because a diff's rows are contiguous per side within
-any selection somebody can drag.
-
-#### That they are kept
-
-**A comment outlives the app.** It was a _sitting_ once — nothing written down,
-on the argument that what a review was for was the chat at the end of it. There
-is no chat at the end, so nothing was keeping it. They live in
-`workspace/review.json`, one file for the whole workspace, which is why `ReviewThread` and everything under it are in the contract
-rather than in the renderer that draws them.
-
-What is stored is **not only line numbers**: each thread carries the lines it
-quoted. That is what lets it be put back. `showing` fires when a file is drawn —
-the one moment both the commit and the working buffer are to hand — and `settle`
-finds those lines again, shifted, and re-anchors the thread; a thread whose
-lines are nowhere is marked `stale` and drawn as **outdated** rather than
-deleted, because a remark whose code has gone is still something somebody said
-and quietly dropping it would be this app deciding a reading was finished.
-
-**Resolving** is the forge's _Resolve conversation_, and the same bargain:
-absent is open, so everything written before the field existed reads as one and
-nothing on disk needs migrating. It neither deletes the thread nor moves it —
-drawn collapsed on its own lines, still openable, still repliable. What it buys
-is the count: every count in the app is of the **open** ones, so a diff worked
-through reads as done.
-
-#### The `Comments` tab
-
-**The third tab in the Explorer's row**, beside `All files` and `Changes`
-(`ExplorerTab` in `lib/store.ts` is the one list that says which there are).
-It exists because drawing a comment where it belongs — in the diff, under its
-lines — makes "where are they all" unanswerable without opening every changed
-file. That question is a list, and this column is where lists live.
-
-- **Grouped by file, flat within it.** Not the folder tree the `Changes` list
-  became: there are a handful of files with remarks in them rather than a
-  checkout's worth, and folding a two-deep tree to find one is the tedium this
-  tab is for. Each group is in the order the remarks are drawn down the diff,
-  which is the order they are read in.
-- **A row is a way _to_ the comment, not the comment.** It draws the first
-  note's first line and nothing else: `reveal` opens the checkout's diff tab on
-  that file, focuses the thread and rings it.
-  A second full rendering of the body here would be one more place for the two
-  to disagree — the same reason the changed files are listed in this column and
-  the diff is in the pane. The **first** note rather than the last, because the
-  first is the one that says what the remark is about and a row showing the
-  latest reply would change under the reader every time somebody answered.
-- **Resolved rows stay.** Every _count_ in the app is of the open ones; a
-  **list** is read as "what was said" rather than "what is left", and dropping
-  them would make this the one place a settled remark cannot be found again.
-  They carry the tick the folded thread in the diff carries, and their text is
-  dimmed — not struck through, since a line through a sentence somebody has to
-  read is a sentence nobody reads.
-- **Delete is the one action on a row**, and it is here rather than only in the
-  diff because a remark whose code has gone is one you want rid of from the list
-  you found it in, without opening the file to do it.
-
-**The walk is gone, and so is `Discard`.** The Explorer's header carried three
-more buttons for a while: `⌥↑` / `⌥↓` to step to the previous and next open
-thread across files, and a `Discard` that threw away every comment in the
-checkout. All three are deleted, with `step`, `stepThrough`, `orderedThreads`,
-`clear` and `isReviewStepShortcut`.
-
-The walk was written when there was no listing — the comments were in the diff
-and nowhere else, so a key that crossed files was the only way to read them all
-without twelve trips through the `Changes` tree. This tab **is** that, and
-better at it: a walk shows you one thread and hides the shape of the pile, while
-a list shows how many there are and which files they are in, and lets somebody
-go to the fourth one directly rather than pressing a key three times. Keeping
-both would be two ways to reach a comment, one of which had to be told to you —
-the buttons existed only because a shortcut with nothing on screen is a shortcut
-nobody finds, which is an argument for a visible list, not for a pair of arrows.
-
-`Discard` went with them for a plainer reason: every thread has a delete of its
-own, in the diff and now on its row here, and a button that throws away every
-remark in a checkout with no confirmation is a large thing to leave beside a
-tab. It has no replacement, and that is deliberate — the git `Discard` two rows
-down destroys work and asks first; this destroyed a reading of it and did not.
-What is left in the header is Refresh.
-
-The **badge** on a row of the `Changes` list is a count of that file's open
-threads (`commentCountsUnder` sums a folder's), so a remark in a file nobody has
-open is visible from the list the files are read in. It was tinted by the worst
-severity under it; with severities gone it is the muted grey of everything else
-on the row.
+Deleted: `lib/files/review.ts`, `review-marks.ts`, `review-hosts.ts`,
+`review-panel.tsx`, `comments-list.tsx`, `test/comments.ts`, the `Comments`
+Explorer tab, the comment badges on the `Changes` list, `comments:list` and
+`comments:save`, and `ReviewThread` with its shapes in `shared/api.ts`. What is
+on a user's disk stays: nothing reads `workspace/review.json` any more, and
+nothing deletes it either. A strip saved with the `Comments` tab open reads back
+as `All files`.
 
 ### The diff pane, and what it costs
 

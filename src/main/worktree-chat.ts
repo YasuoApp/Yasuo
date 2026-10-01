@@ -74,11 +74,10 @@ import { expandHome } from "./shell-env"
  * over the files the user is actually working in. Nothing claims otherwise: the
  * turn is told where it really is (`SYSTEM_PROMPT`), the caption under the
  * composer says the project, and the picker is the user's to set — `Plan` and
- * `Ask` are there for exactly this. Four of the five modes in `PERMISSIONS`
- * decide up front, because a mode that stops to ask was impossible until the
- * turn moved to the SDK. `ask` is the one that does, and in the other four a
- * prompt is still a turn that stalls — which is why they name their refusals
- * rather than leaving anything merely unlisted.
+ * `Ask` are there for exactly this. Most of the modes in `PERMISSIONS` decide
+ * up front, because a mode that stops to ask was impossible until the turn
+ * moved to the SDK. `ask` stops for anything unlisted and `edits` for an MCP
+ * tool; everywhere else a refusal is named rather than left to stall.
  *
  * **No MCP config goes over at all.** This app used to serve its own panels as
  * three `yasuo-*` servers and hand a turn the config naming them; that whole
@@ -190,8 +189,7 @@ export type WorktreeChatSource = {
  * MCP tool through it, and being asked to approve a search for a tool is a
  * prompt nobody can answer. No MCP server is named here at all: this app no
  * longer configures one, so it has no name to name — a tool from a server the
- * CLI found on its own is decided by the mode, which for four of the five means
- * refused with a message rather than left to stall.
+ * CLI found on its own is decided by the mode — see `asks` on `PERMISSIONS`.
  */
 const ALLOWED_TOOLS = [
   "ToolSearch",
@@ -289,7 +287,7 @@ const READ_PROMPT =
  * somebody is there, it asks once and carries on.
  */
 const ASK_PROMPT =
-  "Reading is pre-approved here; writing a file or running a command will stop and ask the user, who is present and will answer. Go ahead and use those tools when the work needs them rather than working around them — a request is a short pause, not a refusal. Use AskUserQuestion when a choice is genuinely the user's to make."
+  "Anything the user's settings do not already allow will stop and ask the user, who is present and will answer. Go ahead and use the tools the work needs rather than working around them — a request is a short pause, not a refusal. Use AskUserQuestion when a choice is genuinely the user's to make."
 
 /**
  * What each permission actually runs as.
@@ -315,27 +313,45 @@ const PERMISSIONS: Record<
      * re-write on every switch: 42,345 tokens written and none read, against
      * 103 for a turn that changed nothing. */
     prompt?: string
-    /** Whether a turn may stop and put an *arbitrary* unpermitted call on
-     * screen rather than refusing it outright. `onAsk` is handed to
-     * `runAgentTurn` in every mode regardless — see `ASK_TOOL` — this only
-     * covers everything else `permits` refused. */
-    asks?: boolean
+    /** Which unpermitted calls a turn may stop and put on screen rather than
+     * refusing outright. `onAsk` is handed to `runAgentTurn` in every mode
+     * regardless — see `ASK_TOOL` — this only covers everything else
+     * `permits` refused. */
+    asks?: (toolName: string) => boolean
+    /** Whether a call an account's own ask rule matched is put on screen like
+     * any other prompt, rather than allowed — see `deciding`. */
+    asksRules?: boolean
   }
 > = {
   plan: { allowed: READ_TOOLS, prompt: PLAN_PROMPT },
   read: { allowed: READ_TOOLS, prompt: READ_PROMPT },
   /*
-   * The one that stops and asks.
+   * The plain CLI, exactly: permits nothing of its own and asks about all of it.
    *
-   * `READ_TOOLS` is still permitted under it, which is the difference between a
-   * mode somebody can work in and one that asks four times before it has
-   * finished reading a file. So what actually reaches the screen is the writes,
-   * the shell, and anything this app never listed — which is the set worth being
-   * asked about. `AskUserQuestion` is not on the list on purpose: being
-   * unpermitted is how the question gets here. See `ASK_TOOL`.
+   * That is not four prompts before a file is read, because `canUseTool` is
+   * only reached for a call the CLI would itself have prompted on — its own
+   * rules (`settings.json`'s allow and deny, a read inside `cwd`) are applied
+   * first, and the session loads every settings source. It used to pre-approve
+   * `READ_TOOLS` too, which made it the CLI plus a list — and a list is what
+   * makes "the terminal does it, the app does not" possible. An "Always allow"
+   * here hands back the CLI's own `suggestions`, so it is the same rule the
+   * terminal would have written. `AskUserQuestion` reaches here by being
+   * unpermitted, like everything else. See `ASK_TOOL`.
    */
-  ask: { allowed: READ_TOOLS, prompt: ASK_PROMPT, asks: true },
-  edits: { allowed: ALLOWED_TOOLS },
+  ask: {
+    allowed: [],
+    prompt: ASK_PROMPT,
+    asks: () => true,
+    asksRules: true,
+  },
+  /*
+   * Asks about an MCP tool rather than refusing it. Refusing was a mode that
+   * runs any `curl` without a word but could not fetch a Figma frame through
+   * the server the user's own `claude` already has — the plain CLI asks once
+   * and remembers, and this did not even ask. Only MCP: anything else off
+   * `ALLOWED_TOOLS` is a built-in this mode deliberately left out.
+   */
+  edits: { allowed: ALLOWED_TOOLS, asks: isMcpTool },
   /*
    * Nothing is refused except `ASK_TOOL`, and nothing else is asked.
    *
@@ -368,6 +384,11 @@ const PERMISSIONS: Record<
  * `permits` refused, so letting "everything" cover it too would run the
  * model's question as a no-op tool call instead of putting it on screen.
  */
+/** A tool on an MCP server, by the wire name the CLI gives every one of them. */
+export function isMcpTool(name: string): boolean {
+  return name.startsWith("mcp__")
+}
+
 function permitting(allowed: string[] | undefined): (name: string) => boolean {
   if (!allowed) return (name) => name !== ASK_TOOL
   return (name) => name !== ASK_TOOL && allowed.includes(name)
@@ -1095,6 +1116,7 @@ export class WorktreeChats {
         // goes to the CLI is identical for every mode, which is what keeps one
         // cached prefix serving all five — see `permits` in `claude-agent.ts`.
         permits: (name) => permitting(this.permissionOf(id).allowed)(name),
+        asksRules: () => this.permissionOf(id).asksRules === true,
         // Not a mode's business and not read per call: the same list for every
         // turn of this session, which is what keeps it inside the cached prefix.
         disallowedTools: disabledTools,
@@ -1109,7 +1131,8 @@ export class WorktreeChats {
         // only the mode's own `asks` says whether this asks or refuses outright
         // — its absence is what stops the other four ever pausing on those.
         onAsk: (request: AskRequest) =>
-          request.toolName === ASK_TOOL || this.permissionOf(id).asks
+          request.toolName === ASK_TOOL ||
+          this.permissionOf(id).asks?.(request.toolName)
             ? this.ask(id, request)
             : Promise.resolve({
                 allow: false,

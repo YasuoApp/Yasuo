@@ -46,7 +46,6 @@ export function FileDiff({
   path,
   initialText,
   ready,
-  reviewRootId,
 }: {
   path: string
   initialText: string
@@ -55,9 +54,6 @@ export function FileDiff({
    * `read` below lag the prop by the whole switch rather than half of it: a
    * `HEAD` that arrived first would mount an editor against a blank file. */
   ready: boolean
-  /** The checkout being reviewed, for the comment column — see
-   * `CodeMirrorFileDiff`. Only the `Changes` pane passes one. */
-  reviewRootId?: string | null
 }) {
   // The file the editor is showing, which lags the prop through a switch: the
   // one on screen stays until there is a committed side for the next.
@@ -127,7 +123,6 @@ export function FileDiff({
         whitespace={whitespace}
         original={head.text}
         patch={head.patch}
-        reviewRootId={reviewRootId}
       />
     </Suspense>
   )

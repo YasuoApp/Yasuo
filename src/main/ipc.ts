@@ -23,7 +23,6 @@ import {
   type ClaudeProfile,
   type FileDiff,
   type FileIndexEntry,
-  type ReviewThread,
   type WorktreeChatAnswer,
   type WorktreeChatOptions,
 } from "../shared/api"
@@ -59,7 +58,7 @@ import { TerminalManager } from "./terminal"
 import { ChatTray } from "./tray"
 import { TsServers } from "./tsserver"
 import { checkForUpdate, downloadUpdate, startInstaller } from "./updater"
-import { DirectoryWatchers } from "./watch"
+import { DirectoryWatchers, RootWatchers } from "./watch"
 import {
   addWorktree,
   branchFromTitle,
@@ -165,7 +164,8 @@ export function registerIpc(getWindow: () => BrowserWindow | null): {
   worktreeChats: WorktreeChats
   terminals: TerminalManager
   tsServers: TsServers
-  watchers: DirectoryWatchers
+  /** Both kinds of `fs.watch` — the tree's and the `Changes` list's. */
+  watchers: { closeAll: () => void }
   /** Exposed so the icon leaves the menu bar with the app rather than after
    * it. */
   tray: ChatTray
@@ -1027,13 +1027,27 @@ export function registerIpc(getWindow: () => BrowserWindow | null): {
    * The tree follows the disk while it is open — see `main/watch.ts` for why
    * this watches the expanded directories and nothing above or below them.
    */
-  const watchers = new DirectoryWatchers((dir) =>
+  const directoryWatchers = new DirectoryWatchers((dir) =>
     send(IPC.directoryChanged, { dir })
   )
+  // And each root as a whole, so a write into a folder nobody has expanded
+  // still reaches the `Changes` list — see `RootWatchers`.
+  const rootWatchers = new RootWatchers((root, paths, overflow) =>
+    send(IPC.treeChanged, { root, paths, overflow })
+  )
+  const watchers = {
+    closeAll() {
+      directoryWatchers.closeAll()
+      rootWatchers.closeAll()
+    },
+  }
 
   ipcMain.handle(IPC.watchDirectories, async (_event, dirs: string[]) => {
     const roots = (await fileRoots()).map((root) => root.path)
-    watchers.set([
+    // Re-set on every call, and the renderer sends one when the folders
+    // change as well as when the tree does.
+    rootWatchers.set(roots)
+    directoryWatchers.set([
       // Filtered rather than refused: this call carries a whole set, and one
       // directory belonging to a folder removed while the message was in
       // flight would otherwise cost the tree every other watcher it asked for.
@@ -1119,12 +1133,6 @@ export function registerIpc(getWindow: () => BrowserWindow | null): {
     IPC.saveLearning,
     async (_event, folderId: string, proposal: LearningProposal) =>
       saveLearning(await store.resolveFolderDir(folderId), proposal)
-  )
-
-  ipcMain.handle(IPC.listReviewThreads, () => store.listReviewThreads())
-
-  ipcMain.handle(IPC.saveReviewThreads, (_event, threads: ReviewThread[]) =>
-    store.saveReviewThreads(threads)
   )
 
   ipcMain.handle(IPC.readDrawing, (_event, id: string) => store.readDrawing(id))

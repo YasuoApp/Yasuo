@@ -11,7 +11,6 @@ import path from "node:path"
 
 import type {
   AssistantMessage,
-  ReviewThread,
   ClaudeProfile,
   WorktreeChat,
   WorkspaceFolder,
@@ -71,19 +70,6 @@ export const WORKTREE_CHATS_FILE = "worktree-chats.json"
 
 /** Where each of those chats' lines live, one `<id>.json` per chat. */
 export const WORKTREE_CHATS_DIR = "worktree-chats"
-
-/**
- * The review's own threads, across every project.
- *
- * One file for the workspace rather than one per project: a thread carries the `rootId` it belongs to, and the pane reads the
- * lot once at boot to know a review exists in a file nobody has opened.
- *
- * This exists at all because a review stopped being a sitting — see
- * `docs/design.md` § Changes. What it holds is not only line numbers: the lines
- * themselves are in each thread, which is what lets a comment be put back where
- * it belongs after the file has moved under it.
- */
-export const REVIEW_FILE = "review.json"
 
 /**
  * Where drawings are kept, one `<id>.excalidraw` per drawing.
@@ -442,14 +428,6 @@ export class Store {
 
   private worktreeChatPath(id: string): string {
     return path.join(this.workspaceDir, WORKTREE_CHATS_DIR, `${ownId(id)}.json`)
-  }
-
-  listReviewThreads(): Promise<ReviewThread[]> {
-    return this.readList(REVIEW_FILE)
-  }
-
-  saveReviewThreads(threads: ReviewThread[]): Promise<void> {
-    return this.writeList(REVIEW_FILE, threads)
   }
 
   /** A drawing's scene, or "" for one that has never been saved. */

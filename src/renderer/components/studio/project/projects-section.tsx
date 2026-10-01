@@ -676,6 +676,10 @@ function ProjectRow({
   )
 }
 
+/** How many of a project's chats are listed before `View all`. A project with
+ * months of chats in it otherwise pushes every project below it off the column. */
+const CHAT_LIMIT = 20
+
 /**
  * One project's chats, newest first — a chat just started is the top row.
  *
@@ -720,13 +724,25 @@ function ProjectChats({
   const [distilling, setDistilling] = useState<WorktreeChat | null>(null)
   const menuFocus = useMenuFocusHandoff()
 
+  /** Whether the list runs past `CHAT_LIMIT`. Per project and in memory: a
+   * column that remembered which lists were opened would reopen long. */
+  const [showAll, setShowAll] = useState(false)
+
   const listed = saved(chats, unsaved)
   const own = folderId ? chatsOf(listed, folderId) : ungroupedChats(listed)
   if (own.length === 0) return null
 
+  const hidden = own.length - CHAT_LIMIT
+  const shown = showAll || hidden <= 0 ? own : own.slice(0, CHAT_LIMIT)
+  // The selected chat stays in the list even past the cut: a chat picked from
+  // the tab strip with no row lit for it reads as the column having lost it.
+  const selected = own.find((chat) => chat.id === selectedId)
+  const rows =
+    selected && !shown.includes(selected) ? [...shown, selected] : shown
+
   return (
     <>
-      {own.map((chat) => {
+      {rows.map((chat) => {
         const isSending = sending.includes(chat.id)
         const isWaiting = asks[chat.id] !== undefined
         // Third in the same precedence the other two keep: a chat with
@@ -866,6 +882,17 @@ function ProjectChats({
           </ContextMenu>
         )
       })}
+      {hidden > 0 && (
+        <SideRow
+          indent={indent}
+          className={cn(PILL, "text-[0.6875rem]")}
+          onClick={() => setShowAll((all) => !all)}
+        >
+          <span className="min-w-0 flex-1 truncate text-left">
+            {showAll ? "Show less" : `View all (${own.length})`}
+          </span>
+        </SideRow>
+      )}
       {distilling && folderId && (
         <DistillDialog
           chatId={distilling.id}

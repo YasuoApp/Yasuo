@@ -143,8 +143,12 @@ export function readModel(model: {
   const isNew =
     /\b(?:opus\s*5|sonnet\s*5|new)\b/i.test(model.displayName) ||
     /\b(?:opus\s*5|sonnet\s*5)\b/i.test(model.description)
+  // The star is the row to pick, so it names the current flagship and moves
+  // when one lands — Opus 5.5 took it from 4.8. A version and not an alias:
+  // `opus` follows the account, and starring it would star whatever that
+  // resolves to on a machine whose CLI predates the release.
   const isFavorite =
-    /\b(?:4\.8|recommended)\b/i.test(model.displayName) ||
+    /\b(?:5\.5|recommended)\b/i.test(model.displayName) ||
     model.value === "default"
   return {
     value: model.value,

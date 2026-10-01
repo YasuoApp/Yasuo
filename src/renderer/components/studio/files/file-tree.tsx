@@ -69,7 +69,6 @@ import {
   type Viewer,
 } from "@/lib/files/viewers"
 import { useProjects } from "@/lib/projects"
-import { useReview } from "@/lib/files/review"
 import { shownRootOf } from "@/lib/files/roots"
 import { useStudio, type ExplorerTab } from "@/lib/store"
 import { RenameDialog } from "../rename-dialog"
@@ -77,7 +76,6 @@ import { IconButton } from "../icon-button"
 import { RenameRow, useMenuFocusHandoff } from "../rename-row"
 import { SideRow } from "../side-row"
 import { ChangesList } from "./changes-list"
-import { CommentsList } from "./comments-list"
 
 /** What the right-click menu is about: a row in the tree, or the workspace
  * folder heading above one. */
@@ -202,20 +200,10 @@ export function FileTree({ onAddFolder }: { onAddFolder: () => void }) {
   const changed = changes === undefined ? undefined : changeCount(changes)
   useWatchChanges(shown)
 
-  /* How many comments this checkout is carrying — the `Comments` tab's count.
-   * Every thread, resolved or not: the tab is a listing, and a settled remark is
-   * still one it lists. Read as a length rather than as a filtered array, so the
-   * selector returns a number and this header does not re-render on every
-   * keystroke in a reply box. */
-  const commentCount = useReview(
-    (state) =>
-      state.threads.filter((thread) => thread.rootId === shown?.id).length
-  )
-
   return (
     <ContextMenu>
       <div className="flex h-full flex-col">
-        {/* Three tabs where the panel's title used to be.
+        {/* Two tabs where the panel's title used to be.
             `Explorer` named the panel to somebody already looking at it, and
             the space is worth more as the way in to the other list this panel
             has: what the project has changed, which after an agent's turn is
@@ -226,7 +214,7 @@ export function FileTree({ onAddFolder }: { onAddFolder: () => void }) {
             is out of flow, so the room for it has to be left here. */}
         <div className="flex h-9 shrink-0 items-center gap-2 border-b pr-11 pl-1.5">
           {/* `overflow-hidden` is the safety valve: with one button beside
-              them the three tabs fit the panel's minimum with room to spare,
+              them the two tabs fit the panel's minimum with room to spare,
               and a sidebar dragged narrower than that clips them rather than
               pushing Refresh off the end. */}
           <div
@@ -235,29 +223,19 @@ export function FileTree({ onAddFolder }: { onAddFolder: () => void }) {
           >
             <ExplorerTabButton id="files" label="All files" />
             <ExplorerTabButton id="changes" label="Changes" count={changed} />
-            {/* The third, and the one that answers "where are they all": a
-                comment lives in the diff, under its lines, so before this the
-                only way to find one was to open the file it was in. `0` is not
-                drawn — a count on a tab is a reason to click it. */}
-            <ExplorerTabButton
-              id="comments"
-              label="Comments"
-              count={commentCount || undefined}
-            />
           </div>
 
           <div className="flex shrink-0 items-center gap-0.5">
             {/* **Refresh is the only one left**, and the rule it stands for
-                still holds: a row of icons beside three tabs is a row of icons
+                still holds: a row of icons beside two tabs is a row of icons
                 nobody reads, so every action about a *thing* is on a menu over
                 that thing — `New file` and `Collapse all` on the root bar's menu
                 (or a directory row's, which creates in *that* directory),
                 `Add folder` on the empty space under the tree and in the File
                 menu. It is now the **only** one: this header carried three more
                 for a while — the two arrows that walked the comments and a
-                Discard for the whole pile — and they are gone with the walk,
-                since the `Comments` tab is the way to a remark and each has a
-                delete of its own. Refresh is the one that is about the panel
+                Discard for the whole pile — and they are gone with the
+                comments themselves. Refresh is the one that is about the panel
                 itself, and the filesystems `fs.watch` is quiet on are why it
                 exists at all. */}
             <IconButton
@@ -277,7 +255,7 @@ export function FileTree({ onAddFolder }: { onAddFolder: () => void }) {
           </div>
         </div>
 
-        {/* The changed files and the comments, when one of those is the tab.
+        {/* The changed files, when that is the tab.
             Their own scroller and **outside** the tree's context menu: the rows
             there open a diff, and a right-click offering `Add folder…` over
             them would be the workspace's menu on a list that is not about the
@@ -285,12 +263,7 @@ export function FileTree({ onAddFolder }: { onAddFolder: () => void }) {
             Unstage, Discard — inside this scroller. */}
         {tab !== "files" ? (
           <div className="min-h-0 flex-1 overflow-auto pb-3">
-            {shown &&
-              (tab === "changes" ? (
-                <ChangesList root={shown} />
-              ) : (
-                <CommentsList root={shown} />
-              ))}
+            {shown && <ChangesList root={shown} />}
           </div>
         ) : (
           /* One trigger over the whole tree, rather than one per row: the rows

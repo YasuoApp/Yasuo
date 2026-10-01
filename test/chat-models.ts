@@ -65,6 +65,28 @@ section("readModel: one row of the CLI's answer")
   )
 }
 
+section("readModel: the two badges, which the CLI does not send")
+{
+  const flagship = readModel(row({ displayName: "Opus 5.5" }))
+  check("the current flagship keeps the star", flagship.isFavorite === true)
+  check("and reads as new", flagship.isNew === true, flagship)
+
+  const previous = readModel(row({ displayName: "Opus 4.8" }))
+  check(
+    "the one it replaced does not, or the menu has two",
+    previous.isFavorite === undefined,
+    previous
+  )
+
+  const recommended = readModel(
+    row({ value: "default", displayName: "Default (recommended)" })
+  )
+  check(
+    "the CLI's own recommendation is starred",
+    recommended.isFavorite === true
+  )
+}
+
 section("chatEfforts: what to offer over a model")
 {
   const models = [

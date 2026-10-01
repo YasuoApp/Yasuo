@@ -124,6 +124,12 @@ export type AgentSessionOptions = {
    */
   permits: (toolName: string) => boolean
   /**
+   * Whether a call an account's own ask rule matched goes to `onAsk` like any
+   * other prompt, rather than being allowed. True for the mode that mirrors the
+   * plain CLI, which would have shown that prompt too. Read per call.
+   */
+  asksRules?: () => boolean
+  /**
    * MCP tools the workspace has switched off, as wire names or server prefixes
    * — `MCP_DISABLED_TOOLS_KEY`.
    *
@@ -538,7 +544,7 @@ export async function startAgentSession(
             },
           }
         : {}),
-      canUseTool: deciding(session.permits, session.onAsk),
+      canUseTool: deciding(session.permits, session.onAsk, session.asksRules),
       stderr: (data) => {
         // Kept rather than reported as it arrives: the CLI writes warnings here
         // on a turn that goes on to succeed, and only a failure makes them
@@ -965,7 +971,9 @@ function errorOf(message: ResultMessage, interrupted: boolean): string | null {
  * own call rather than the account holder's, and it is made in every mode,
  * `plan` and `read` included, because a connector's tool carries no read/write
  * shape this app can see. A plan turn that reaches one is trusting that policy
- * rather than this app's read-only guarantee.
+ * rather than this app's read-only guarantee. The exception is a mode whose
+ * `asksRules` says so — the one that mirrors the plain CLI, which would have
+ * put that prompt on screen rather than answered it.
  *
  * After that: what the mode permits runs, what it does not goes to whoever can
  * be asked, and with nobody to ask it is refused with a message rather than
@@ -983,10 +991,11 @@ function errorOf(message: ResultMessage, interrupted: boolean): string | null {
  */
 function deciding(
   permits: (toolName: string) => boolean,
-  onAsk: AskHandler | undefined
+  onAsk: AskHandler | undefined,
+  asksRules?: () => boolean
 ): Options["canUseTool"] {
   return async (toolName, input, context) => {
-    if (context.matchedAskRule) {
+    if (context.matchedAskRule && !(onAsk && asksRules?.())) {
       return { behavior: "allow", updatedInput: input }
     }
 
