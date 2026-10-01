@@ -4,7 +4,13 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import { promisify } from "node:util"
 
-import { changes, commit, fileAtHead, recentSubjects } from "../src/main/git"
+import {
+  changes,
+  commit,
+  fileAtHead,
+  log,
+  recentSubjects,
+} from "../src/main/git"
 import { check, finish, section } from "./harness"
 
 /**
@@ -49,6 +55,7 @@ async function main() {
   section("a folder that is not a repository")
 
   check("has no changes", (await changes(root)).length === 0)
+  check("and no commits", (await log(root, 10)).length === 0)
   check(
     "and nothing in HEAD",
     (await fileAtHead(root, path.join(root, "anything.ts"))) === null
@@ -242,6 +249,43 @@ async function main() {
   // empty `-m` — and an editor with no terminal to draw in never returns.
   check("an empty message is refused", refused !== "", refused)
 
+  section("the Commits tab")
+
+  const commits = await log(root, 10)
+  check(
+    "newest first",
+    JSON.stringify(commits.map((entry) => entry.subject)) ===
+      JSON.stringify(["feat: the staged half", "second", "first"]),
+    commits.map((entry) => entry.subject)
+  )
+  check(
+    "the subject alone, not the body",
+    commits[0]?.subject === "feat: the staged half"
+  )
+  check(
+    "with its hashes, author and an ISO date",
+    /^[0-9a-f]{40}$/.test(commits[0]?.hash ?? "") &&
+      commits[0]!.hash.startsWith(commits[0]!.shortHash) &&
+      commits[0]?.author === "Test" &&
+      !Number.isNaN(Date.parse(commits[0]?.date ?? "")),
+    commits[0]
+  )
+  check(
+    "and the refs pointing at it",
+    commits[0]?.refs.includes("HEAD -> main") === true &&
+      commits[1]?.refs.length === 0,
+    commits.map((entry) => entry.refs)
+  )
+  check("capped at the limit", (await log(root, 2)).length === 2)
+  const page = await log(root, 2, 1)
+  check(
+    "a later page starts after the ones skipped",
+    JSON.stringify(page.map((entry) => entry.subject)) ===
+      JSON.stringify(["second", "first"]),
+    page.map((entry) => entry.subject)
+  )
+  check("and is empty past the end", (await log(root, 2, 3)).length === 0)
+
   section("a repository with no commits")
 
   const fresh = await mkdtemp(path.join(tmpdir(), "yasuo-changes-empty-"))
@@ -266,6 +310,7 @@ async function main() {
     "and HEAD has nothing at all",
     (await fileAtHead(fresh, path.join(fresh, "first.ts"))) === null
   )
+  check("and no commits to list", (await log(fresh, 10)).length === 0)
 
   await rm(root, { recursive: true, force: true })
   await rm(fresh, { recursive: true, force: true })

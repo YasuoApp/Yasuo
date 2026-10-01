@@ -1,0 +1,149 @@
+import type { ReactNode } from "react"
+import { MessageSquare, Search, Settings, SquareTerminal } from "lucide-react"
+
+import { cn } from "@/lib/utils"
+import { useDock } from "@/lib/dock"
+import { usePalette } from "@/lib/palette"
+import { useProjects } from "@/lib/projects"
+import { useWorktreeChats } from "@/lib/worktree-chat/store"
+import {
+  activityOf,
+  activityTitle,
+  isRunning,
+} from "@/lib/worktree-chat/running"
+import { unreadIn } from "@/lib/worktree-chat/unread"
+import { IconButton } from "./icon-button"
+
+/**
+ * The window's leftmost strip: the ways into the rest of the window, one icon
+ * each, and Settings at the foot.
+ *
+ * It took over from the project column's own 36px rail (`ProjectRail`, deleted).
+ * That rail existed so a column collapsed to nothing still left its way back on
+ * screen; this strip is on screen whatever the column is doing, so the column
+ * can collapse to nothing and the button that reopens it is the first one here.
+ *
+ * Its own card rather than part of the column's, because it is not about the
+ * workspace's projects — Search, the dock and Settings are the window's.
+ */
+export function NavRail({ onOpenSettings }: { onOpenSettings: () => void }) {
+  const sidebar = useProjects((state) => state.sidebar)
+  const toggleSidebar = useProjects((state) => state.toggleSidebar)
+  const dockOpen = useDock((state) => state.open)
+  const dockTab = useDock((state) => state.tab)
+  const toggleDockTab = useDock((state) => state.toggleTab)
+
+  /*
+   * Whether anything is running behind the shut column — the rows are gone, the
+   * counts on them are gone, and a focused window rings no notification, so a
+   * dot on the button that reopens it is what is left to say it.
+   *
+   * Every chat rather than the active project's: a shut column is not showing
+   * which project is which, so a dot that counted one of them would go dark
+   * while another was answering. Drawn only while the column is shut; open, the
+   * rows say it themselves.
+   */
+  const chats = useWorktreeChats((state) => state.chats)
+  const sending = useWorktreeChats((state) => state.sending)
+  const asks = useWorktreeChats((state) => state.asks)
+  const unread = useWorktreeChats((state) => state.unread)
+  const activity = activityOf(chats, sending, asks)
+  const running = !sidebar && isRunning(activity)
+  // Second to `running`: a chat that has already answered, which leaves nothing
+  // spinning and so is the case a shut column loses hardest.
+  const news = !sidebar && !running && unreadIn(chats, unread) > 0
+
+  return (
+    <nav
+      aria-label="Window"
+      className="flex w-12 shrink-0 flex-col items-center gap-1 rounded-xl bg-background py-2 outline -outline-offset-1 outline-border"
+    >
+      <RailButton
+        label={
+          sidebar
+            ? "Hide projects"
+            : running
+              ? `Show projects — ${activityTitle(activity)}`
+              : news
+                ? "Show projects — a chat has answered"
+                : "Show projects"
+        }
+        pressed={sidebar}
+        onClick={toggleSidebar}
+        dot={
+          running
+            ? activity.waiting > 0
+              ? "animate-pulse bg-primary"
+              : "bg-muted-foreground"
+            : news
+              ? "bg-primary"
+              : undefined
+        }
+      >
+        <MessageSquare />
+      </RailButton>
+      <RailButton
+        label="Search"
+        onClick={() => usePalette.getState().setOpen(true)}
+      >
+        <Search />
+      </RailButton>
+
+      <div className="flex-1" />
+
+      <RailButton
+        label="Terminal"
+        pressed={dockOpen && dockTab === "terminal"}
+        onClick={() => toggleDockTab("terminal")}
+      >
+        <SquareTerminal />
+      </RailButton>
+      <RailButton label="Settings" onClick={onOpenSettings}>
+        <Settings />
+      </RailButton>
+    </nav>
+  )
+}
+
+function RailButton({
+  label,
+  pressed,
+  onClick,
+  dot,
+  children,
+}: {
+  label: string
+  pressed?: boolean
+  onClick: () => void
+  /** The classes of a mark over the button's corner, or nothing. */
+  dot?: string
+  children: ReactNode
+}) {
+  return (
+    <div className="relative">
+      <IconButton
+        label={label}
+        side="right"
+        pressed={pressed}
+        onClick={onClick}
+        className={cn(
+          "size-8 [&_svg]:size-4",
+          pressed && "bg-accent text-accent-foreground"
+        )}
+      >
+        {children}
+      </IconButton>
+      {/* `pointer-events-none` so it never swallows the click meant for the
+          button under it. */}
+      {dot && (
+        <span
+          aria-hidden
+          className={cn(
+            "pointer-events-none absolute top-1 right-1 size-1.5 rounded-full ring-2 ring-background",
+            dot
+          )}
+        />
+      )}
+    </div>
+  )
+}

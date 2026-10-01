@@ -1,6 +1,5 @@
-import { Plus, Search, Settings } from "lucide-react"
+import { Plus } from "lucide-react"
 
-import { usePalette } from "@/lib/palette"
 import {
   SIDEBAR_SECTIONS,
   useProjects,
@@ -9,10 +8,9 @@ import {
 import { IconButton } from "./icon-button"
 import { PanelHeader, type Fold } from "./panel-header"
 import { ProjectsSection } from "./project/projects-section"
-import { SideRow } from "./side-row"
 
 /**
- * The window's left column: `Search`, then whatever `SIDEBAR_SECTIONS` lists.
+ * The window's left column: whatever `SIDEBAR_SECTIONS` lists.
  *
  * **Projects, and nothing else.** The column stacked three — `Projects` /
  * `Database` / `API`, each folding — and the other two were hidden behind
@@ -33,12 +31,8 @@ import { SideRow } from "./side-row"
  * use is emptying the column.
  */
 export function WorkspaceSidebar({
-  onOpenSettings,
   onAddFolder,
 }: {
-  /** The Settings dialog is the workbench's, mounted there — this is the
-   * footer asking for it, the way Explorer's header asks for Add folder. */
-  onOpenSettings: () => void
   /** The same dialog Explorer's tree asks for, and asked for the same way: it
    * is mounted in the workbench, so both columns ask rather than open. */
   onAddFolder: () => void
@@ -52,15 +46,9 @@ export function WorkspaceSidebar({
       aria-label="Workspace"
       className="flex h-full min-h-0 flex-col overflow-hidden"
     >
-      {/* `pr-9` because the column's collapse button is positioned over the
-          right of this row (`project-rail.tsx`) and takes no width of its own —
-          without it, the row's hover highlight ran under the button. */}
-      <div className="shrink-0 py-2 pr-9">
-        <SideRow onClick={() => usePalette.getState().setOpen(true)}>
-          <Search className="size-3.5 shrink-0 text-muted-foreground" />
-          <span className="truncate">Search</span>
-        </SideRow>
-      </div>
+      {/* Search was the first row here, and Settings a footer under the list.
+          Both are the window's rather than the workspace's, and moved to the
+          title bar's command field and the `NavRail` beside this column. */}
 
       {/*
         Open sections share what is left over, each scrolling inside itself.
@@ -87,20 +75,6 @@ export function WorkspaceSidebar({
             fold={!alone}
           />
         ))}
-      </div>
-
-      {/* The bar Conductor closes its sidebar with. Settings rather than a plan
-          badge and a help link: this app has no account, and `⌘,` was the only
-          way to the dialog — a preference nobody can find is a preference
-          nobody changes. */}
-      <div className="flex h-8 shrink-0 items-center justify-end border-t px-3">
-        <IconButton
-          label="Settings"
-          onClick={onOpenSettings}
-          className="size-5 shrink-0"
-        >
-          <Settings className="size-3.5" />
-        </IconButton>
       </div>
     </nav>
   )

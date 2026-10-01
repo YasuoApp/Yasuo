@@ -18,6 +18,7 @@ import {
   CHAT_TRAY_KEY,
   IPC,
   MCP_DISABLED_TOOLS_KEY,
+  type ChatImage,
   type ChatPlace,
   type ChatSeed,
   type ClaudeProfile,
@@ -35,6 +36,7 @@ import * as files from "./files"
 import { MAX_INDEXED_FILES } from "./files"
 import {
   changes,
+  log,
   commit,
   currentBranch,
   discard,
@@ -85,6 +87,11 @@ const IMAGE_MIME_TYPES: Record<string, string> = {
 /** A thumbnail is all this is for — never worth holding a huge image whole
  * in memory just to preview it. */
 const MAX_IMAGE_PREVIEW_BYTES = 20 * 1024 * 1024
+
+/** The most commits one `git:log` call answers with — see that handler. The
+ * `Commits` view re-reads everything it has shown on every commit, in one call,
+ * so this is also how far it can be paged before a re-read stops covering it. */
+const MAX_LOG_PAGE = 1000
 
 /**
  * Where `install.sh` puts the app, and so the bundle the updater reopens.
@@ -550,8 +557,10 @@ export function registerIpc(getWindow: () => BrowserWindow | null): {
     }
   )
 
-  ipcMain.handle(IPC.sendWorktreeChat, (_event, id: string, prompt: string) =>
-    worktreeChats.send(id, prompt)
+  ipcMain.handle(
+    IPC.sendWorktreeChat,
+    (_event, id: string, prompt: string, images?: ChatImage[]) =>
+      worktreeChats.send(id, prompt, images ?? [])
   )
 
   ipcMain.handle(IPC.stopWorktreeChat, (_event, id: string) => {
@@ -735,6 +744,19 @@ export function registerIpc(getWindow: () => BrowserWindow | null): {
 
   ipcMain.handle(IPC.gitChanges, async (_event, folderId: string) =>
     changes(await store.resolveFolderDir(folderId))
+  )
+
+  // A page of history rather than all of it: a repository's whole log is tens
+  // of thousands of rows. Clamped here, since the numbers are the renderer's
+  // and a page of `Infinity` is the whole log by another name.
+  ipcMain.handle(
+    IPC.gitLog,
+    async (_event, folderId: string, limit: number, skip = 0) =>
+      log(
+        await store.resolveFolderDir(folderId),
+        Math.max(1, Math.min(MAX_LOG_PAGE, Math.floor(limit) || 1)),
+        Math.max(0, Math.floor(skip) || 0)
+      )
   )
 
   /*

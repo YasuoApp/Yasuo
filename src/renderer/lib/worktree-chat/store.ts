@@ -4,6 +4,7 @@ import {
   chatRootId,
   type AssistantMessage,
   type ChatAgent,
+  type ChatImage,
   type ChatPlace,
   type ChatWindow,
   type WorktreeChat,
@@ -212,9 +213,14 @@ type WorktreeChatState = {
    * later would arrive after the field had been built empty.
    */
   drafts: Record<string, string>
+  /** The pictures a draft's `[Image #n]` tags stand for, kept beside it for the
+   * same reason: the field is rebuilt on every switch, and a draft that came back
+   * with its tags and without their pictures would send text naming nothing. In
+   * memory only, like the drafts. */
+  draftImages: Record<string, ChatImage[]>
   /** Keeps what is in a field — the composer on its way out. Empty text forgets
    * the entry rather than storing one. */
-  keepDraft: (chatId: string, text: string) => void
+  keepDraft: (chatId: string, text: string, images?: ChatImage[]) => void
   /** Forgets one, so a field rebuilt later comes up empty rather than repeating
    * a message that has already been sent. */
   clearDraft: (chatId: string) => void
@@ -269,7 +275,7 @@ type WorktreeChatState = {
    * `localCommand` for why only two commands are this app's and everything else
    * goes to the CLI verbatim.
    */
-  send: (id: string, prompt: string) => Promise<void>
+  send: (id: string, prompt: string, images?: ChatImage[]) => Promise<void>
   stop: (id: string) => void
   /**
    * Answers what a chat is waiting on, and takes the card down.
@@ -293,6 +299,7 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
   messages: {},
   reading: [],
   drafts: {},
+  draftImages: {},
   sending: [],
   startedAt: {},
   context: {},
@@ -473,18 +480,34 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
     }
   },
 
-  keepDraft(chatId, text) {
+  keepDraft(chatId, text, images = []) {
     if (!text) {
       get().clearDraft(chatId)
       return
     }
-    if (get().drafts[chatId] === text) return
-    set({ drafts: { ...get().drafts, [chatId]: text } })
+    const held = get().draftImages[chatId]
+    const same = held === images || (!held && images.length === 0)
+    if (get().drafts[chatId] === text && same) return
+    set({
+      drafts: { ...get().drafts, [chatId]: text },
+      draftImages:
+        images.length > 0
+          ? { ...get().draftImages, [chatId]: images }
+          : without(get().draftImages, chatId),
+    })
   },
 
   clearDraft(chatId) {
-    if (get().drafts[chatId] === undefined) return
-    set({ drafts: without(get().drafts, chatId) })
+    if (
+      get().drafts[chatId] === undefined &&
+      get().draftImages[chatId] === undefined
+    ) {
+      return
+    }
+    set({
+      drafts: without(get().drafts, chatId),
+      draftImages: without(get().draftImages, chatId),
+    })
   },
 
   // Written here and then to the record, like `setOptions` and for the same
@@ -525,6 +548,7 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
       chats: get().chats.filter((chat) => chat.id !== id),
       messages: rest,
       drafts: without(get().drafts, id),
+      draftImages: without(get().draftImages, id),
       queued: without(get().queued, id),
       unsaved: get().unsaved.filter((entry) => entry !== id),
       // Nothing left to read it in. A dot kept for a deleted chat would be
@@ -578,7 +602,7 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
     })
   },
 
-  async send(id, prompt) {
+  async send(id, prompt, images = []) {
     const text = prompt.trim()
     if (!text) return
 
@@ -641,7 +665,7 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
        */
       if (!(await get().save(id))) throw new Error("Could not start that chat.")
 
-      await window.desktop.sendWorktreeChat(id, text)
+      await window.desktop.sendWorktreeChat(id, text, images)
     } catch (error) {
       // This line only, not the chat's other marks: a message that could not be
       // sent is not waiting behind anything, and the ones queued before it still

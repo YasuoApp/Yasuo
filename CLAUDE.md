@@ -127,8 +127,10 @@ handler and the long-lived managers (`Store`, `SqlConnections`, `DockerRuntime`,
   off the staged diff by the read-only `claude` (`draftCommitMessage` in
   `one-turn-agent.ts`, fed by `stagedDiff` / `recentSubjects` here), so the gesture
   is ending a reading of the diff rather than writing a paragraph in a panel with
-  no room for one. Amend, log, branch and push stay out — that is the git client
-  the dock's shell already is. `discard`
+  no room for one. **`log` is the one read of history** — the checked-out
+  branch's commits a page at a time (`--skip`) for the `Commits` view, nothing
+  written (`docs/design.md` § Commits). Amend, branch and push stay out — that is
+  the git client the dock's shell already is. `discard`
   answers with the paths it could not restore instead of deleting them: they go
   to the trash in `ipc.ts`, because this module stays free of `electron` so the
   tests can import it.
@@ -173,9 +175,8 @@ handler and the long-lived managers (`Store`, `SqlConnections`, `DockerRuntime`,
   free of `electron` (`test/chat-digest.ts`); `WorktreeChats.digests` holds the
   lines and the cache, and deliberately does **not** go through `read`, which
   would keep every transcript in the workspace resident to answer a question worth
-  two numbers and a list of paths. What it cannot see is on `ChatDigest.paths`: a
-  file rewritten by a `Bash` line names no chat, so the `Changes` filter narrows
-  the list and never divides it. Searching what a chat **said** is not here and is
+  two numbers and a list of paths. Nothing in the renderer reads
+  `ChatDigest.paths` since the `Changes` filter was removed. Searching what a chat **said** is not here and is
   not main's: it is asked of the conversation on screen, whose lines the renderer
   already holds (`lib/worktree-chat/search.ts`).
 
@@ -348,17 +349,19 @@ are one unit, and the count is read off the message's own text so a match inside
 a shut fold still counts. It is the one window shortcut claimed conditionally: the panes are
 hidden rather than unmounted, so the pane checks it is the one showing before
 taking a key that belongs to CodeMirror everywhere else.
-The **right-hand panel** is Explorer, with `All files` and `Changes` tabs, and it
-is the whole height of its column. **Both columns collapse to a 36px rail**
-rather than to nothing (`explorer-rail.tsx`, `project-rail.tsx`) — one button
-each, the way back from a handle dragged shut — so the two panels'
-`collapsedSize` and the rails' width are one exported `RAIL_WIDTH`, the same
-bargain the dock's strip makes. A rail is **positioned, not laid out**: it takes
-none of its column's width, so the panels' sizes are the columns' own numbers
-and the one row it lands on leaves the room (`pr-11` on Explorer's header).
-A shut column is `invisible` rather than squeezed — a positioned rail clips
-nothing behind it — and never unmounted. `WindowLeftEdge` holds no button any
-more, only the traffic lights' clearance. The **dock** — `Run` and `Terminal` — is under
+The **right-hand panel** is Explorer, with `All files` and `Git` tabs, and it
+is the whole height of its column. The window is a **canvas with cards**: a
+full-width title bar (`WindowTitleBar` — crumb left, a centred `Run a command`
+field for the palette), then the `NavRail` (projects toggle with the activity
+dot, Search, Terminal, Settings), the projects column, the pane + dock and the
+Explorer, each a card (`CARD`, an inward outline so collapsed sizes stay exact)
+with the gaps as resize handles (`Gap`). **Explorer collapses to a 36px rail**
+(`explorer-rail.tsx`, `RAIL_WIDTH`), the same bargain the dock's strip makes;
+the **projects column collapses to nothing**, since the rail's first button is
+its way back. A rail is **positioned, not laid out**: it takes none of its
+column's width, and the one row it lands on leaves the room (`pr-11` on
+Explorer's header). A shut column is hidden rather than squeezed and never
+unmounted. The **dock** — `Run` and `Terminal` — is under
 the **pane**, spanning its width, collapsed rather than unmounted because a pty
 taken out of the tree ends. It used to be the lower half of the Explorer column,
 where a 520px cap left the shell ~60 columns wide; `docs/design.md` has the
@@ -368,12 +371,15 @@ height and the panel's `collapsedSize` are one exported `DOCK_STRIP_HEIGHT`
 rather than an `h-9` beside a `36`. `⌃\`` toggles the Terminal tab
 (`isTerminalShortcut`), and it is the one shortcut deliberately _not_ refused
 inside a pty. A project's rows are its **chats**.
-The `Changes` list carries a **chip per chat** that wrote some of what is on it
-(`touchesIn`/`keptBy`in`lib/worktree-chat/digests.ts`), drawn only when more
-than one did, and the piles are split *after* that filter — so `Stage everything`and the discard act on what is shown and say`shown`while it is up.
+The `Changes` list's **per-chat chips are deleted** (`docs/design.md` § Whose
+work this is, removed), so its actions are about the whole checkout again.
 
-The Explorer's tab row is **two**: `All files` and `Changes` (`ExplorerTab` in
-`lib/store.ts`). **There are no comments on a diff** — the `+` column, the
+The Explorer's tab row is **two**: `All files` and `Git`, and `Git` holds two
+views in a row under it — `Changes` and `Commits` (`ExplorerTab` and `GitView`
+in `lib/store.ts`; a strip saved on the old `changes`/`commits` tabs reads back
+as `Git` at that view). `commits-list.tsx` is re-read off the same git status
+signal the `Changes` list is, so a commit in the dock's shell lands without
+Refresh. **There are no comments on a diff** — the `+` column, the
 threads, the `Comments` tab and the badges are deleted (`docs/design.md`
 § Comments, removed); nothing reads `workspace/review.json` any more.
 A project's chat list shows the newest **20** (`CHAT_LIMIT` in
@@ -496,8 +502,13 @@ Logic worth testing is split out from the drawing: `lib/worktree-chat/activity.t
 `lib/worktree-chat/running.ts` (`test/chat-running.ts`) with `main/notify.ts`'s
 own `ChatNotices` (`test/notify.ts`),
 `lib/worktree-chat/unread.ts` (`test/chat-unread.ts`),
-`lib/worktree-chat/digests.ts` with `main/chat-digest.ts` (`test/chat-digest.ts`),
+`lib/worktree-chat/digests.ts`'s `spentIn` with `main/chat-digest.ts`
+(`test/chat-digest.ts`),
 `lib/worktree-chat/search.ts` (`test/chat-search.ts`),
+`lib/worktree-chat/images.ts`'s `attachedIn` — a picture dropped or pasted into
+the composer is read as base64 at once and written as `[Image #n]`, because a
+macOS screenshot's temporary file is gone by the time a path to it is read
+(`test/chat-images.ts`),
 `lib/files/change-tree.ts` (`test/change-tree.ts`),
 `lib/project-tree.ts` (`test/project-tree.ts`),
 `lib/files/git-diff.ts` with `main/git.ts`'s own `fileDiff` (`test/git-diff.ts`),

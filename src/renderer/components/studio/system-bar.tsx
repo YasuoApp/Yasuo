@@ -41,7 +41,9 @@ export function SystemBar() {
   const freeText = `${bytes(usage.memoryAvailable)} free`
 
   return (
-    <footer className="flex h-6 shrink-0 items-center gap-2 border-t bg-muted/40 px-3 text-[11px] text-muted-foreground">
+    // No edge or fill of its own: it sits on the canvas under the cards, which
+    // is what separates it from them.
+    <footer className="flex h-6 shrink-0 items-center gap-2 px-3 text-[11px] text-muted-foreground">
       <span
         className="flex shrink-0 items-center gap-1.5"
         title={cpuTitle(usage)}

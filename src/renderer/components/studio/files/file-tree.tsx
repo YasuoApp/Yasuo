@@ -70,12 +70,13 @@ import {
 } from "@/lib/files/viewers"
 import { useProjects } from "@/lib/projects"
 import { shownRootOf } from "@/lib/files/roots"
-import { useStudio, type ExplorerTab } from "@/lib/store"
+import { useStudio } from "@/lib/store"
 import { RenameDialog } from "../rename-dialog"
 import { IconButton } from "../icon-button"
 import { RenameRow, useMenuFocusHandoff } from "../rename-row"
 import { SideRow } from "../side-row"
 import { ChangesList } from "./changes-list"
+import { CommitsList } from "./commits-list"
 
 /** What the right-click menu is about: a row in the tree, or the workspace
  * folder heading above one. */
@@ -192,6 +193,9 @@ export function FileTree({ onAddFolder }: { onAddFolder: () => void }) {
    * so `Changes 12` is true before it is clicked — which is the whole use of a
    * number on a tab. */
   const tab = useStudio((state) => state.explorerTab)
+  const setTab = useStudio((state) => state.setExplorerTab)
+  const gitView = useStudio((state) => state.gitView)
+  const setGitView = useStudio((state) => state.setGitView)
   // Files, not rows: a file staged and then edited again is two rows in the
   // list below and one file here.
   const changes = useChanges((state) =>
@@ -221,8 +225,19 @@ export function FileTree({ onAddFolder }: { onAddFolder: () => void }) {
             role="tablist"
             className="flex min-w-0 flex-1 items-center gap-0.5 overflow-hidden"
           >
-            <ExplorerTabButton id="files" label="All files" />
-            <ExplorerTabButton id="changes" label="Changes" count={changed} />
+            <ExplorerTabButton
+              active={tab === "files"}
+              onClick={() => setTab("files")}
+              label="All files"
+            />
+            {/* The count rides on `Git` too, so `Git 12` is true before it is
+                clicked — and on whichever view is showing inside it. */}
+            <ExplorerTabButton
+              active={tab === "git"}
+              onClick={() => setTab("git")}
+              label="Git"
+              count={changed}
+            />
           </div>
 
           <div className="flex shrink-0 items-center gap-0.5">
@@ -261,10 +276,35 @@ export function FileTree({ onAddFolder }: { onAddFolder: () => void }) {
             them would be the workspace's menu on a list that is not about the
             workspace. The changed-file list carries its own menu — Stage,
             Unstage, Discard — inside this scroller. */}
-        {tab !== "files" ? (
-          <div className="min-h-0 flex-1 overflow-auto pb-3">
-            {shown && <ChangesList root={shown} />}
-          </div>
+        {tab === "git" ? (
+          <>
+            {/* The `Git` tab's two views, a row under the tab that holds them:
+                what has changed, and what has been committed. */}
+            <div
+              role="tablist"
+              className="flex h-8 shrink-0 items-center gap-0.5 border-b px-1.5"
+            >
+              <ExplorerTabButton
+                active={gitView === "changes"}
+                onClick={() => setGitView("changes")}
+                label="Changes"
+                count={changed}
+              />
+              <ExplorerTabButton
+                active={gitView === "commits"}
+                onClick={() => setGitView("commits")}
+                label="Commits"
+              />
+            </div>
+            <div className="min-h-0 flex-1 overflow-auto pb-3">
+              {shown &&
+                (gitView === "commits" ? (
+                  <CommitsList root={shown} />
+                ) : (
+                  <ChangesList root={shown} />
+                ))}
+            </div>
+          </>
         ) : (
           /* One trigger over the whole tree, rather than one per row: the rows
              are a recursive component, and a trigger inside a trigger inside a
@@ -585,7 +625,7 @@ export function FileTree({ onAddFolder }: { onAddFolder: () => void }) {
 }
 
 /**
- * One of the Explorer's two tabs.
+ * One of the Explorer's tabs, or one of the `Git` tab's two views inside it.
  *
  * Not the workbench's `TabStrip`, and not shadcn's `Tabs`: those are about
  * things somebody opened and can close, and these are two fixed views of one
@@ -593,23 +633,22 @@ export function FileTree({ onAddFolder }: { onAddFolder: () => void }) {
  * row, so a tab and the row under it read as the same kind of "this is the one".
  */
 function ExplorerTabButton({
-  id,
+  active,
+  onClick,
   label,
   count,
 }: {
-  id: ExplorerTab
+  active: boolean
+  onClick: () => void
   label: string
   count?: number
 }) {
-  const active = useStudio((state) => state.explorerTab) === id
-  const setTab = useStudio((state) => state.setExplorerTab)
-
   return (
     <button
       type="button"
       role="tab"
       aria-selected={active}
-      onClick={() => setTab(id)}
+      onClick={onClick}
       className={cn(
         "flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs transition-colors",
         active

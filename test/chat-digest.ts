@@ -1,15 +1,6 @@
-import type {
-  AssistantMessage,
-  ChatDigest,
-  GitChange,
-  TurnUsage,
-} from "../src/shared/api"
+import type { AssistantMessage, ChatDigest, TurnUsage } from "../src/shared/api"
 import { digestOf, pathsTouched, spendOf } from "../src/main/chat-digest"
-import {
-  keptBy,
-  spentIn,
-  touchesIn,
-} from "../src/renderer/lib/worktree-chat/digests"
+import { spentIn } from "../src/renderer/lib/worktree-chat/digests"
 import { check, finish, section } from "./harness"
 
 /**
@@ -155,20 +146,10 @@ section("the record a caller reads")
 }
 
 /*
- * And the other side of the bridge: what the `Changes` list and the system bar
- * make of those folds. Here rather than in a file of their own because the two
- * halves are one feature — a fold nobody can narrow a list with is not worth
- * computing — and this is the file that would have to change if the shape did.
+ * And the other side of the bridge: what the system bar makes of those folds.
+ * Here rather than in a file of their own because this is the file that would
+ * have to change if the shape did.
  */
-
-const change = (path: string, directory = false): GitChange => ({
-  path,
-  state: "modified",
-  staged: false,
-  directory,
-  added: null,
-  removed: null,
-})
 
 const digest = (
   chatId: string,
@@ -183,70 +164,6 @@ const digest = (
   turns: costUsd > 0 ? 1 : 0,
   unpriced: 0,
 })
-
-section("which chat wrote which of these files")
-{
-  const changes = [change("/repo/a.ts"), change("/repo/b.ts")]
-  const digests = [
-    digest("c1", "f1", ["/repo/a.ts", "/repo/gone.ts"]),
-    digest("c2", "f1", ["/repo/b.ts"]),
-    digest("c3", "f2", ["/repo/a.ts"]),
-    digest("c4", "f1", ["/repo/committed.ts"]),
-  ]
-
-  const touches = touchesIn(digests, "f1", changes)
-  check(
-    "only this project's chats, and only the ones with something on the list",
-    JSON.stringify(touches.map((touch) => touch.chatId)) ===
-      JSON.stringify(["c1", "c2"]),
-    touches
-  )
-  check(
-    "a file it wrote and somebody has committed since is not counted",
-    touches[0]?.count === 1,
-    touches
-  )
-}
-{
-  const changes = [change("/repo/a.ts"), change("/repo/b.ts")]
-  const touches = touchesIn(
-    [
-      digest("c1", "f1", ["/repo/a.ts"]),
-      digest("c2", "f1", ["/repo/a.ts", "/repo/b.ts"]),
-    ],
-    "f1",
-    changes
-  )
-  check("the busiest chat is first", touches[0]?.chatId === "c2", touches)
-}
-
-section("narrowing the list to one of them")
-{
-  const changes = [change("/repo/a.ts"), change("/repo/b.ts")]
-  check(
-    "the rows it wrote and no others",
-    JSON.stringify(keptBy(changes, ["/repo/b.ts"]).map((row) => row.path)) ===
-      JSON.stringify(["/repo/b.ts"])
-  )
-}
-{
-  // A wholly untracked directory is one row in `git status`, and what the chat
-  // named is the files inside it.
-  const changes = [change("/repo/public/images/", true)]
-  check(
-    "an untracked directory is kept by a file written under it",
-    keptBy(changes, ["/repo/public/images/logo.png"]).length === 1
-  )
-  check(
-    "and not by one written elsewhere",
-    keptBy(changes, ["/repo/src/a.ts"]).length === 0
-  )
-  check(
-    "a directory row is not a prefix match on the name",
-    keptBy([change("/repo/public/im", true)], ["/repo/public/images/logo.png"])
-      .length === 0
-  )
-}
 
 section("what the workspace has spent")
 {

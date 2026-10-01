@@ -11,6 +11,7 @@ import {
   type ChatAskQuestion,
   type ChatDigest,
   type ChatEffort,
+  type ChatImage,
   type ChatPermission,
   type ChatPlace,
   type ChatSeed,
@@ -28,6 +29,7 @@ import {
   lineId,
   startAgentSession,
   summarise,
+  type AgentPrompt,
   type AgentSession,
   type AskDecision,
   type AskRequest,
@@ -665,7 +667,11 @@ export class WorktreeChats {
    * start — the chat reads back with the question in it and the reason under it,
    * rather than with neither.
    */
-  async send(id: string, prompt: string): Promise<void> {
+  async send(
+    id: string,
+    prompt: string,
+    images: ChatImage[] = []
+  ): Promise<void> {
     const chats = await this.source.chats()
     const chat = chats.find((entry) => entry.id === id)
     if (!chat) throw new Error("That chat no longer exists.")
@@ -699,8 +705,10 @@ export class WorktreeChats {
     // which is where a record older than either field is brought up to date.
     const options = chatOptions(chat.options)
 
+    // The line keeps the `[Image #n]` and not the picture: a transcript that
+    // carried base64 would be megabytes re-read every time the chat is opened.
     await this.append(id, { id: lineId(), role: "user", text: prompt })
-    await this.deliver(id, cwd, options, prompt)
+    await this.deliver(id, cwd, options, prompt, images)
   }
 
   /**
@@ -726,14 +734,18 @@ export class WorktreeChats {
   private headed(
     live: Live,
     options: WorktreeChatOptions,
-    prompt: string
-  ): string {
+    prompt: string,
+    images: ChatImage[]
+  ): AgentPrompt {
     const said = live.saidMode
     live.saidMode = options.permission
 
     const permission = PERMISSIONS[options.permission] ?? PERMISSIONS.edits
-    if (!permission.prompt || said === options.permission) return prompt
-    return `${permission.prompt}\n\n${prompt}`
+    const text =
+      !permission.prompt || said === options.permission
+        ? prompt
+        : `${permission.prompt}\n\n${prompt}`
+    return images.length > 0 ? { text, images } : text
   }
 
   /**
@@ -751,7 +763,8 @@ export class WorktreeChats {
     id: string,
     cwd: string,
     options: WorktreeChatOptions,
-    prompt: string
+    prompt: string,
+    images: ChatImage[]
   ): Promise<void> {
     // Asked per message rather than held, because Settings can be changed
     // between two messages in the same chat — and unlike the model, this is an
@@ -787,7 +800,7 @@ export class WorktreeChats {
         this.retune(live, options)
         // The CLI queues it behind whatever it is doing, which is the whole
         // point: this is the path a message typed mid-answer takes.
-        open.send(this.headed(live, options, prompt))
+        open.send(this.headed(live, options, prompt, images))
         return
       }
       // Either it died, or something it was started with has moved. Neither is
@@ -879,7 +892,7 @@ export class WorktreeChats {
       resume,
       // Headed here rather than inside `open`, so the retry paths there resend
       // the exact message that failed instead of deciding the head twice.
-      this.headed(entry, options, prompt)
+      this.headed(entry, options, prompt, images)
     )
 
     await entry.opening
@@ -1069,7 +1082,7 @@ export class WorktreeChats {
     resume: boolean,
     /** The message the session is being opened for, queued by
      * `startAgentSession` before it waits for the CLI. */
-    message: string
+    message: AgentPrompt
   ): Promise<AgentSession | null> {
     /** Set once the session is this object's to report the death of. Until then
      * the reporting is done below, which is what lets the retry swallow the

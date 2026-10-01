@@ -1,5 +1,12 @@
-import { useEffect, useMemo, useRef, useState, type DragEvent } from "react"
-import { Archive } from "lucide-react"
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent,
+} from "react"
+import { Archive, Search } from "lucide-react"
 
 import {
   chatOptions,
@@ -12,9 +19,11 @@ import { useStudio } from "@/lib/store"
 import { cn } from "@/lib/utils"
 import { blockOf, blocksOf } from "@/lib/worktree-chat/activity"
 import { clearFind, paintFind, rectOfHit } from "@/lib/worktree-chat/find-marks"
+import { readImage } from "@/lib/worktree-chat/images"
 import { hitsIn } from "@/lib/worktree-chat/search"
 import { placeOf, useWorktreeChats } from "@/lib/worktree-chat/store"
 import { chatLine, totalOf, usageDetail } from "@/lib/worktree-chat/usage"
+import { IconButton } from "../icon-button"
 import { ChatAsk } from "./chat-ask"
 import { ChatFind } from "./chat-find"
 import { ChatComposer, type ChatComposerHandle } from "./chat-composer"
@@ -86,6 +95,7 @@ export function WorktreeChatPane() {
        */
       key={shown.id}
       chatId={shown.id}
+      title={shown.title}
       // The chat's own place rather than the workbench's: a chat tab can be on
       // screen for a moment before the context has followed it, and the caption
       // saying what this turn may do has to be about *this* chat.
@@ -183,10 +193,12 @@ function heldUntil(): number {
 
 function Conversation({
   chatId,
+  title,
   place,
   options,
 }: {
   chatId: string
+  title: string
   /** Null once the checkout or project a chat names has gone. */
   place: ChatPlace | null
   options: WorktreeChatOptions
@@ -219,6 +231,7 @@ function Conversation({
    * one chat's half-written message came to sit under another one's.
    */
   const seeded = useWorktreeChats((state) => state.drafts[chatId])
+  const seededImages = useWorktreeChats((state) => state.draftImages[chatId])
   const keepDraft = useWorktreeChats((state) => state.keepDraft)
   const clearDraft = useWorktreeChats((state) => state.clearDraft)
 
@@ -270,6 +283,18 @@ function Conversation({
   } | null>(null)
   const showing = useStudio((state) => state.pane) === "worktree"
 
+  /** The key and the header's button: a second press with the bar up puts the
+   * caret back in the field rather than doing nothing — see `opened`. */
+  const openFind = useCallback(
+    () =>
+      setFind((held) =>
+        held?.chatId === chatId
+          ? { ...held, opened: held.opened + 1 }
+          : { chatId, query: "", at: 0, opened: 1 }
+      ),
+    [chatId]
+  )
+
   /*
    * The key itself.
    *
@@ -287,18 +312,14 @@ function Conversation({
     function onKeyDown(event: KeyboardEvent) {
       if (!isStudioShortcut(event, "f")) return
       event.preventDefault()
-      setFind((held) =>
-        held?.chatId === chatId
-          ? { ...held, opened: held.opened + 1 }
-          : { chatId, query: "", at: 0, opened: 1 }
-      )
+      openFind()
     }
 
     window.addEventListener("keydown", onKeyDown, { capture: true })
     return () => {
       window.removeEventListener("keydown", onKeyDown, { capture: true })
     }
-  }, [chatId, showing])
+  }, [openFind, showing])
 
   /**
    * A file dropped anywhere over the conversation, typed in as its path.
@@ -328,15 +349,35 @@ function Conversation({
     depth.current = 0
     setDropping(false)
 
-    // Empty for anything with no file behind it — an image dragged out of a
-    // web page is bytes Chromium is holding, and there is no path to type.
-    // Those are dropped rather than written out to the workspace: what the
-    // turn would then read is a copy nobody can find again.
-    const paths = [...event.dataTransfer.files]
-      .map((file) => window.desktop.getPathForFile(file))
-      .filter(Boolean)
-    composer.current?.insertPaths(paths)
+    /*
+     * A picture is read **now** and goes as bytes, `[Image #n]` in the text; the
+     * rest go as paths.
+     *
+     * A picture's path was what failed: a screenshot dragged off the thumbnail
+     * macOS shows is a temporary file that macOS deletes moments later, so the
+     * path in the message named nothing by the time the turn tried to read it.
+     * Read at the drop it is the picture somebody was looking at — and an image
+     * dragged out of a web page, which has no path at all, now goes too.
+     *
+     * A file that says it is an image and cannot be decoded falls back to its
+     * path, which is at least something the turn can try.
+     */
+    const files = [...event.dataTransfer.files]
+    const pictures = files.filter((file) => file.type.startsWith("image/"))
+    const others = files.filter((file) => !pictures.includes(file))
+    composer.current?.insertPaths(pathsOf(others))
+
+    void Promise.all(pictures.map(readImage)).then((read) => {
+      composer.current?.insertImages(read.filter((image) => image !== null))
+      composer.current?.insertPaths(
+        pathsOf(pictures.filter((_, index) => read[index] === null))
+      )
+    })
   }
+
+  // Empty for anything with no file behind it, which has no path to type.
+  const pathsOf = (files: File[]) =>
+    files.map((file) => window.desktop.getPathForFile(file)).filter(Boolean)
   /**
    * Whether the view is following the end of the transcript. Deliberately not
    * "is scrolled to the bottom": a message rendering taller a frame later —
@@ -559,129 +600,157 @@ function Conversation({
       {dropping && (
         <div className="pointer-events-none absolute inset-2 z-20 grid place-items-center rounded-lg border-2 border-dashed border-ring bg-background/70">
           <p className="text-xs text-muted-foreground">
-            Drop to write the path into your message
+            Drop to add it to your message
           </p>
         </div>
       )}
 
-      {/* `⌘F`, hanging over the top-right corner of the transcript the way an
+      {/* The chat's own name over its transcript. The strip above says it too,
+          truncated to a tab's width; this is where it can be read in full, and
+          where `⌘F` has a button for anybody who does not know the key. */}
+      <header className="flex h-10 shrink-0 items-center gap-2 border-b px-4">
+        <h2
+          className="min-w-0 flex-1 truncate text-sm font-medium"
+          title={title}
+        >
+          {title}
+        </h2>
+        <IconButton
+          label="Find in chat"
+          side="bottom"
+          onClick={openFind}
+          className="size-6"
+        >
+          <Search className="size-3.5" />
+        </IconButton>
+      </header>
+
+      {/* The transcript and what hangs over it, in a box of their own so the
+          find bar's `top` is measured from under the header. */}
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        {/* `⌘F`, hanging over the top-right corner of the transcript the way an
           editor's does — see `ChatFind` for why it is a bar and not a dialog.
           Keyed by the chat so a bar carried across a switch cannot keep the
           previous conversation's field. */}
-      {finding && (
-        <ChatFind
-          key={chatId}
-          query={finding.query}
-          opened={finding.opened}
-          at={at}
-          total={hits.length}
-          // A new query starts at its first match rather than wherever the last
-          // one had walked to: `at` is an index into a list that has just been
-          // replaced.
-          onQuery={(query) => setFind({ ...finding, query, at: 0 })}
-          onStep={(by) => {
-            if (hits.length === 0) return
-            // Wrapped here rather than counted up, so `at` is always an index
-            // into the list as it stands: `at + by` can go negative, which is
-            // what the `+ hits.length` is for.
-            setFind({ ...finding, at: (at + by + hits.length) % hits.length })
-          }}
-          onClose={() => setFind(null)}
-        />
-      )}
-
-      <div
-        ref={box}
-        onScroll={(event) => {
-          const { scrollTop, scrollHeight, clientHeight } = event.currentTarget
-          if (restoring()) {
-            lastTop.current = scrollTop
-            return
-          }
-          // Reaching the bottom pins; only scrolling *up* unpins. Content
-          // growing under a still view fires a scroll event too, and treating
-          // that as leaving the bottom is what stopped the pane following a
-          // turn that was still rendering.
-          if (scrollHeight - scrollTop - clientHeight < 8) pinned.current = true
-          else if (scrollTop < lastTop.current - 1) pinned.current = false
-          lastTop.current = scrollTop
-          places.set(chatId, { top: scrollTop, pinned: pinned.current })
-        }}
-        className={cn(
-          "min-h-0 flex-1 overflow-y-auto",
-          empty ? "grid place-items-center px-6" : "px-4 py-4"
+        {finding && (
+          <ChatFind
+            key={chatId}
+            query={finding.query}
+            opened={finding.opened}
+            at={at}
+            total={hits.length}
+            // A new query starts at its first match rather than wherever the last
+            // one had walked to: `at` is an index into a list that has just been
+            // replaced.
+            onQuery={(query) => setFind({ ...finding, query, at: 0 })}
+            onStep={(by) => {
+              if (hits.length === 0) return
+              // Wrapped here rather than counted up, so `at` is always an index
+              // into the list as it stands: `at + by` can go negative, which is
+              // what the `+ hits.length` is for.
+              setFind({ ...finding, at: (at + by + hits.length) % hits.length })
+            }}
+            onClose={() => setFind(null)}
+          />
         )}
-      >
-        {reading ? (
-          <div
-            ref={content}
-            className="mx-auto flex w-full max-w-2xl flex-col gap-3"
-          >
-            <ChatTranscriptSkeleton />
-          </div>
-        ) : empty ? (
-          // Where this chat is, which is what somebody with three checkouts of
-          // one project open needs before they ask for anything.
-          <div className="w-full max-w-md">
-            <WorktreeWelcome place={place} />
-          </div>
-        ) : (
-          <div
-            ref={content}
-            className="mx-auto flex w-full max-w-2xl flex-col gap-3"
-          >
-            {blocks.map((block) => (
-              /*
-               * A wrapper per block, for the one thing a block cannot carry
-               * itself: where it is. The palette's search opens a chat *at* a
-               * line, and both halves of landing on it — the scroll above and
-               * the ring below — need a node to find and mark. Drawn for every
-               * block rather than only the found one, so the transcript's
-               * layout does not change under a reader when one is.
-               */
-              <div
-                key={block.id}
-                data-block={block.id}
+
+        <div
+          ref={box}
+          onScroll={(event) => {
+            const { scrollTop, scrollHeight, clientHeight } =
+              event.currentTarget
+            if (restoring()) {
+              lastTop.current = scrollTop
+              return
+            }
+            // Reaching the bottom pins; only scrolling *up* unpins. Content
+            // growing under a still view fires a scroll event too, and treating
+            // that as leaving the bottom is what stopped the pane following a
+            // turn that was still rendering.
+            if (scrollHeight - scrollTop - clientHeight < 8)
+              pinned.current = true
+            else if (scrollTop < lastTop.current - 1) pinned.current = false
+            lastTop.current = scrollTop
+            places.set(chatId, { top: scrollTop, pinned: pinned.current })
+          }}
+          className={cn(
+            "min-h-0 flex-1 overflow-y-auto",
+            empty ? "grid place-items-center px-6" : "px-4 py-4"
+          )}
+        >
+          {reading ? (
+            <div
+              ref={content}
+              className="mx-auto flex w-full max-w-2xl flex-col gap-3"
+            >
+              <ChatTranscriptSkeleton />
+            </div>
+          ) : empty ? (
+            // Where this chat is, which is what somebody with three checkouts of
+            // one project open needs before they ask for anything.
+            <div className="w-full max-w-md">
+              <WorktreeWelcome place={place} />
+            </div>
+          ) : (
+            <div
+              ref={content}
+              className="mx-auto flex w-full max-w-2xl flex-col gap-3"
+            >
+              {blocks.map((block) => (
                 /*
-                 * A match is marked on the **words**, not on the block — see
-                 * `paintFind`, which paints them into the highlight registry.
-                 *
-                 * The ring is what is left of that for the one case the words
-                 * cannot answer: a **fold**. A turn's working is collapsed, so a
-                 * message the model wrote mid-turn has no text on screen to
-                 * paint — and a match that is counted, scrolled to and then
-                 * invisible is worse than one that was never counted. So a fold
-                 * holding a match says so, and says harder when it is the one
-                 * the arrows are on. An open fold gets both, which is the honest
-                 * answer for a container: the ring is where, the highlight is
-                 * what.
+                 * A wrapper per block, for the one thing a block cannot carry
+                 * itself: where it is. The palette's search opens a chat *at* a
+                 * line, and both halves of landing on it — the scroll above and
+                 * the ring below — need a node to find and mark. Drawn for every
+                 * block rather than only the found one, so the transcript's
+                 * layout does not change under a reader when one is.
                  */
-                className={cn(
-                  "rounded-lg",
-                  block.kind === "activity" &&
-                    foundBlocks.has(block.id) &&
-                    "ring-1 ring-ring/25 ring-offset-4 ring-offset-background",
-                  block.kind === "activity" &&
-                    block.id === currentBlock &&
-                    "ring-2 ring-ring/70"
-                )}
-              >
-                {block.kind === "activity" ? (
-                  <ChatActivity of={block} />
-                ) : (
-                  <ChatMessage
-                    of={block.line}
-                    queued={queued?.includes(block.line.id) === true}
-                  />
-                )}
-              </div>
-            ))}
-            {/* At the end of the transcript rather than over it: it is the turn
+                <div
+                  key={block.id}
+                  data-block={block.id}
+                  /*
+                   * A match is marked on the **words**, not on the block — see
+                   * `paintFind`, which paints them into the highlight registry.
+                   *
+                   * The ring is what is left of that for the one case the words
+                   * cannot answer: a **fold**. A turn's working is collapsed, so a
+                   * message the model wrote mid-turn has no text on screen to
+                   * paint — and a match that is counted, scrolled to and then
+                   * invisible is worse than one that was never counted. So a fold
+                   * holding a match says so, and says harder when it is the one
+                   * the arrows are on. An open fold gets both, which is the honest
+                   * answer for a container: the ring is where, the highlight is
+                   * what.
+                   */
+                  className={cn(
+                    "rounded-lg",
+                    block.kind === "activity" &&
+                      foundBlocks.has(block.id) &&
+                      "ring-1 ring-ring/25 ring-offset-4 ring-offset-background",
+                    block.kind === "activity" &&
+                      block.id === currentBlock &&
+                      "ring-2 ring-ring/70"
+                  )}
+                >
+                  {block.kind === "activity" ? (
+                    <ChatActivity of={block} />
+                  ) : (
+                    <ChatMessage
+                      of={block.line}
+                      queued={queued?.includes(block.line.id) === true}
+                    />
+                  )}
+                </div>
+              ))}
+              {/* At the end of the transcript rather than over it: it is the turn
                 asking, so it belongs where the turn had got to. */}
-            {ask && (
-              <ChatAsk ask={ask} onAnswer={(given) => answer(chatId, given)} />
-            )}
-            {/*
+              {ask && (
+                <ChatAsk
+                  ask={ask}
+                  onAnswer={(given) => answer(chatId, given)}
+                />
+              )}
+              {/*
               Compaction, which is a state and never a percentage.
 
               An indeterminate row on purpose: the CLI reports `compacting` and
@@ -694,24 +763,24 @@ function Conversation({
               Above the turn's own spinner, since compaction happens to the
               conversation rather than as part of the answer.
             */}
-            {compacting && (
-              <div className="flex items-center gap-2 px-1 text-[0.7rem] text-muted-foreground">
-                <Archive className="size-3 shrink-0 animate-pulse" />
-                <span>Compacting the conversation…</span>
-              </div>
-            )}
-            {/* Kept until the next compaction starts: a failure that vanished
+              {compacting && (
+                <div className="flex items-center gap-2 px-1 text-[0.7rem] text-muted-foreground">
+                  <Archive className="size-3 shrink-0 animate-pulse" />
+                  <span>Compacting the conversation…</span>
+                </div>
+              )}
+              {/* Kept until the next compaction starts: a failure that vanished
                 with the spinner would leave a window that never shrank and no
                 reason on screen for it. */}
-            {!compacting && compactError && (
-              <div className="flex items-center gap-2 px-1 text-[0.7rem] text-destructive">
-                <Archive className="size-3 shrink-0" />
-                <span className="truncate">
-                  Could not compact: {compactError}
-                </span>
-              </div>
-            )}
-            {/* Not while a question is up — the turn is held, not working, and
+              {!compacting && compactError && (
+                <div className="flex items-center gap-2 px-1 text-[0.7rem] text-destructive">
+                  <Archive className="size-3 shrink-0" />
+                  <span className="truncate">
+                    Could not compact: {compactError}
+                  </span>
+                </div>
+              )}
+              {/* Not while a question is up — the turn is held, not working, and
                 a spinner under the card would say otherwise.
 
                 A running subagent counts as working even when the chat does
@@ -720,11 +789,12 @@ function Conversation({
                 to report its state that is all `sending` has to go on. The
                 agents are what is still out there, so they draw their own
                 spinner. */}
-            {(sending || (agents ?? []).length > 0) && !ask && (
-              <ChatSkeleton startedAt={startedAt} agents={agents} />
-            )}
-          </div>
-        )}
+              {(sending || (agents ?? []).length > 0) && !ask && (
+                <ChatSkeleton startedAt={startedAt} agents={agents} />
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="shrink-0 border-t p-3">
@@ -735,17 +805,18 @@ function Conversation({
             key={chatId}
             ref={composer}
             initialDraft={seeded ?? ""}
+            initialImages={seededImages}
             // The field on its way out — switching chats, or this panel being
             // taken down — hands back what was in it, and that is what makes
             // coming back to a chat find the sentence you left in it.
-            onLeave={(text) => keepDraft(chatId, text)}
+            onLeave={(text, images) => keepDraft(chatId, text, images)}
             sending={sending}
-            onSend={(text) => {
+            onSend={(text, images) => {
               // Before the send, so the draft cannot outlive the message: the
               // field empties itself, and this is what stops a rebuild of it
               // putting the sent text back.
               clearDraft(chatId)
-              void send(chatId, text)
+              void send(chatId, text, images)
             }}
             onStop={() => stop(chatId)}
             placeholder={

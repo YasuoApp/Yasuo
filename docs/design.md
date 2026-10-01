@@ -103,21 +103,29 @@ ids and `section-marks.tsx` the label, icon and hue, because a hue that means
 left column closes on its own button. Two keys for two columns, deliberately:
 one that took both would leave the workbench with no edges at all.
 
-**Both columns close to a 36px rail rather than to nothing** — the same
-`RAIL_WIDTH`, each holding the button that brings its column back. Explorer's is
-the one the argument is written out under (see Closing it leaves the rail); this
-column's is the mirror of it, with one difference: it is on the column's **inner**
-edge rather than the window's. Each rail sits at the end its column is
-collapsible from, which for this one is the right, beside the handle that shut
-it — and it leaves the window's left edge to the traffic lights alone.
+**The window is a canvas with cards on it.** A title bar runs its whole width —
+the lights' clearance and the `project › branch` crumb at the left, a `Run a
+command` field centred on the window that opens the palette — and under it sit,
+each a rounded card with a gap of canvas between: a 48px **`NavRail`**, the
+projects column, the pane with the dock under it, and the Explorer. The gaps
+are the resize handles. A card's edge is an inward outline rather than a border
+(`CARD` in `studio.tsx`), because the dock and the Explorer collapse to exact
+pixel sizes and a border would have taken two of them.
 
-That mirror cost the left column its top row. The toggle used to sit up there
-beside the lights, and that row had to be **drawn twice** — once in the column,
-once in the crumb bar — so the button could survive the column it collapsed.
-With the button at the edge in both states, `WindowLeftEdge` is what it was
-always for and nothing else: clearance for the lights. The column is 36px of the
-84 they need, so the crumb bar's half of that clearance is `3rem` rather than
-`5.25rem`.
+The crumb used to sit in a bar over the pane and the Explorer only, on the
+argument that the left column is the workspace's and a bar across it would label
+it with one checkout's name. It is the window's title bar now, the way a
+document's name heads any window; the rail between the crumb and the column is
+what keeps the column reading as the workspace's.
+
+**Explorer closes to a 36px rail; the projects column closes to nothing.** Each
+needs the button that brings it back on screen while it is shut. Explorer's is
+its rail (see Closing it leaves the rail). The projects column's used to be the
+mirror of that — `project-rail.tsx`, a 36px strip on its inner edge with the same
+activity dot — and is deleted: the `NavRail` is on screen whatever the column is
+doing, so its first button is the toggle and carries the dot. Search moved off
+the top of the column into the title bar's field, and Settings off its footer
+onto the foot of the rail; both are the window's rather than the workspace's.
 
 The dock — `Run` and `Terminal` — is under the **pane**, spanning its width; it
 used to be the lower half of this column, and see The dock for why it moved.
@@ -2303,7 +2311,8 @@ pass over an array. A search of **every** chat was built before this and deleted
 with the palette group: it needed a channel, a walk of every transcript on disk
 behind a debounce, and a cap, and what it bought was finding a conversation whose
 title you had forgotten by a sentence inside it. `main/chat-digest.ts` is what is
-left of it, folding only what the `Changes` filter and the spend figure need.
+left of it, folding only what the spend figure needs (and the paths the removed
+`Changes` filter read).
 
 **Nothing it lists can fail any more.** Opening a row is a read or a `select`,
 so `open` resolves to nothing and the palette's only line under the input is the
@@ -3480,59 +3489,60 @@ repository. Nothing is optimistic: what a `git add` did to a `MM` file is git's
 answer to give, so all three writes end by re-reading the list, the tree's
 colours and the listings the paths were in.
 
-#### Whose work this is
+#### Whose work this is, removed
 
-**Several chats answering at once in one project is the point of this app, and
-this list is where the cost of it lands.** `git status` belongs to the project,
-not to a conversation, so three turns' work arrives as one pile with nothing on
-it saying which chat left which file — and the two sentences somebody says while
-reading it (keep this, throw that away) are exactly the ones that need to know.
+There was a row of chips over the piles — `All`, then one per chat with how many
+of the rows on this list it wrote — and picking one narrowed the tree, and every
+whole-list action with it, to that chat's own writes. It is **deleted**: the
+chips, `touchesIn` / `keptBy` in `lib/worktree-chat/digests.ts`, their tests, the
+`shown` wording on the headings and the menu, and the chat-shaped target the
+discard dialog had for a narrowed list.
 
-So there is a row of chips over the piles: `All`, then one per chat, each with
-how many of the rows on this list it wrote. Picking one narrows the tree to that
-chat's own writes.
+The argument against it is the ceiling it always had. What a chat wrote came out
+of its transcript's edit tools, so a file rewritten by a `Bash` line named no
+chat, and `All` was never "the rest of them" — a filter that is only ever
+incomplete, over a list short enough to read, drawn as a row of `Untitled`
+chips that had to be hovered to be told apart. It cost a line of the panel's
+height for an answer somebody could not trust to be whole.
 
-**What a chat is shown to have written comes out of its transcript** — the
-`file_path` of every `Write` / `Edit` / `MultiEdit` / `NotebookEdit` that did not
-come back an error, folded by `main/chat-digest.ts` and read here through
-`ChatDigest.paths`. Nothing new is recorded to make this work: the tool line
-already carried the path, because the row draws it as a chip. A refused or failed
-edit is dropped — it changed nothing, and a file listed under a chat that could
-not write to it points the filter at the wrong conversation — while a call still
-in flight is kept, since it is about to land and the list re-reads when it does.
+What stays is the fold it read: `main/chat-digest.ts` still answers
+`ChatDigest.paths` beside the spend the system bar sums, and nothing in the
+renderer reads the paths any more.
 
-**It narrows the list and never divides it.** A file rewritten by a `Bash` line —
-`sed -i`, a formatter, a build, `git checkout` — leaves nothing in the transcript
-saying so, so `All` is not "the rest of them" and the counts are not expected to
-add up to it. That ceiling is the reason this is a filter rather than a column of
-attribution on every row: a row that named an author would be wrong silently,
-where a chip that omits a file is only ever incomplete.
+### Commits
 
-**Drawn only when more than one chat is in the list.** With one, or none, the
-answer is already on the screen, and a control offering to narrow a list to the
-whole of itself is a control explaining a situation nobody is in — the same rule
-`Ungrouped` follows in the left column. The held chat id is read back through the
-chips rather than reset by an effect, so switching to another project simply has
-no such chip and the list is not narrowed; the palette's tab row heals itself the
-same way.
+**`Commits`, beside `Changes` under one `Git` tab: the commits of the branch the
+project has checked out, twenty at a time**, newest first — subject, short hash, author, how long ago, and the
+refs pointing at each (`HEAD -> main` in the primary hue). `log` in
+`main/git.ts`, `IPC.gitLog`, `commits-list.tsx`; `test/git-changes.ts` drives it
+against the real repository.
 
-**Everything in the panel then acts on what is shown**, and the piles are split
-_after_ the filter for exactly that reason. A list narrowed to one chat with a
-`Stage everything` that also staged another chat's files would be a control lying
-about the rows above it. So the headings' buttons and the menu's three
-whole-checkout items say `shown` while a filter is up, and the discard is handed
-a target of those paths rather than `"all"` — `discardAll` is git throwing away
-the checkout, which is not what a narrowed list is asking for. The commit box is
-the one thing above the filter and outside it: what is staged is staged whether
-or not it is being drawn.
+**Paged, with `Show 20 more` under the last row** until the history runs out.
+Each read asks for one commit more than it shows, which is how it knows whether
+to offer the button without a `rev-list --count` — on a large repository that
+count is the full walk paging exists to avoid. A re-read after a commit asks for
+everything already shown rather than for the first page, so a list paged to
+sixty does not snap back to twenty under somebody reading it; one call answers
+at most 1000 (`MAX_LOG_PAGE`), and a list paged past that is re-read in several.
 
-The list is re-read off the same signal the changes are (`useWatchChanges`), so a
-chip's count tracks a turn as it writes without a second set of timers over the
-same watcher events. `touchesIn` and `keptBy` in
-`lib/worktree-chat/digests.ts` are the pure halves, with `pathsTouched` on the
-main side; `test/chat-digest.ts` checks both, including the one shape that is not
-an equality — a wholly untracked **directory** is one row in `git status` and
-what the chat named is the files inside it.
+This is the rule "no log" being moved, at the user's asking, and it is moved
+only as far as a list. The argument for keeping history out was that the dock's
+shell is the git client; what it did not cover is the glance after a turn or a
+commit — is that commit there, what has this branch had done to it today —
+which is a read, not a gesture, and costs a terminal round trip for one line.
+So it is read-only and flat: no graph, no other branches, nothing to click into,
+no diff of a commit. Those would be the second git client.
+
+It arrived as a third tab and was folded at once into a `Git` tab with
+`Changes`, the two as views in a row under it (`GitView`): both are git's answer
+about the project, and three tabs side by side read as three equal kinds of
+thing when `All files` is the odd one out.
+
+**Live the way `Changes` is.** It re-reads whenever the project's git status is
+re-read, which is already behind the watchers — main watches each root's own
+`.git`, so a commit (`COMMIT_EDITMSG`), a checkout (`HEAD`) or a pull
+(`ORIG_HEAD`, `FETCH_HEAD`) in the dock's shell moves the list without Refresh
+and without a timer of its own.
 
 ### Committing
 

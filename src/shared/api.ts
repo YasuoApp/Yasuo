@@ -132,6 +132,22 @@ export type GitStatusEntry = {
  * anybody's changes), and it carries the line counts, which cost a second git
  * call and are wanted for a handful of paths rather than for all of them.
  */
+/**
+ * One commit, as the Explorer's `Commits` tab lists it — see `log` in
+ * `main/git.ts`.
+ */
+export type GitCommit = {
+  hash: string
+  shortHash: string
+  subject: string
+  author: string
+  /** The author date, ISO 8601. */
+  date: string
+  /** What points at it — `HEAD -> main`, `origin/main`, `tag: v1.0` — as git
+   * prints them. Empty for most commits. */
+  refs: string[]
+}
+
 export type GitChange = {
   path: string
   state: GitFileState
@@ -1506,6 +1522,24 @@ export type WorktreeChat = {
 export type WorktreeChatEvent = AssistantEvent & { chatId: string }
 
 /**
+ * A picture going out with a message, as bytes rather than as a path.
+ *
+ * Bytes because the path is what failed: a screenshot dragged out of the
+ * thumbnail macOS shows is a file in a temporary directory that macOS deletes
+ * moments later, so a path written into the message named nothing by the time
+ * the turn tried to `Read` it. Read at the drop, it is the picture the person
+ * was looking at.
+ *
+ * Not written down with the chat: the transcript keeps the `[Image #n]` the
+ * message was sent with, and the CLI's own session holds the picture.
+ */
+export type ChatImage = {
+  mediaType: "image/png" | "image/jpeg" | "image/gif" | "image/webp"
+  /** Base64, without a `data:` prefix. */
+  data: string
+}
+
+/**
  * What one chat did, folded out of its lines — the two questions asked *about* a
  * conversation rather than inside it.
  *
@@ -1789,6 +1823,18 @@ export type DesktopApi = {
    * Ignored paths are left out — see `GitChange`.
    */
   gitChanges: (folderId: string) => Promise<GitChange[]>
+
+  /**
+   * Up to `limit` commits of the branch checked out in one folder, newest
+   * first, after the newest `skip` — one page of the `Commits` view. Empty for
+   * a folder that is not a repository, has no commit yet, or has nothing past
+   * `skip`.
+   */
+  gitLog: (
+    folderId: string,
+    limit: number,
+    skip?: number
+  ) => Promise<GitCommit[]>
 
   /**
    * The three writes the Changes list makes — `git add`, its undo, and
@@ -2146,8 +2192,15 @@ export type DesktopApi = {
     askId: string,
     answer: WorktreeChatAnswer
   ) => Promise<void>
-  /** Runs one turn. Rejects when that chat is still answering. */
-  sendWorktreeChat: (id: string, prompt: string) => Promise<void>
+  /**
+   * Sends one message. `images` are the pictures pasted or dropped into it,
+   * each standing where its `[Image #n]` is in `prompt`.
+   */
+  sendWorktreeChat: (
+    id: string,
+    prompt: string,
+    images?: ChatImage[]
+  ) => Promise<void>
   /** Kills the turn in flight. There is nothing gentler in print mode. */
   stopWorktreeChat: (id: string) => Promise<void>
   /** Every chat's events, tagged with the chat. Returns an
@@ -2400,6 +2453,7 @@ export const IPC = {
   gitWorktreeRepo: "git:worktree-repo",
   gitStatus: "git:status",
   gitChanges: "git:changes",
+  gitLog: "git:log",
   gitStage: "git:stage",
   gitUnstage: "git:unstage",
   gitDiscard: "git:discard",

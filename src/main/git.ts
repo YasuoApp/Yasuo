@@ -3,7 +3,12 @@ import { readFile, realpath, stat } from "node:fs/promises"
 import path from "node:path"
 import { promisify } from "node:util"
 
-import type { GitChange, GitFileState, GitStatusEntry } from "../shared/api"
+import type {
+  GitChange,
+  GitCommit,
+  GitFileState,
+  GitStatusEntry,
+} from "../shared/api"
 
 const run = promisify(execFile)
 
@@ -13,8 +18,8 @@ const run = promisify(execFile)
  *
  * The panel that read a working tree — staging, commits, and the GitHub pull
  * requests beside them — was removed, and most of *that* is still not coming
- * back through here: nothing talks to a forge, nothing commits, and there is no
- * history to read. What is answered is what a file **is** — which Explorer
+ * back through here: nothing talks to a forge, and the history read is one
+ * list of the checked-out branch's commits (`log`). What is answered is what a file **is** — which Explorer
  * colours its rows with, since a file nobody has committed reads differently
  * from one that has been edited, and a `node_modules` the same grey as `src` is
  * a tree that makes somebody read the names to find the code — and, for the
@@ -715,6 +720,62 @@ export async function recentSubjects(
   }
 }
 
+/** Fields and records are split on ASCII unit/record separators, which no
+ * subject, name or ref can contain — a tab or a newline in a subject cannot. */
+const UNIT = "\x1f"
+const RECORD = "\x1e"
+
+/**
+ * `limit` commits of the branch that is checked out, newest first, after
+ * skipping the newest `skip` — a page of the Explorer's `Commits` tab.
+ *
+ * **Read-only, and a list rather than a client.** It is the one place this
+ * module reads history at all, and it reads only what the row draws — no
+ * graph, no other branches, no diff of a commit. `docs/design.md` § Commits has
+ * why a log was let in when amend, branch and push still are not.
+ *
+ * Empty for a folder that is not a repository and for one with no commit yet,
+ * which `git log` reports as an error: both are "nothing to list".
+ */
+export async function log(
+  dir: string,
+  limit: number,
+  skip = 0
+): Promise<GitCommit[]> {
+  let out: string
+  try {
+    out = await git(dir, [
+      "log",
+      `-n${limit}`,
+      `--skip=${skip}`,
+      // `%D`: the refs pointing at the commit, so the row can say which is
+      // `HEAD` and where `origin` is without a second call.
+      `--pretty=format:%H${UNIT}%h${UNIT}%s${UNIT}%an${UNIT}%aI${UNIT}%D${RECORD}`,
+    ])
+  } catch {
+    return []
+  }
+
+  return out
+    .split(RECORD)
+    .map((record) => record.replace(/^\n/, ""))
+    .filter(Boolean)
+    .map((record) => {
+      const [hash, shortHash, subject, author, date, refs] = record.split(UNIT)
+      return {
+        hash: hash ?? "",
+        shortHash: shortHash ?? "",
+        subject: subject ?? "",
+        author: author ?? "",
+        date: date ?? "",
+        refs: (refs ?? "")
+          .split(", ")
+          .map((ref) => ref.trim())
+          .filter(Boolean),
+      }
+    })
+}
+
 /**
  * Commits what is staged, and answers with the commit.
  *
@@ -727,9 +788,10 @@ export async function recentSubjects(
  * panel with no room for one" — it is reading a diff, then ending that reading.
  * `docs/design.md` § Committing carries the whole argument.
  *
- * What is still refused is everything after it: no amend, no log, no branch, no
- * push. This app is not becoming a second and worse git client — it finishes the
- * one gesture it already had somebody in the middle of.
+ * What is still refused is everything after it: no amend, no branch, no push.
+ * This app is not becoming a second and worse git client — it finishes the one
+ * gesture it already had somebody in the middle of. (A read-only list of
+ * commits came later, `log` above; it writes nothing.)
  *
  * The message goes as an **argument**, never through a shell, so a backtick or
  * a `$(…)` in it is text. Hooks run: a repository that refuses a commit at

@@ -8,6 +8,7 @@ import {
 import type {
   AssistantMessage,
   ChatAgent,
+  ChatImage,
   ChatTodo,
   ChatWindow,
   ChatWindowSlice,
@@ -353,7 +354,7 @@ export type AgentHandlers = {
  * done in the terminal.
  */
 export type AgentSession = {
-  send: (prompt: string) => void
+  send: (prompt: AgentPrompt) => void
   /** Stops the running turn without ending the session — the Stop button. What
    * was queued behind it still runs, which is the CLI's own rule. */
   interrupt: () => void
@@ -362,6 +363,32 @@ export type AgentSession = {
   setEffort: (effort: string | null) => void
   /** Ends it. `onExit` fires with a null error: this is a close, not a failure. */
   close: () => void
+}
+
+/**
+ * One message for the CLI: words, or words with pictures — a chat's message
+ * with something pasted or dropped into it, each picture standing where its
+ * `[Image #n]` is in `text`. A plain string for every caller that has none.
+ */
+export type AgentPrompt = string | { text: string; images: ChatImage[] }
+
+/** The message's `content`: a string as it always was, or the text block with
+ * the pictures after it in the order they were numbered. */
+function contentOf(prompt: AgentPrompt): SDKUserMessage["message"]["content"] {
+  if (typeof prompt === "string" || prompt.images.length === 0) {
+    return typeof prompt === "string" ? prompt : prompt.text
+  }
+  return [
+    { type: "text", text: prompt.text },
+    ...prompt.images.map((image) => ({
+      type: "image" as const,
+      source: {
+        type: "base64" as const,
+        media_type: image.mediaType,
+        data: image.data,
+      },
+    })),
+  ]
 }
 
 const NOT_INSTALLED =
@@ -385,11 +412,11 @@ class Inbox {
 
   constructor(private readonly sessionId: string) {}
 
-  push(prompt: string): void {
+  push(prompt: AgentPrompt): void {
     if (this.closed) return
     this.waiting.push({
       type: "user",
-      message: { role: "user", content: prompt },
+      message: { role: "user", content: contentOf(prompt) },
       // Not a subagent's — this is the person typing.
       parent_tool_use_id: null,
       session_id: this.sessionId,
@@ -446,7 +473,7 @@ export async function startAgentSession(
   handlers: AgentHandlers,
   /** The message this session is being opened for. Queued before the CLI is
    * waited on — see above. */
-  first: string
+  first: AgentPrompt
 ): Promise<AgentSession | null> {
   // A GUI app inherits almost none of the user's PATH, so where `claude` is has
   // to be asked of their own login shell rather than of `process.env`.

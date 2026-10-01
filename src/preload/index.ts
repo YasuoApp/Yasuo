@@ -63,6 +63,8 @@ const api: DesktopApi = {
     ipcRenderer.invoke(IPC.gitWorktreeRepo, folderId),
   gitStatus: (folderId) => ipcRenderer.invoke(IPC.gitStatus, folderId),
   gitChanges: (folderId) => ipcRenderer.invoke(IPC.gitChanges, folderId),
+  gitLog: (folderId, limit, skip) =>
+    ipcRenderer.invoke(IPC.gitLog, folderId, limit, skip),
   gitStage: (folderId, paths) =>
     ipcRenderer.invoke(IPC.gitStage, folderId, paths),
   gitUnstage: (folderId, paths) =>
@@ -140,8 +142,8 @@ const api: DesktopApi = {
     ipcRenderer.invoke(IPC.setWorktreeChatOptions, id, options),
   answerWorktreeChatAsk: (askId, answer) =>
     ipcRenderer.invoke(IPC.answerWorktreeChatAsk, askId, answer),
-  sendWorktreeChat: (id, prompt) =>
-    ipcRenderer.invoke(IPC.sendWorktreeChat, id, prompt),
+  sendWorktreeChat: (id, prompt, images) =>
+    ipcRenderer.invoke(IPC.sendWorktreeChat, id, prompt, images),
   stopWorktreeChat: (id) => ipcRenderer.invoke(IPC.stopWorktreeChat, id),
   onWorktreeChatEvent: (listener) =>
     subscribe<WorktreeChatEvent>(IPC.worktreeChatEvent, listener),

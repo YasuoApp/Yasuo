@@ -3,6 +3,7 @@ import {
   useImperativeHandle,
   useRef,
   useState,
+  type ClipboardEvent,
   type ComponentProps,
   type KeyboardEvent,
   type ReactNode,
@@ -38,6 +39,7 @@ import {
   DEFAULT_CHAT_OPTIONS,
   type AgentCommand,
   type AgentModel,
+  type ChatImage,
   type ChatWindow,
   type ChatEffort,
   type ChatPermission,
@@ -79,6 +81,7 @@ import {
   rankCommands,
   type CommandQuery,
 } from "@/lib/worktree-chat/command-text"
+import { attachedIn, imageTag, readImage } from "@/lib/worktree-chat/images"
 import { chatMentions, primeMentions } from "@/lib/worktree-chat/mentions"
 import { compact } from "@/lib/worktree-chat/usage"
 import {
@@ -208,10 +211,17 @@ const KIND_HUE: Record<PlainMentionKind, string> = {
  * asks the field to type it, the way the `+` menu's picker does. That is the
  * whole handle, and it should stay that way.
  */
+/** One empty list, for a draft with no pictures — shared rather than a fresh
+ * `[]` per render or per send. */
+const NO_IMAGES: ChatImage[] = []
+
 export type ChatComposerHandle = {
   /** Writes absolute paths at the caret, each one relative to `attachRoot`
    * where it is inside it. */
   insertPaths: (paths: string[]) => void
+  /** Holds pictures for the message and writes an `[Image #n]` at the caret
+   * for each — see `lib/worktree-chat/images.ts`. */
+  insertImages: (images: ChatImage[]) => void
 }
 
 export function ChatComposer({
@@ -226,13 +236,16 @@ export function ChatComposer({
   folderId = null,
   contextWindow,
   initialDraft = "",
+  initialImages = NO_IMAGES,
   onLeave,
 }: {
   /** The pane's way in, for a file dropped anywhere over the conversation
    * rather than on the field itself — see `ChatComposerHandle`. */
   ref?: RefObject<ChatComposerHandle | null>
   sending: boolean
-  onSend: (text: string) => void
+  /** The message, with the pictures its `[Image #n]` tags still name —
+   * renumbered by `attachedIn`, so the two agree. */
+  onSend: (text: string, images: ChatImage[]) => void
   onStop: () => void
   placeholder?: string
   /** What the toolbar under the field is showing. */
@@ -288,6 +301,8 @@ export function ChatComposer({
    * of saying "this is a different field now".
    */
   initialDraft?: string
+  /** The pictures that draft's `[Image #n]` tags stand for, `[n - 1]` for each. */
+  initialImages?: ChatImage[]
   /**
    * The field on its way out, so the draft can be kept for this chat.
    *
@@ -295,9 +310,16 @@ export function ChatComposer({
    * thing that was in it, and a store written per keystroke would re-render the
    * pane on every letter typed.
    */
-  onLeave?: (text: string) => void
+  onLeave?: (text: string, images: ChatImage[]) => void
 }) {
   const [draft, setDraft] = useState(initialDraft)
+  /**
+   * Every picture added to this draft, in the order it was added — `[Image #n]`
+   * is `images[n - 1]`. Never shortened while the draft lives, so a number
+   * once written always names the same picture; deleting a tag is what takes
+   * one out, and `attachedIn` is where that is read.
+   */
+  const [images, setImages] = useState(initialImages)
   /**
    * The one menu, in whichever of its two kinds is open.
    *
@@ -327,9 +349,9 @@ export function ChatComposer({
 
   /* The draft as it stands, for the unmount below: the cleanup runs once and
    * would otherwise close over the empty string it was built with. */
-  const latest = useRef(draft)
+  const latest = useRef({ draft, images })
   useEffect(() => {
-    latest.current = draft
+    latest.current = { draft, images }
   })
 
   /* Through a ref as well, so the cleanup below can stay a once-only effect
@@ -342,7 +364,11 @@ export function ChatComposer({
   // Once, on the way out, whatever has changed since: this is the field being
   // taken off the screen, not a value being reported. Both halves are refs, so
   // there is nothing for this to depend on.
-  useEffect(() => () => onLeaveRef.current?.(latest.current), [])
+  useEffect(
+    () => () =>
+      onLeaveRef.current?.(latest.current.draft, latest.current.images),
+    []
+  )
 
   const field = useRef<HTMLTextAreaElement>(null)
   const mirror = useRef<HTMLDivElement>(null)
@@ -473,18 +499,52 @@ export function ChatComposer({
   function insertPaths(paths: string[]) {
     if (paths.length === 0) return
 
+    insertAtCaret(
+      paths
+        .map((path) => (attachRoot ? relativeTo(attachRoot, path) : path))
+        .map((path) => {
+          // `@`, so a dropped path is tinted like a picked one — but not on one
+          // that had to be quoted, since the tint matches whole words and a
+          // quoted path is not one.
+          const quoted = quotePath(path)
+          return quoted === path ? mentionOf(path) : quoted
+        })
+        .join(" ")
+    )
+  }
+
+  /**
+   * Pictures, as tags rather than paths: a screenshot dragged off macOS's
+   * thumbnail is a temporary file that is deleted moments later, so a path to
+   * it named nothing by the time the turn went to read it.
+   */
+  function insertImages(added: ChatImage[]) {
+    if (added.length === 0) return
+
+    insertAtCaret(
+      added.map((_, index) => imageTag(images.length + index + 1)).join(" ")
+    )
+    setImages([...images, ...added])
+  }
+
+  /** A screenshot copied rather than saved — `⌃⇧⌘4` — is a picture on the
+   * clipboard with no file anywhere, and the same tag is the only way to send
+   * it. Anything else pasted is the textarea's own business. */
+  function onPaste(event: ClipboardEvent<HTMLTextAreaElement>) {
+    const files = [...event.clipboardData.files].filter((file) =>
+      file.type.startsWith("image/")
+    )
+    if (files.length === 0) return
+
+    event.preventDefault()
+    void Promise.all(files.map(readImage)).then((read) =>
+      insertImages(read.filter((image) => image !== null))
+    )
+  }
+
+  function insertAtCaret(written: string) {
     const element = field.current
     const caret = element?.selectionStart ?? draft.length
-    const written = paths
-      .map((path) => (attachRoot ? relativeTo(attachRoot, path) : path))
-      .map((path) => {
-        // `@`, so a dropped path is tinted like a picked one — but not on one
-        // that had to be quoted, since the tint matches whole words and a
-        // quoted path is not one.
-        const quoted = quotePath(path)
-        return quoted === path ? mentionOf(path) : quoted
-      })
-      .join(" ")
 
     // Spaced off whatever is already there, so a path does not run into the end
     // of a sentence somebody was in the middle of.
@@ -502,7 +562,7 @@ export function ChatComposer({
   // Rebuilt every render on purpose: it closes over the draft and the caret as
   // they stand, and a memoised one would type into the field as it was when the
   // pane last re-rendered.
-  useImperativeHandle(ref, () => ({ insertPaths }))
+  useImperativeHandle(ref, () => ({ insertPaths, insertImages }))
 
   /**
    * Sends, whatever the chat is doing.
@@ -514,8 +574,10 @@ export function ChatComposer({
    */
   function submit() {
     if (!draft.trim()) return
-    onSend(draft)
+    const message = attachedIn(draft, images)
+    onSend(message.text, message.images)
     setDraft("")
+    setImages(NO_IMAGES)
     setMenu(null)
   }
 
@@ -687,6 +749,7 @@ export function ChatComposer({
                 mirror.current.scrollTop = event.currentTarget.scrollTop
             }}
             onKeyDown={onKeyDown}
+            onPaste={onPaste}
             rows={3}
             spellCheck={false}
             placeholder={placeholder}

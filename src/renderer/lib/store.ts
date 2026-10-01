@@ -58,6 +58,7 @@ type RememberedStrip = {
   /** A plain string on the way in, and narrowed in `bootstrap`: a build that
    * had no tabs over the Explorer wrote nothing here. */
   explorerTab?: string
+  gitView?: string
 }
 
 function isRememberedStrip(value: unknown): value is RememberedStrip {
@@ -69,7 +70,9 @@ function isRememberedStrip(value: unknown): value is RememberedStrip {
     // or did not know it could be closed.
     (record.section === undefined || typeof record.section === "string") &&
     (record.sidebar === undefined || typeof record.sidebar === "boolean") &&
-    (record.explorerTab === undefined || typeof record.explorerTab === "string")
+    (record.explorerTab === undefined ||
+      typeof record.explorerTab === "string") &&
+    (record.gitView === undefined || typeof record.gitView === "string")
   )
 }
 
@@ -111,10 +114,18 @@ export type Pane = Section | "worktree" | "changes"
  *
  * A third, `comments`, went with the comments on a diff (`docs/design.md`
  * § Comments, removed); a strip saved with it open reads back as `files`.
+ *
+ * `Changes` is no longer a tab of its own: it and `Commits` — the checked-out
+ * branch's history, read-only (`commits-list.tsx`) — are the two views of one
+ * `Git` tab (`GitView`), since both are git's answer about the project and a
+ * row of three tabs left `All files` the odd one out.
  */
-export type ExplorerTab = "files" | "changes"
+export type ExplorerTab = "files" | "git"
 
-const EXPLORER_TABS: ExplorerTab[] = ["files", "changes"]
+/** Which of the `Git` tab's two views is showing. */
+export type GitView = "changes" | "commits"
+
+const GIT_VIEWS: GitView[] = ["changes", "commits"]
 
 type StudioState = {
   /** Storage is open and the workspace has been read. */
@@ -182,6 +193,10 @@ type StudioState = {
    */
   explorerTab: ExplorerTab
   setExplorerTab: (tab: ExplorerTab) => void
+  /** Kept while `All files` is showing, so going back to `Git` lands on the
+   * view that was left — remembered with the strip for the same reason. */
+  gitView: GitView
+  setGitView: (view: GitView) => void
 
   /**
    * The workbench tab strip's order, as prefixed ids (`db:public.users`).
@@ -271,8 +286,8 @@ export const useStudio = create<StudioState>((set, get) => {
   }
 
   function rememberStrip() {
-    const { tabOrder, pane, sidebar, explorerTab } = get()
-    remember(STRIP_KEY, { tabOrder, pane, sidebar, explorerTab })
+    const { tabOrder, pane, sidebar, explorerTab, gitView } = get()
+    remember(STRIP_KEY, { tabOrder, pane, sidebar, explorerTab, gitView })
   }
 
   /** Opens storage and reads the workspace. */
@@ -294,9 +309,18 @@ export const useStudio = create<StudioState>((set, get) => {
         // A build that never wrote this had no way to close the sidebar, so
         // the absence means open rather than "unknown".
         sidebar: strip.sidebar ?? true,
-        explorerTab: EXPLORER_TABS.includes(strip.explorerTab as ExplorerTab)
-          ? (strip.explorerTab as ExplorerTab)
-          : "files",
+        // `changes` and `commits` were tabs of their own before `Git` held
+        // them, so a strip saved on either opens on `Git` at that view.
+        explorerTab:
+          strip.explorerTab === "git" ||
+          GIT_VIEWS.includes(strip.explorerTab as GitView)
+            ? "git"
+            : "files",
+        gitView: GIT_VIEWS.includes(strip.gitView as GitView)
+          ? (strip.gitView as GitView)
+          : GIT_VIEWS.includes(strip.explorerTab as GitView)
+            ? (strip.explorerTab as GitView)
+            : "changes",
       })
     }
 
@@ -343,6 +367,7 @@ export const useStudio = create<StudioState>((set, get) => {
     pane: "files",
     sidebar: true,
     explorerTab: "files",
+    gitView: "changes",
     tabOrder: [],
 
     showPane(pane) {
@@ -361,6 +386,11 @@ export const useStudio = create<StudioState>((set, get) => {
 
     setExplorerTab(tab) {
       set({ explorerTab: tab })
+      rememberStrip()
+    },
+
+    setGitView(view) {
+      set({ gitView: view })
       rememberStrip()
     },
 
