@@ -1,5 +1,10 @@
 import type { AssistantMessage, ChatDigest, TurnUsage } from "../src/shared/api"
-import { digestOf, pathsTouched, spendOf } from "../src/main/chat-digest"
+import {
+  digestOf,
+  pathsTouched,
+  spendOf,
+  spendRows,
+} from "../src/main/chat-digest"
 import { spentIn } from "../src/renderer/lib/worktree-chat/digests"
 import { check, finish, section } from "./harness"
 
@@ -164,6 +169,42 @@ const digest = (
   turns: costUsd > 0 ? 1 : 0,
   unpriced: 0,
 })
+
+section("one row per turn, for the dashboard")
+{
+  const chat = {
+    id: "c1",
+    title: "Fix the build",
+    folderId: "f1",
+    updatedAt: "2026-09-30T10:00:00.000Z",
+  }
+  const stamped: AssistantMessage = {
+    ...usage(0.25),
+    at: "2026-09-29T08:00:00.000Z",
+  }
+  const rows = spendRows(chat, [
+    said("user", "hi"),
+    stamped,
+    usage(null),
+    tool("Read", "/x"),
+  ])
+  check("usage lines only", rows.length === 2, rows)
+  check(
+    "a stamped line keeps its own time",
+    rows[0]?.at === "2026-09-29T08:00:00.000Z" && rows[0]?.costUsd === 0.25,
+    rows[0]
+  )
+  check(
+    "an unstamped line falls back to the chat's updatedAt",
+    rows[1]?.at === chat.updatedAt && rows[1]?.costUsd === null,
+    rows[1]
+  )
+  check(
+    "the chat's title and project ride along",
+    rows.every((row) => row.title === chat.title && row.folderId === "f1"),
+    rows
+  )
+}
 
 section("what the workspace has spent")
 {

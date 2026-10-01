@@ -159,6 +159,104 @@
   font-size: 0.85em;
 }
 
+/*
+ * The spans `lib/markdown/highlight.ts` writes into a fence. The same ramp as
+ * the editor's `lightHighlighting` / `darkHighlighting` in `lib/editor.ts`,
+ * by hand, so a keyword in a reply is the keyword in the file beside it; the
+ * editor cannot lend its classes, since those are generated per `EditorView`.
+ */
+.markdown-prose .tok-comment {
+  color: #767a8a;
+}
+.markdown-prose .tok-keyword {
+  color: #8a3fb8;
+}
+.markdown-prose .tok-string {
+  color: #2e7d43;
+}
+.markdown-prose .tok-regexp {
+  color: #0f7183;
+}
+.markdown-prose .tok-number {
+  color: #b0561a;
+}
+.markdown-prose .tok-type {
+  color: #0f7183;
+}
+.markdown-prose .tok-function {
+  color: #2f5fd0;
+}
+.markdown-prose .tok-property {
+  color: #1a6a8c;
+}
+.markdown-prose .tok-variable {
+  color: #2b3245;
+}
+.markdown-prose .tok-tag {
+  color: #b03a5b;
+}
+.markdown-prose .tok-punctuation {
+  color: #767a8a;
+}
+.markdown-prose .tok-heading {
+  color: #2f5fd0;
+  font-weight: bold;
+}
+.markdown-prose .tok-link {
+  color: #2f5fd0;
+  text-decoration: underline;
+}
+.markdown-prose .tok-emphasis {
+  font-style: italic;
+}
+.markdown-prose .tok-strong {
+  font-weight: bold;
+}
+.markdown-prose .tok-invalid {
+  color: #c33d3d;
+}
+
+.dark .markdown-prose .tok-comment {
+  color: #6c7086;
+}
+.dark .markdown-prose .tok-keyword {
+  color: #c79bf0;
+}
+.dark .markdown-prose .tok-string {
+  color: #9ed7a8;
+}
+.dark .markdown-prose .tok-regexp {
+  color: #7fcfdb;
+}
+.dark .markdown-prose .tok-number {
+  color: #e8b17a;
+}
+.dark .markdown-prose .tok-type {
+  color: #7fcfdb;
+}
+.dark .markdown-prose .tok-function {
+  color: #8ba6f5;
+}
+.dark .markdown-prose .tok-property {
+  color: #a9d3ee;
+}
+.dark .markdown-prose .tok-variable {
+  color: #d7d9e4;
+}
+.dark .markdown-prose .tok-tag {
+  color: #f2909f;
+}
+.dark .markdown-prose .tok-punctuation {
+  color: #878b9e;
+}
+.dark .markdown-prose .tok-heading,
+.dark .markdown-prose .tok-link {
+  color: #8ba6f5;
+}
+.dark .markdown-prose .tok-invalid {
+  color: #f78a8a;
+}
+
 .markdown-prose blockquote {
   border-left: 2px solid var(--border);
   padding-left: 0.625rem;

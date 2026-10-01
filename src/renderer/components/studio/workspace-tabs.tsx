@@ -11,7 +11,7 @@ import {
   tabIds,
   useActiveTabId,
 } from "@/lib/panels"
-import { isStudioShortcut } from "@/lib/shortcuts"
+import { isStudioShortcut, tabNumberOf, tabStepOf } from "@/lib/shortcuts"
 import { useStudio, type Pane } from "@/lib/store"
 import { useTabItems } from "./tab-items"
 import { TabStrip } from "./tab-strip"
@@ -81,6 +81,43 @@ export function WorkspaceTabs({ pane }: { pane: Pane }) {
       window.removeEventListener("keydown", onKeyDown, { capture: true })
     }
   }, [activeId])
+
+  /*
+   * `⌘⇧[` / `⌘⇧]` and `⌘1`…`⌘9` — walking the strip from the keyboard.
+   *
+   * Over `items` rather than the panels' own lists, because the strip is the
+   * order somebody can see: with grouping on a step lands on the next *folder*,
+   * which is what the next tab on screen is. Wraps at either end, as a browser
+   * does. `⌘9` is the last tab however many there are.
+   */
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (items.length === 0) return
+
+      const step = tabStepOf(event)
+      if (step !== null) {
+        event.preventDefault()
+        const at = items.findIndex((item) => item.id === activeId)
+        const next = items[(at + step + items.length) % items.length]
+        if (next) selectTab(next.id)
+        return
+      }
+
+      const number = tabNumberOf(event)
+      if (number !== null) {
+        const target =
+          number === 9 ? items[items.length - 1] : items[number - 1]
+        if (!target) return
+        event.preventDefault()
+        selectTab(target.id)
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown, { capture: true })
+    return () => {
+      window.removeEventListener("keydown", onKeyDown, { capture: true })
+    }
+  }, [items, activeId])
 
   // The same intent from the menu, which is the way to it without a keyboard —
   // and, on the platforms where a session's terminal keeps Ctrl+W, the way to

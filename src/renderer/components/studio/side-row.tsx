@@ -31,8 +31,11 @@ import { cn } from "@/lib/utils"
  * one gap, one inset — rather than written out a second time where it would
  * quietly drift.
  */
+// The height is the density setting's (`--density-row`, `lib/appearance.ts`)
+// rather than `h-6`: this is the one row every list is built from, so it is
+// the one place density has to be read for the whole sidebar to follow.
 export const SIDE_ROW_SHAPE =
-  "flex h-6 w-full items-center gap-1.5 pr-2 text-xs"
+  "flex h-(--density-row) w-full items-center gap-1.5 pr-2 text-xs"
 
 /** The inset for a row at `indent` levels deep. The base is built in, so a flat
  * list and a nested one align. */

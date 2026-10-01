@@ -16,6 +16,7 @@ import {
   type ChatPlace,
   type ChatSearchResult,
   type ChatSeed,
+  type ChatSpend,
   type ClaudeProfile,
   type WorktreeChat,
   type WorktreeChatAnswer,
@@ -23,7 +24,7 @@ import {
   type WorktreeChatEvent,
   type WorktreeChatOptions,
 } from "../shared/api"
-import { digestOf } from "./chat-digest"
+import { digestOf, spendOf, spendRows } from "./chat-digest"
 import { chatMatchesIn } from "./content-search"
 import {
   AGENT_TOOLS,
@@ -465,6 +466,20 @@ export class WorktreeChats {
     { at: string; digest: ChatDigest }
   >()
 
+  /** The dashboard's rows for a chat nobody has open — the same bargain as
+   * `digested`, one row per turn instead of one per chat. */
+  private readonly spent = new Map<string, { at: string; rows: ChatSpend[] }>()
+
+  /**
+   * Which chats have been told they are over budget, and at what cap.
+   *
+   * Keyed to the cap rather than to the chat, so a cap that is raised and
+   * crossed again says so again, while a chat that keeps running past the same
+   * cap is told once rather than after every turn — the line is a warning, and
+   * a warning repeated ten times is a transcript nobody can read.
+   */
+  private readonly budgetWarned = new Map<string, number>()
+
   /**
    * What `search` keeps of a chat nobody has open: the two voices and nothing
    * else, against the `updatedAt` they were read at — the same bargain as
@@ -607,6 +622,42 @@ export class WorktreeChats {
   }
 
   /**
+   * Every turn's bill across every chat — `digests` with the fold swapped, and
+   * the same three sources in the same order. See `spendRows`.
+   */
+  async spend(): Promise<ChatSpend[]> {
+    const chats = await this.source.chats()
+
+    const rows: ChatSpend[] = []
+    for (const chat of chats) {
+      const place = {
+        id: chat.id,
+        title: chat.title,
+        folderId: chatRootId(chat),
+        updatedAt: chat.updatedAt,
+      }
+
+      const held = this.messages.get(chat.id)
+      if (held) {
+        rows.push(...spendRows(place, held))
+        continue
+      }
+
+      const cached = this.spent.get(chat.id)
+      if (cached && cached.at === chat.updatedAt) {
+        rows.push(...cached.rows)
+        continue
+      }
+
+      const folded = spendRows(place, await this.source.readChat(chat.id))
+      this.spent.set(chat.id, { at: chat.updatedAt, rows: folded })
+      rows.push(...folded)
+    }
+
+    return rows
+  }
+
+  /**
    * Every chat with a match in what was said, the most recently active first —
    * the left column's Search (`content-search.ts`).
    *
@@ -691,6 +742,8 @@ export class WorktreeChats {
 
     this.messages.set(id, [])
     this.startedIn.delete(id)
+    // Spend is back at nothing, so crossing the same cap again is news again.
+    this.budgetWarned.delete(id)
     this.setBusy(id, false)
 
     await this.source.writeChat(id, [])
@@ -706,6 +759,8 @@ export class WorktreeChats {
 
     this.messages.delete(id)
     this.digested.delete(id)
+    this.spent.delete(id)
+    this.budgetWarned.delete(id)
     this.said.delete(id)
     this.startedIn.delete(id)
     this.autoTitled.delete(id)
@@ -1701,7 +1756,13 @@ export class WorktreeChats {
     })
   }
 
-  private async append(id: string, message: AssistantMessage): Promise<void> {
+  private async append(id: string, line: AssistantMessage): Promise<void> {
+    // Stamped here, the one writer, so every line carries the same clock — and
+    // only when the caller did not bring one, which nothing does yet.
+    const message: AssistantMessage = {
+      ...line,
+      at: line.at ?? new Date().toISOString(),
+    }
     const messages = [...(await this.read(id)), message]
     this.messages.set(id, messages)
 
@@ -1748,6 +1809,10 @@ export class WorktreeChats {
       const existing = chats.find((chat) => chat.id === id)
       if (!existing) return
 
+      // After the usage line is on disk and before the listing moves, so the
+      // warning reads the total this turn made rather than the one before it.
+      if (message.role === "usage") this.checkBudget(id, existing, messages)
+
       const titled =
         existing.title === "Untitled" && message.role === "user"
           ? titleOf(message.text)
@@ -1774,6 +1839,36 @@ export class WorktreeChats {
     } catch (error) {
       console.error("Could not write the chat", error)
     }
+  }
+
+  /**
+   * Says, once per cap, that a chat has spent past the cap its toolbar set.
+   *
+   * An `error` line rather than a new role: it is drawn in the colour a thing
+   * worth stopping for is drawn in, `notify.ts` already rings a failure while
+   * the window is unfocused, and a chat read back next week shows where the
+   * money ran out. The turn itself is not stopped — see `budgetUsd`.
+   */
+  private checkBudget(
+    id: string,
+    chat: WorktreeChat,
+    messages: AssistantMessage[]
+  ): void {
+    const cap = chatOptions(chat.options).budgetUsd ?? null
+    if (cap === null) {
+      this.budgetWarned.delete(id)
+      return
+    }
+    const { costUsd } = spendOf(messages)
+    if (costUsd < cap) return
+    if (this.budgetWarned.get(id) === cap) return
+
+    this.budgetWarned.set(id, cap)
+    void this.append(id, {
+      id: lineId(),
+      role: "error",
+      text: `Over budget: this chat has spent $${costUsd.toFixed(2)} of its $${cap.toFixed(2)} cap. The next message still goes — raise or clear the cap in the toolbar if that is what you want.`,
+    })
   }
 }
 

@@ -20,7 +20,7 @@ its diffs and the chats that made them, in one tab strip.
 There is one **workspace**, holding any number of **folders** — directories
 already on this machine, worked on where they are. It is deliberately not
 switchable. What is per folder is what is genuinely per repository — a shell's
-cwd, a run command, a branch name. Sign-in will bring a second workspace; until then
+cwd, a branch name. Sign-in will bring a second workspace; until then
 `DEFAULT_WORKSPACE_ID` is a constant.
 
 One package, no monorepo workspaces. `src/main/` is the Electron main process,
@@ -80,7 +80,7 @@ reaches the contract through the `@shared/*` alias; `@/*` is `src/renderer`.
 
 `main.ts` creates the window and calls `registerIpc()`; `ipc.ts` owns every
 handler and the long-lived managers (`Store`, `SqlConnections`, `DockerRuntime`,
-`ProcessManager`, `TerminalManager`, `WorktreeChats`).
+`TerminalManager`, `WorktreeChats`).
 
 - **`store.ts`** — all state on disk under `~/.yasuo`: `manifest.json` for the
   workspace and its settings, `workspace/` for the panels' own files. A
@@ -187,7 +187,25 @@ handler and the long-lived managers (`Store`, `SqlConnections`, `DockerRuntime`,
   two numbers and a list of paths. Nothing in the renderer reads
   `ChatDigest.paths` since the `Changes` filter was removed. Searching what a chat **said** is not here and is
   not main's: it is asked of the conversation on screen, whose lines the renderer
-  already holds (`lib/worktree-chat/search.ts`).
+  already holds (`lib/worktree-chat/search.ts`). `spendRows` beside it is the
+  **cost dashboard's** fold — one row per usage line, with the chat's title and
+  the line's `at` — served by `WorktreeChats.spend` the same three-source way.
+
+- **Every chat line carries `at`** (ISO), stamped in `WorktreeChats.append`,
+  the one writer; lines from before it have none and draw no time. A chat's
+  `budgetUsd` (toolbar) is a **warning, not a lock**: `checkBudget` appends one
+  `error` line per cap crossed and the next message still goes.
+
+- **A chat can be popped out** into a window of its own: `openChatWindow` in
+  `main.ts` loads this same renderer with `?chat=<id>`, which `App.tsx` reads
+  and draws as `ChatWindow`. For that, `send` in `ipc.ts` **broadcasts every
+  push event to every window**, and the notification check asks whether _any_
+  window is focused. `setAlwaysOnTop` acts on the calling window.
+
+- **`webviewTag` is on** for the studio window, for the dock's `Preview` tab
+  (`dock-preview.tsx`, a `<webview>` of the project's dev server whose
+  screenshot goes into the composer). `saveTextFile` is the one write outside
+  the roots — a save dialog names the destination — for a chat's export.
 
 ### `worktree-chat.ts` + `claude-agent.ts` — the `claude` a conversation runs on
 
@@ -372,7 +390,7 @@ the **projects column collapses to nothing**, since the rail's first button is
 its way back. A rail is **positioned, not laid out**: it takes none of its
 column's width, and the one row it lands on leaves the room (`pr-11` on
 Explorer's header). A shut column is hidden rather than squeezed and never
-unmounted. The **dock** — `Run` and `Terminal` — is under
+unmounted. The **dock** — a tab per shell, and a `+` — is under
 the **pane**, spanning its width, collapsed rather than unmounted because a pty
 taken out of the tree ends. It used to be the lower half of the Explorer column,
 where a 520px cap left the shell ~60 columns wide; `docs/design.md` has the
@@ -530,8 +548,22 @@ macOS screenshot's temporary file is gone by the time a path to it is read
 `lib/worktree-chat/claude-profiles.ts`'s `accountLabel` / `accountCaption` with
 `main/claude-auth.ts`'s own `readAuthStatus` and `main/claude-profiles.ts`'s
 naming of a profile's directory (`test/claude-account.ts`),
-`shared/learnings.ts` (`test/learnings.ts`). Put new logic on that side of the
-line.
+`shared/learnings.ts` (`test/learnings.ts`),
+`lib/worktree-chat/spend.ts` — the cost dashboard's grouping by day, project,
+model and chat (`test/chat-spend.ts`), `lib/worktree-chat/export.ts` — a chat as
+Markdown (`test/chat-export.ts`; `export-html.ts` is the DOM half),
+`lib/appearance.ts` — palettes, fonts, font size and density as root attributes
+and CSS vars (`test/appearance.ts`), `lib/preview.ts`'s `devServerUrlIn`
+(`test/preview.ts`). Put new logic on that side of the line.
+
+Three things outside the chat pane put words into its composer — a terminal
+selection, a preview screenshot — through `lib/worktree-chat/composer-bus.ts`:
+a delivery addressed to a chat, which the pane drawing that chat types in.
+Code blocks in a reply are coloured by `lib/markdown/highlight.ts`, the editor's
+grammar walked once into `.tok-*` spans rather than a CodeMirror per fence.
+`⌘⇧[` / `⌘⇧]` and `⌘1`–`⌘9` walk the strip (`tabStepOf`, `tabNumberOf` in
+`lib/shortcuts.ts`). The first launch shows `onboarding-tour.tsx` once
+(`onboarded` in settings); Settings › Appearance replays it.
 
 ## Conventions
 

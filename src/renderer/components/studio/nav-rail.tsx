@@ -1,5 +1,11 @@
 import type { ReactNode } from "react"
-import { MessageSquare, Search, Settings, SquareTerminal } from "lucide-react"
+import {
+  ChartColumn,
+  MessageSquare,
+  Search,
+  Settings,
+  SquareTerminal,
+} from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { useDock } from "@/lib/dock"
@@ -26,7 +32,13 @@ import { IconButton } from "./icon-button"
  * Its own card rather than part of the column's, because it is not about the
  * workspace's projects — Search, the dock and Settings are the window's.
  */
-export function NavRail({ onOpenSettings }: { onOpenSettings: () => void }) {
+export function NavRail({
+  onOpenSettings,
+  onOpenCosts,
+}: {
+  onOpenSettings: () => void
+  onOpenCosts: () => void
+}) {
   // "Showing" is the column open *on that view*: Search open hides the
   // projects as surely as a shut column does.
   const column = useProjects((state) => state.sidebar)
@@ -35,8 +47,7 @@ export function NavRail({ onOpenSettings }: { onOpenSettings: () => void }) {
   const sidebar = column && view === "projects"
   const searching = column && view === "search"
   const dockOpen = useDock((state) => state.open)
-  const dockTab = useDock((state) => state.tab)
-  const toggleDockTab = useDock((state) => state.toggleTab)
+  const toggleDock = useDock((state) => state.toggle)
 
   /*
    * Whether anything is running behind the shut column — the rows are gone, the
@@ -75,6 +86,7 @@ export function NavRail({ onOpenSettings }: { onOpenSettings: () => void }) {
         }
         pressed={sidebar}
         onClick={() => toggleView("projects")}
+        tour="projects"
         dot={
           running
             ? activity.waiting > 0
@@ -99,13 +111,18 @@ export function NavRail({ onOpenSettings }: { onOpenSettings: () => void }) {
       >
         <Search />
       </RailButton>
+      {/* What every chat has cost, as a dialog — see `CostDashboard`. */}
+      <RailButton label="Costs" onClick={onOpenCosts}>
+        <ChartColumn />
+      </RailButton>
 
       <div className="flex-1" />
 
       <RailButton
         label="Terminal"
-        pressed={dockOpen && dockTab === "terminal"}
-        onClick={() => toggleDockTab("terminal")}
+        pressed={dockOpen}
+        onClick={toggleDock}
+        tour="terminal"
       >
         <SquareTerminal />
       </RailButton>
@@ -121,6 +138,7 @@ function RailButton({
   pressed,
   onClick,
   dot,
+  tour,
   children,
 }: {
   label: string
@@ -128,10 +146,12 @@ function RailButton({
   onClick: () => void
   /** The classes of a mark over the button's corner, or nothing. */
   dot?: string
+  /** The name the onboarding tour finds this button by (`data-tour`). */
+  tour?: string
   children: ReactNode
 }) {
   return (
-    <div className="relative">
+    <div className="relative" data-tour={tour}>
       <IconButton
         label={label}
         side="right"

@@ -6,6 +6,15 @@ import {
   MCP_DISABLED_TOOLS_KEY,
   type ChatEffort,
 } from "@shared/api"
+import {
+  DEFAULT_APPEARANCE,
+  isAccentPalette,
+  isDensity,
+  isFontSize,
+  isMonoFont,
+  isSansFont,
+  type Appearance,
+} from "./appearance"
 import { recall, remember } from "./tab-memory"
 import { getSetting, setSetting } from "./workspace"
 
@@ -45,7 +54,14 @@ type Stored = {
   reviewModel: string | null
   reviewEffort: ChatEffort | null
   reviewProfileId: string | null
-}
+  /**
+   * Whether the first-launch tour has been seen through or skipped. Written
+   * here with the preferences rather than in its own key because Settings has
+   * the button that unsets it — **Replay the tour** — and a flag the dialog
+   * can flip belongs in the bag the dialog edits.
+   */
+  onboarded: boolean
+} & Appearance
 
 function isStored(value: unknown): value is Stored {
   // Every field is optional since `tabsPlacement` went, so this is the whole of
@@ -72,7 +88,16 @@ function isStored(value: unknown): value is Stored {
       typeof record.reviewEffort === "string") &&
     (record.reviewProfileId === undefined ||
       record.reviewProfileId === null ||
-      typeof record.reviewProfileId === "string")
+      typeof record.reviewProfileId === "string") &&
+    // The appearance choices are checked against their lists rather than as
+    // strings: a name this build has no rule for would leave `data-palette`
+    // pointing at nothing and the picker with no row lit.
+    (record.palette === undefined || isAccentPalette(record.palette)) &&
+    (record.fontSans === undefined || isSansFont(record.fontSans)) &&
+    (record.fontMono === undefined || isMonoFont(record.fontMono)) &&
+    (record.fontSize === undefined || isFontSize(record.fontSize)) &&
+    (record.density === undefined || isDensity(record.density)) &&
+    (record.onboarded === undefined || typeof record.onboarded === "boolean")
   )
 }
 
@@ -128,6 +153,14 @@ type SettingsState = Stored & {
    * hands them over. */
   setReviewModel: (model: string | null, effort: ChatEffort | null) => void
   setReviewProfileId: (profileId: string | null) => void
+  /** The appearance choices, applied to the document by `applyAppearance`
+   * (`lib/appearance.ts`) through a subscription rather than from here. */
+  setPalette: (palette: Appearance["palette"]) => void
+  setFontSans: (font: Appearance["fontSans"]) => void
+  setFontMono: (font: Appearance["fontMono"]) => void
+  setFontSize: (size: Appearance["fontSize"]) => void
+  setDensity: (density: Appearance["density"]) => void
+  setOnboarded: (onboarded: boolean) => void
   /** Replaces the whole list — the pure `with*` helpers in
    * `lib/worktree-chat/mcp-servers.ts` work out what it should be. */
   setMcpDisabledTools: (tools: string[]) => void
@@ -183,6 +216,12 @@ export const useSettings = create<SettingsState>((set, get) => {
       reviewModel,
       reviewEffort,
       reviewProfileId,
+      palette,
+      fontSans,
+      fontMono,
+      fontSize,
+      density,
+      onboarded,
     } = get()
     remember(SETTINGS_KEY, {
       groupTabs,
@@ -191,6 +230,12 @@ export const useSettings = create<SettingsState>((set, get) => {
       reviewModel,
       reviewEffort,
       reviewProfileId,
+      palette,
+      fontSans,
+      fontMono,
+      fontSize,
+      density,
+      onboarded,
     })
   }
 
@@ -203,6 +248,11 @@ export const useSettings = create<SettingsState>((set, get) => {
     reviewModel: null,
     reviewEffort: null,
     reviewProfileId: null,
+    ...DEFAULT_APPEARANCE,
+    // False until the tour has been seen: absent from anything written before
+    // the tour existed, which is read as "show it once" rather than as a
+    // preference somebody already made.
+    onboarded: false,
     mcpDisabledTools: [],
     chatNotifications: true,
     chatTray: true,
@@ -246,6 +296,36 @@ export const useSettings = create<SettingsState>((set, get) => {
 
     setReviewProfileId(reviewProfileId) {
       set({ reviewProfileId })
+      save()
+    },
+
+    setPalette(palette) {
+      set({ palette })
+      save()
+    },
+
+    setFontSans(fontSans) {
+      set({ fontSans })
+      save()
+    },
+
+    setFontMono(fontMono) {
+      set({ fontMono })
+      save()
+    },
+
+    setFontSize(fontSize) {
+      set({ fontSize })
+      save()
+    },
+
+    setDensity(density) {
+      set({ density })
+      save()
+    },
+
+    setOnboarded(onboarded) {
+      set({ onboarded })
       save()
     },
 

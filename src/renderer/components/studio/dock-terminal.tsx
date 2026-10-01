@@ -1,24 +1,22 @@
 import { useCallback, useEffect, useRef } from "react"
-import { RotateCw, X } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { useDock } from "@/lib/dock"
+import { scanDevServer, usePreview } from "@/lib/preview"
 import { useShells, type Shell } from "@/lib/shell/store"
 import { useStudio } from "@/lib/store"
-import { IconButton } from "./icon-button"
 import { TerminalView, type TerminalHandle } from "./terminal-view"
 
 /**
- * The dock's Terminal tab: a shell in the project that was last clicked.
+ * The dock's body: the shell whose tab is selected.
  *
- * Conductor's `Setup / Run / Terminal` strip, and this is the third of them — a
- * plain shell beside the work rather than a surface of its own. The agent side
- * of what the Terminal *panel* used to be is a worktree's chat now, which is
- * why a shell can live in a strip under the pane without demoting anything: it
- * is somewhere to run `git log`, not somewhere work happens.
+ * A plain shell beside the work rather than a surface of its own. The agent
+ * side of what the Terminal *panel* used to be is a project's chat now, which
+ * is why a shell can live in a strip under the pane without demoting anything:
+ * it is somewhere to run `git log`, not somewhere work happens.
  *
  * Every shell stays mounted, hidden rather than unmounted — a pty taken out of
- * the tree would end, not hide, and switching project must not kill the command
+ * the tree would end, not hide, and switching tab must not kill the command
  * that was left running in the last one. `invisible` rather than `hidden`,
  * because `display: none` collapses the box xterm measures itself against and
  * the pty would be told a size that is not the one it comes back to.
@@ -28,18 +26,22 @@ export function DockTerminal() {
   const activeId = useShells((state) => state.activeId)
   const target = useShells((state) => state.target)
 
-  // The one place a shell is started, and only while this tab is the one on
-  // screen: a pty is a process, and clicking a project in the column must not
-  // start one behind a dock nobody has opened. Following `target` is what makes
-  // a project clicked *while* this is showing switch straight away.
-  const showing = useDock((state) => state.open && state.tab === "terminal")
-  // The folders too: with nothing clicked yet `ensure` guesses from them, and a
-  // tab opened before the workspace had been read would otherwise sit on its
-  // empty state until something else happened to change.
-  const folders = useStudio((state) => state.folders)
+  // The one place a shell is started unasked-for, and only while the dock is
+  // on screen: a pty is a process, and clicking a project in the column must
+  // not start one behind a dock nobody has opened. Following `target` is what
+  // makes a project clicked *while* this is showing switch straight away.
+  // And only while the shells are the view: opening the dock on `Preview`
+  // must not start a pty behind the webview either.
+  const showing = useDock((state) => state.open && state.view === "shells")
+  // Whether there are folders at all, rather than the list: with nothing
+  // clicked yet `ensure` guesses from them, and a dock opened before the
+  // workspace had been read would otherwise sit on its empty state — but the
+  // list itself changes on every rename, and each change would drag the dock
+  // off a tab somebody picked by hand.
+  const anyFolder = useStudio((state) => state.folders.length > 0)
   useEffect(() => {
     if (showing) useShells.getState().ensure()
-  }, [showing, target, folders])
+  }, [showing, target, anyFolder])
 
   if (shells.length === 0) {
     return (
@@ -52,70 +54,18 @@ export function DockTerminal() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <Where id={activeId} />
-      <div className="relative min-h-0 flex-1">
-        {shells.map((shell) => (
-          <div
-            key={shell.id}
-            className={cn(
-              "absolute inset-0",
-              shell.id !== activeId && "invisible"
-            )}
-          >
-            <ShellView shell={shell} />
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-/**
- * Which directory the shell on screen is in.
- *
- * Said in the panel rather than left to the prompt: the whole point of this tab
- * is that it follows the project, so the one thing a reader has to be able to
- * check at a glance is which one it followed.
- */
-function Where({ id }: { id: string | null }) {
-  const shells = useShells((state) => state.shells)
-  const folders = useStudio((state) => state.folders)
-  const restart = useShells((state) => state.restart)
-  const close = useShells((state) => state.close)
-
-  const shell = shells.find((candidate) => candidate.id === id)
-  if (!shell) return null
-
-  const project =
-    folders.find((folder) => folder.id === shell.folderId)?.name ?? "project"
-
-  return (
-    <div className="flex h-7 shrink-0 items-center gap-1.5 border-b px-2">
-      <span className="min-w-0 truncate text-[0.7rem] text-muted-foreground">
-        {project}
-      </span>
-      {shell.exited && (
-        <span className="shrink-0 text-[0.7rem] text-muted-foreground/70">
-          exited
-        </span>
-      )}
-      <span className="ml-auto flex shrink-0 items-center">
-        <IconButton
-          label="Restart shell"
-          className="size-6"
-          onClick={() => restart(shell.id)}
+    <div className="relative h-full min-h-0">
+      {shells.map((shell) => (
+        <div
+          key={shell.id}
+          className={cn(
+            "absolute inset-0",
+            shell.id !== activeId && "invisible"
+          )}
         >
-          <RotateCw className="size-3" />
-        </IconButton>
-        <IconButton
-          label="Close shell"
-          className="size-6"
-          onClick={() => close(shell.id)}
-        >
-          <X className="size-3" />
-        </IconButton>
-      </span>
+          <ShellView shell={shell} />
+        </div>
+      ))}
     </div>
   )
 }
@@ -128,6 +78,7 @@ function Where({ id }: { id: string | null }) {
  */
 function ShellView({ shell }: { shell: Shell }) {
   const setExited = useShells((state) => state.setExited)
+  const setCwd = useShells((state) => state.setCwd)
 
   // The id arrives asynchronously, but keystrokes can be typed before it does,
   // so writes go through a ref rather than state.
@@ -141,6 +92,27 @@ function ShellView({ shell }: { shell: Shell }) {
       let unsubscribeData: (() => void) | undefined
       let unsubscribeExit: (() => void) | undefined
 
+      // Where the shell is, for the tab's name. Asked once output has gone
+      // quiet after an Enter — a `cd` is only ever a line typed, and the prompt
+      // it redraws is the output that says the line has run — so a dev server
+      // streaming logs costs no lookups, and neither does typing. True at
+      // first so the opening prompt asks once.
+      let entered = true
+      let settle: ReturnType<typeof setTimeout> | undefined
+      const lookSoon = (created: string) => {
+        clearTimeout(settle)
+        settle = setTimeout(() => {
+          if (!entered || disposed) return
+          entered = false
+          void window.desktop
+            .terminalCwd(created)
+            .then((cwd) => {
+              if (!disposed && cwd) setCwd(id, cwd)
+            })
+            .catch(() => {})
+        }, 300)
+      }
+
       void window.desktop
         .terminalCreate(folderId, terminal.cols, terminal.rows)
         .then((created) => {
@@ -153,9 +125,20 @@ function ShellView({ shell }: { shell: Shell }) {
 
           terminalId.current = created
 
+          // The dev-server URL this shell prints, offered to the `Preview`
+          // tab and nothing more — see `lib/preview.ts` for why it is not
+          // opened. The carry is what joins a URL the pty cut in two.
+          let carry = ""
+
           unsubscribeData = window.desktop.onTerminalData((event) => {
             if (event.terminalId !== created) return
             terminal.write(event.chunk)
+            lookSoon(created)
+
+            const scanned = scanDevServer(carry, event.chunk)
+            carry = scanned.carry
+            if (scanned.url)
+              usePreview.getState().suggest(folderId, scanned.url)
           })
 
           unsubscribeExit = window.desktop.onTerminalExit((event) => {
@@ -174,12 +157,14 @@ function ShellView({ shell }: { shell: Shell }) {
         })
 
       terminal.onData((data) => {
+        if (data.includes("\r")) entered = true
         const current = terminalId.current
         if (current) void window.desktop.terminalWrite(current, data)
       })
 
       return () => {
         disposed = true
+        clearTimeout(settle)
         unsubscribeData?.()
         unsubscribeExit?.()
 
@@ -188,7 +173,7 @@ function ShellView({ shell }: { shell: Shell }) {
         if (current) void window.desktop.terminalKill(current)
       }
     },
-    [id, folderId, setExited]
+    [id, folderId, setExited, setCwd]
   )
 
   const onResize = useCallback((size: { cols: number; rows: number }) => {

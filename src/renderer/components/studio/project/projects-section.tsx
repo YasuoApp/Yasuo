@@ -1,5 +1,8 @@
 import { useState } from "react"
 import {
+  ClipboardCopy,
+  FileCode,
+  FileDown,
   Folder,
   FolderOpen,
   GitBranch,
@@ -45,7 +48,13 @@ import {
   ungroupedChats,
   useWorktreeChats,
 } from "@/lib/worktree-chat/store"
-import type { WorkspaceFolder, WorktreeChat } from "@shared/api"
+import type {
+  AssistantMessage,
+  WorkspaceFolder,
+  WorktreeChat,
+} from "@shared/api"
+import { chatToMarkdown, fileNameOf } from "@/lib/worktree-chat/export"
+import { chatToHtml } from "@/lib/worktree-chat/export-html"
 import { since } from "@/lib/worktree-chat/since"
 import {
   activityLabel,
@@ -55,6 +64,31 @@ import {
   type ChatActivity,
 } from "@/lib/worktree-chat/running"
 import { unreadIn } from "@/lib/worktree-chat/unread"
+
+/**
+ * A chat's lines and its project's name, for the export items.
+ *
+ * The store holds the lines of a chat somebody has opened this run and nothing
+ * else — reading every transcript into memory to list them is what `digests`
+ * refuses — so a chat exported straight from the column is read off disk here,
+ * the same call the pane makes when it is selected.
+ */
+async function withLines(
+  chat: WorktreeChat,
+  then: (lines: AssistantMessage[], project?: string) => Promise<void>
+): Promise<void> {
+  const lines =
+    useWorktreeChats.getState().messages[chat.id] ??
+    (await window.desktop.readWorktreeChat(chat.id))
+  const project = useStudio
+    .getState()
+    .folders.find((folder) => folder.id === chat.folderId)?.name
+  try {
+    await then(lines, project)
+  } catch (error) {
+    console.error("Could not export chat", error)
+  }
+}
 
 /**
  * The chats this column lists: the ones that are on disk.
@@ -869,6 +903,51 @@ function ProjectChats({
                   Distill learnings…
                 </ContextMenuItem>
               )}
+              <ContextMenuSeparator />
+              {/* The transcript as a document — see `lib/worktree-chat/export.ts`.
+                  Three items rather than one dialog with a format picker: the
+                  clipboard and a `.md` are the same bytes, and a save dialog
+                  already asks the one question left. */}
+              <ContextMenuItem
+                onClick={() =>
+                  void withLines(chat, (lines, project) =>
+                    navigator.clipboard.writeText(
+                      chatToMarkdown(chat, lines, { project })
+                    )
+                  )
+                }
+              >
+                <ClipboardCopy />
+                Copy as Markdown
+              </ContextMenuItem>
+              <ContextMenuItem
+                onClick={() =>
+                  void withLines(chat, async (lines, project) => {
+                    await window.desktop.saveTextFile({
+                      defaultName: fileNameOf(chat.title, "md"),
+                      text: chatToMarkdown(chat, lines, { project }),
+                      filters: [{ name: "Markdown", extensions: ["md"] }],
+                    })
+                  })
+                }
+              >
+                <FileDown />
+                Export as Markdown…
+              </ContextMenuItem>
+              <ContextMenuItem
+                onClick={() =>
+                  void withLines(chat, async (lines, project) => {
+                    await window.desktop.saveTextFile({
+                      defaultName: fileNameOf(chat.title, "html"),
+                      text: await chatToHtml(chat, lines, { project }),
+                      filters: [{ name: "HTML", extensions: ["html"] }],
+                    })
+                  })
+                }
+              >
+                <FileCode />
+                Export as HTML…
+              </ContextMenuItem>
               <ContextMenuSeparator />
               {/* The conversation is on disk, so this is the one way it goes. */}
               <ContextMenuItem

@@ -88,6 +88,57 @@ export function isTerminalShortcut(event: KeyboardEvent): boolean {
 }
 
 /**
+ * `⌘⇧[` / `⌘⇧]` — the tab to the left or right of the one on screen, the key
+ * the editors and the browsers agree on for it; `Ctrl+PageUp` / `Ctrl+PageDown`
+ * elsewhere, which is theirs too. `Ctrl+Tab` / `Ctrl+⇧Tab` on every platform
+ * besides, since it is the one everybody tries first.
+ *
+ * `-1`, `1`, or null for a key that is not this. Read off `event.code` for the
+ * brackets, as `⌃\`` is: with Shift held, `key` is `{` on one layout and
+ * something else on the next.
+ *
+ * Refused inside a terminal off macOS like the letters are — `Ctrl+PageUp` is
+ * the shell's own history on some setups, and `Ctrl+Tab` is a pty's to lose.
+ */
+export function tabStepOf(event: KeyboardEvent): -1 | 1 | null {
+  if (event.repeat || event.altKey) return null
+  if (!IS_MAC && inTerminal(event.target)) return null
+
+  if (event.ctrlKey && !event.metaKey && event.code === "Tab") {
+    return event.shiftKey ? -1 : 1
+  }
+
+  if (IS_MAC) {
+    if (!event.metaKey || event.ctrlKey || !event.shiftKey) return null
+    if (event.code === "BracketLeft") return -1
+    if (event.code === "BracketRight") return 1
+    return null
+  }
+
+  if (!event.ctrlKey || event.metaKey || event.shiftKey) return null
+  if (event.code === "PageUp") return -1
+  if (event.code === "PageDown") return 1
+  return null
+}
+
+/**
+ * `⌘1` … `⌘9` — the n-th tab, with `9` the last one whatever the count, which
+ * is the browsers' reading and the editors'. `Ctrl` off macOS.
+ *
+ * The 1-based number, or null. `Digit` codes rather than `key`, so a layout
+ * that puts symbols on the unshifted row still answers.
+ */
+export function tabNumberOf(event: KeyboardEvent): number | null {
+  if (event.repeat || event.altKey || event.shiftKey) return null
+  if (IS_MAC ? !event.metaKey || event.ctrlKey : !event.ctrlKey) return null
+  if (!IS_MAC && event.metaKey) return null
+  if (!IS_MAC && inTerminal(event.target)) return null
+
+  const match = /^Digit([1-9])$/.exec(event.code)
+  return match ? Number(match[1]) : null
+}
+
+/**
  * Whether the caret is in a rich-text editor, where `⌘B` is bold.
  *
  * The one shortcut that has to ask. `⌘P`, `⌘W` and `⌘S` mean nothing to

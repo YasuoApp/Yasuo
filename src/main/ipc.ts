@@ -4,12 +4,12 @@ import path from "node:path"
 
 import {
   app,
+  BrowserWindow,
   clipboard,
   dialog,
   ipcMain,
   Notification,
   shell,
-  type BrowserWindow,
   type OpenDialogOptions,
 } from "electron"
 
@@ -52,7 +52,6 @@ import {
 } from "./git"
 import { ChatNotices, noticeText, type ChatNotice } from "./notify"
 import { installedMcpServers, removeMcpServer } from "./mcp-servers"
-import { ProcessManager } from "./process"
 import { transcriptOf, type LearningProposal } from "../shared/learnings"
 import { saveLearning } from "./learnings"
 import { distillLearnings, draftCommitMessage } from "./one-turn-agent"
@@ -168,8 +167,12 @@ async function clipboardImagePath(): Promise<string | null> {
  * neither was ever *pushed* anything. Both panels are gone; see
  * `docs/design.md` § Database and API, removed.
  */
-export function registerIpc(getWindow: () => BrowserWindow | null): {
-  processes: ProcessManager
+export function registerIpc(
+  getWindow: () => BrowserWindow | null,
+  /** Opens or focuses the window one chat is popped out into — `main.ts`
+   * owns window creation, so this is handed in rather than done here. */
+  openChatWindow: (chatId: string) => void
+): {
   /** Exposed so a turn in flight can be killed on quit. */
   worktreeChats: WorktreeChats
   terminals: TerminalManager
@@ -184,17 +187,19 @@ export function registerIpc(getWindow: () => BrowserWindow | null): {
 } {
   const store = new Store()
 
+  /*
+   * Every window, not only the studio's: a chat popped out into a window of
+   * its own is the same conversation and has to see the same lines. A window
+   * that holds no terminal ignores a `terminal:data` it is sent, which is
+   * cheaper than a table of who wants what.
+   */
   const send = (channel: string, payload: unknown): void => {
-    const window = getWindow()
-    // The window is gone during shutdown; its last output has nowhere to go.
-    if (!window || window.isDestroyed()) return
-    window.webContents.send(channel, payload)
+    for (const window of BrowserWindow.getAllWindows()) {
+      // Gone during shutdown; its last output has nowhere to go.
+      if (window.isDestroyed()) continue
+      window.webContents.send(channel, payload)
+    }
   }
-
-  const processes = new ProcessManager({
-    output: (event) => send(IPC.processOutput, event),
-    exit: (event) => send(IPC.processExit, event),
-  })
 
   const terminals = new TerminalManager({
     data: (event) => send(IPC.terminalData, event),
@@ -375,8 +380,9 @@ export function registerIpc(getWindow: () => BrowserWindow | null): {
     // agent finished"; an unset key reads as on.
     if ((await store.getSetting(CHAT_NOTIFICATIONS_KEY)) === "off") return
 
-    const window = getWindow()
-    if (window && !window.isDestroyed() && window.isFocused()) return
+    // Any window of this app's, not only the studio's: a chat popped out into
+    // its own window and being read there is one nobody needs calling back to.
+    if (BrowserWindow.getFocusedWindow()) return
 
     const chats = await worktreeChats.list()
     const chat = chats.find((entry) => entry.id === notice.chatId)
@@ -528,6 +534,54 @@ export function registerIpc(getWindow: () => BrowserWindow | null): {
   )
 
   ipcMain.handle(IPC.chatDigests, () => worktreeChats.digests())
+
+  ipcMain.handle(IPC.chatSpend, () => worktreeChats.spend())
+
+  /*
+   * A file the user names, which is the one write allowed outside the
+   * workspace's roots: the save dialog is the gate, the way the open dialog is
+   * for `addFolder`. Nothing is written when it is cancelled.
+   */
+  ipcMain.handle(
+    IPC.saveTextFile,
+    async (
+      event,
+      input: {
+        defaultName: string
+        text: string
+        filters?: { name: string; extensions: string[] }[]
+      }
+    ): Promise<string | null> => {
+      const owner = BrowserWindow.fromWebContents(event.sender)
+      const options = {
+        defaultPath: path.join(app.getPath("documents"), input.defaultName),
+        filters: input.filters,
+      }
+      const result = await (owner
+        ? dialog.showSaveDialog(owner, options)
+        : dialog.showSaveDialog(options))
+      if (result.canceled || !result.filePath) return null
+      await writeFile(result.filePath, input.text, "utf8")
+      return result.filePath
+    }
+  )
+
+  ipcMain.handle(IPC.openChatWindow, (_event, chatId: string) => {
+    openChatWindow(chatId)
+  })
+
+  // On the *calling* window: the studio has no reason to pin itself, and a
+  // popped-out chat is the one that wants to stay over another editor.
+  ipcMain.handle(IPC.setAlwaysOnTop, (event, on: boolean) => {
+    const owner = BrowserWindow.fromWebContents(event.sender)
+    if (!owner || owner.isDestroyed()) return
+    owner.setAlwaysOnTop(on, "floating")
+  })
+
+  ipcMain.handle(IPC.isAlwaysOnTop, (event) => {
+    const owner = BrowserWindow.fromWebContents(event.sender)
+    return owner && !owner.isDestroyed() ? owner.isAlwaysOnTop() : false
+  })
 
   /*
    * The left column's Search. `searching` is the generation: each call takes
@@ -1046,6 +1100,20 @@ export function registerIpc(getWindow: () => BrowserWindow | null): {
       imageDataUrl(await inWorkspace(path.resolve(dir, relative)))
   )
 
+  ipcMain.handle(
+    IPC.resolveRelativePath,
+    async (_event, dir: string, relative: string) => {
+      // The markdown preview's links. A miss is an answer rather than a throw:
+      // a README linking to a file that was never committed is ordinary.
+      try {
+        const target = await inWorkspace(path.resolve(dir, relative))
+        return { path: target, directory: (await stat(target)).isDirectory() }
+      } catch {
+        return null
+      }
+    }
+  )
+
   /*
    * One TypeScript server per workspace folder, started the first time a file
    * in that folder is opened — see `main/tsserver.ts`. It is handed a reader
@@ -1161,16 +1229,6 @@ export function registerIpc(getWindow: () => BrowserWindow | null): {
     if (key === CHAT_TRAY_KEY) await applyTraySetting()
   })
 
-  ipcMain.handle(
-    IPC.startProcess,
-    async (_event, folderId: string, command: string, args: string[]) =>
-      processes.start(await store.resolveFolderDir(folderId), command, args)
-  )
-
-  ipcMain.handle(IPC.stopProcess, (_event, processId: string) => {
-    processes.stop(processId)
-  })
-
   /**
    * What one chat taught, distilled by the same read-only `claude` the drafted
    * commit message runs on. The transcript is read here and handed over as text: a chat's
@@ -1257,6 +1315,10 @@ export function registerIpc(getWindow: () => BrowserWindow | null): {
     terminals.kill(terminalId)
   )
 
+  ipcMain.handle(IPC.terminalCwd, (_event, terminalId: string) =>
+    terminals.cwd(terminalId)
+  )
+
   ipcMain.handle(IPC.systemUsage, () => systemUsage())
 
   ipcMain.handle(IPC.checkForUpdate, () =>
@@ -1299,7 +1361,6 @@ export function registerIpc(getWindow: () => BrowserWindow | null): {
   })
 
   return {
-    processes,
     worktreeChats,
     terminals,
     tsServers,

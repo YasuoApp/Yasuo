@@ -11,8 +11,6 @@ import {
   type DirectoryChange,
   type TreeChange,
   type MenuCommand,
-  type ProcessExit,
-  type ProcessOutput,
   type WorktreeChatEvent,
   type TerminalExit,
   type TerminalOutput,
@@ -99,6 +97,8 @@ const api: DesktopApi = {
   readImageFile: (filePath) => ipcRenderer.invoke(IPC.readImageFile, filePath),
   readImageRelative: (dir, relative) =>
     ipcRenderer.invoke(IPC.readImageRelative, dir, relative),
+  resolveRelativePath: (dir, relative) =>
+    ipcRenderer.invoke(IPC.resolveRelativePath, dir, relative),
   listWorkspaceFiles: () => ipcRenderer.invoke(IPC.listWorkspaceFiles),
   watchDirectories: (dirs) => ipcRenderer.invoke(IPC.watchDirectories, dirs),
   onDirectoryChanged: (listener) =>
@@ -134,6 +134,20 @@ const api: DesktopApi = {
     ipcRenderer.invoke(IPC.createWorktreeChat, place, seed),
   readWorktreeChat: (id) => ipcRenderer.invoke(IPC.readWorktreeChat, id),
   chatDigests: () => ipcRenderer.invoke(IPC.chatDigests),
+  chatSpend: () => ipcRenderer.invoke(IPC.chatSpend),
+  saveTextFile: (input) => ipcRenderer.invoke(IPC.saveTextFile, input),
+  openChatWindow: (chatId) => ipcRenderer.invoke(IPC.openChatWindow, chatId),
+  setAlwaysOnTop: (on) => ipcRenderer.invoke(IPC.setAlwaysOnTop, on),
+  isAlwaysOnTop: () => ipcRenderer.invoke(IPC.isAlwaysOnTop),
+  listSnapshots: (chatId) => ipcRenderer.invoke(IPC.listSnapshots, chatId),
+  snapshotDiff: (folderId, snapshotId) =>
+    ipcRenderer.invoke(IPC.snapshotDiff, folderId, snapshotId),
+  restoreSnapshot: (chatId, snapshotId) =>
+    ipcRenderer.invoke(IPC.restoreSnapshot, chatId, snapshotId),
+  chatBlame: (filePath, text) =>
+    ipcRenderer.invoke(IPC.chatBlame, filePath, text),
+  onSnapshotsChanged: (listener) =>
+    subscribe<string>(IPC.snapshotsChanged, listener),
   searchWorkspace: (query, options) =>
     ipcRenderer.invoke(IPC.searchWorkspace, query, options),
   deleteWorktreeChat: (id) => ipcRenderer.invoke(IPC.deleteWorktreeChat, id),
@@ -170,15 +184,6 @@ const api: DesktopApi = {
   writeNoteFile: (fileName, bytes) =>
     ipcRenderer.invoke(IPC.writeNoteFile, fileName, bytes),
 
-  startProcess: (folderId, command, args) =>
-    ipcRenderer.invoke(IPC.startProcess, folderId, command, args),
-  stopProcess: (processId) => ipcRenderer.invoke(IPC.stopProcess, processId),
-
-  onProcessOutput: (listener) =>
-    subscribe<ProcessOutput>(IPC.processOutput, listener),
-  onProcessExit: (listener) =>
-    subscribe<ProcessExit>(IPC.processExit, listener),
-
   terminalCreate: (folderId, cols, rows) =>
     ipcRenderer.invoke(IPC.terminalCreate, folderId, cols, rows),
   terminalWrite: (terminalId, data) =>
@@ -187,6 +192,7 @@ const api: DesktopApi = {
     ipcRenderer.invoke(IPC.terminalResize, terminalId, cols, rows),
   terminalKill: (terminalId) =>
     ipcRenderer.invoke(IPC.terminalKill, terminalId),
+  terminalCwd: (terminalId) => ipcRenderer.invoke(IPC.terminalCwd, terminalId),
 
   onTerminalData: (listener) =>
     subscribe<TerminalOutput>(IPC.terminalData, listener),

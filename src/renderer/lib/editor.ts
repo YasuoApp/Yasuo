@@ -34,6 +34,9 @@ import {
 } from "@codemirror/view"
 import { tags as t } from "@lezer/highlight"
 
+import { monoFontFamily } from "./appearance"
+import { useSettings } from "./settings"
+
 /**
  * CodeMirror, as the studio's one editing stack.
  *
@@ -78,12 +81,11 @@ export const themeConf = new Compartment()
 export const optionsConf = new Compartment()
 
 /** The studio's own mono stack, which is a CSS variable CodeMirror cannot read
- * from a `theme()` spec — it wants a font string, so it is resolved once here. */
+ * from a `theme()` spec — it wants a font string, so it is resolved here. Off
+ * the setting rather than the computed `--font-mono`, which is the same string
+ * one frame later: an editor built in that frame would have kept the old one. */
 export function monoFont(): string {
-  const value = getComputedStyle(document.documentElement)
-    .getPropertyValue("--font-mono")
-    .trim()
-  return value ? `${value}, ui-monospace, monospace` : "ui-monospace, monospace"
+  return monoFontFamily(useSettings.getState().fontMono)
 }
 
 /*

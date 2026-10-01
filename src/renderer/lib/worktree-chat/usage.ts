@@ -261,6 +261,37 @@ export function money(usd: number): string {
   return usd < 0.01 ? `$${usd.toFixed(4)}` : `$${usd.toFixed(2)}`
 }
 
+/**
+ * The toolbar's budget button: `$1.23 / $5`.
+ *
+ * The cap is a round figure somebody typed, so it is drawn without the cents
+ * `money` would add — `$5.00` beside `$1.23` reads as two measurements, and
+ * only one of them is. The spent side is `money`, which is the same figure
+ * the usage line hovers to, so the two cannot disagree by a rounding. A chat
+ * with no priced turn yet is `$0`, not `$0.0000`: nothing has been measured.
+ */
+export function budgetLabel(
+  spentUsd: number | null,
+  budgetUsd: number
+): string {
+  const spent = spentUsd === null || spentUsd === 0 ? "$0" : money(spentUsd)
+  return `${spent} / ${capLabel(budgetUsd)}`
+}
+
+/** `$5`, `$2.50`, `$0.75` — as many decimals as the cap has, up to two. */
+export function capLabel(budgetUsd: number): string {
+  return `$${Number.isInteger(budgetUsd) ? budgetUsd : budgetUsd.toFixed(2)}`
+}
+
+/** Whether a chat has reached its cap — `>=` rather than `>`, since a cap
+ * reached is a cap spent, and main writes its warning on the same edge. */
+export function overBudget(
+  spentUsd: number | null,
+  budgetUsd: number | null
+): boolean {
+  return budgetUsd !== null && spentUsd !== null && spentUsd >= budgetUsd
+}
+
 function plural(count: number, what: string): string {
   return `${count} ${what}${count === 1 ? "" : "s"}`
 }

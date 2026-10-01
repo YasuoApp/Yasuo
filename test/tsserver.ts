@@ -74,6 +74,24 @@ async function main() {
     )
     await servers.open(own.file, own.text)
 
+    // The first request is the one tsserver loads this whole repository for,
+    // and on a busy machine that outlasts `REQUEST_TIMEOUT_MS` — which then
+    // answers null, and the check below failed on load time rather than on
+    // anything this client got wrong. Asked again until it answers, bounded so
+    // a server that never does still fails.
+    const loading = Date.now() + 60_000
+    while (
+      (await servers.hover(
+        own.file,
+        own.line,
+        own.column + "export function ".length
+      )) === null &&
+      Date.now() < loading
+    ) {
+      // A timed-out request is still queued in tsserver; the next one is
+      // answered as soon as the project is in.
+    }
+
     const hover = await servers.hover(
       own.file,
       own.line,

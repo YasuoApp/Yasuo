@@ -87,29 +87,45 @@
  * of black. What the tint buys is what a flat grey could not give: seven
  * surfaces a step apart that still read as one material.
  *
- * `--brand-hue` is not consumed by the tokens below (oklch takes a literal), it
- * records the number so a future re-hue has one place to start from.
+ * **The neutrals read their hue from `--brand-hue`** and scale their chroma by
+ * `--brand-tint`, so an accent palette (`[data-palette]`, below) re-tints every
+ * surface by setting two numbers rather than twenty tokens, and Graphite can
+ * zero the tint for a true grey. The accents themselves — `--primary`, `--ring`,
+ * `--sidebar-primary`, `--chart-1` — stay literal, because each palette's accent
+ * needs its own lightness and its own foreground to keep contrast, and that is
+ * not a hue swap.
  */
 :root {
   --brand-hue: 277;
+  --brand-tint: 1;
 
-  --background: oklch(0.995 0.002 277);
-  --foreground: oklch(0.2 0.015 277);
+  --background: oklch(0.995 calc(0.002 * var(--brand-tint)) var(--brand-hue));
+  --foreground: oklch(0.2 calc(0.015 * var(--brand-tint)) var(--brand-hue));
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.2 0.015 277);
+  --card-foreground: oklch(
+    0.2 calc(0.015 * var(--brand-tint)) var(--brand-hue)
+  );
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.2 0.015 277);
+  --popover-foreground: oklch(
+    0.2 calc(0.015 * var(--brand-tint)) var(--brand-hue)
+  );
   --primary: oklch(0.54 0.2 277);
   --primary-foreground: oklch(0.99 0.005 277);
-  --secondary: oklch(0.965 0.006 277);
-  --secondary-foreground: oklch(0.3 0.03 277);
-  --muted: oklch(0.965 0.006 277);
-  --muted-foreground: oklch(0.52 0.02 277);
-  --accent: oklch(0.945 0.014 277);
-  --accent-foreground: oklch(0.34 0.11 277);
+  --secondary: oklch(0.965 calc(0.006 * var(--brand-tint)) var(--brand-hue));
+  --secondary-foreground: oklch(
+    0.3 calc(0.03 * var(--brand-tint)) var(--brand-hue)
+  );
+  --muted: oklch(0.965 calc(0.006 * var(--brand-tint)) var(--brand-hue));
+  --muted-foreground: oklch(
+    0.52 calc(0.02 * var(--brand-tint)) var(--brand-hue)
+  );
+  --accent: oklch(0.945 calc(0.014 * var(--brand-tint)) var(--brand-hue));
+  --accent-foreground: oklch(
+    0.34 calc(0.11 * var(--brand-tint)) var(--brand-hue)
+  );
   --destructive: oklch(0.58 0.22 25);
-  --border: oklch(0.9 0.006 277);
-  --input: oklch(0.9 0.008 277);
+  --border: oklch(0.9 calc(0.006 * var(--brand-tint)) var(--brand-hue));
+  --input: oklch(0.9 calc(0.008 * var(--brand-tint)) var(--brand-hue));
   --ring: oklch(0.6 0.19 277);
 
   /*
@@ -188,14 +204,93 @@
    * the dimmest. Every studio that does this well — an editor, a terminal, a
    * design tool — sinks its chrome and lifts its content.
    */
-  --sidebar: oklch(0.972 0.005 277);
-  --sidebar-foreground: oklch(0.2 0.015 277);
+  --sidebar: oklch(0.972 calc(0.005 * var(--brand-tint)) var(--brand-hue));
+  --sidebar-foreground: oklch(
+    0.2 calc(0.015 * var(--brand-tint)) var(--brand-hue)
+  );
   --sidebar-primary: oklch(0.54 0.2 277);
   --sidebar-primary-foreground: oklch(0.99 0.005 277);
-  --sidebar-accent: oklch(0.94 0.016 277);
-  --sidebar-accent-foreground: oklch(0.32 0.11 277);
-  --sidebar-border: oklch(0.9 0.006 277);
+  --sidebar-accent: oklch(
+    0.94 calc(0.016 * var(--brand-tint)) var(--brand-hue)
+  );
+  --sidebar-accent-foreground: oklch(
+    0.32 calc(0.11 * var(--brand-tint)) var(--brand-hue)
+  );
+  --sidebar-border: oklch(0.9 calc(0.006 * var(--brand-tint)) var(--brand-hue));
   --sidebar-ring: oklch(0.6 0.19 277);
+
+  /*
+   * Density, as three lengths `lib/appearance.ts` rewrites on `<html>` from the
+   * setting: a sidebar row (`SIDE_ROW_SHAPE`), the gap between a transcript's
+   * turns (`.transcript-gap`), and the tab strip. These are the comfortable
+   * values, here only for the frame before the setting has been read — the
+   * table itself is `densityVars`, so a test can hold it.
+   */
+  --density-row: 1.5rem;
+  --density-gap: 0.75rem;
+  --density-tab: 2.25rem;
+}
+
+/*
+ * The accent palettes — `data-palette` on `<html>`, written by
+ * `applyAppearance` from the Appearance setting.
+ *
+ * Each one is a hue for the neutrals (or no tint at all, for Graphite) and a
+ * literal accent with a foreground chosen against it: the brighter accents
+ * carry dark text, since white on a 0.72-lightness teal is a 2.5:1 contrast
+ * and near-black on it is 7:1. A chart hue that collides with the accent is
+ * swapped for the indigo the accent vacated.
+ *
+ * **These light blocks sit above `.dark` on purpose.** `[data-palette="…"]`
+ * and `.dark` are both one attribute or class deep, so with both on `<html>`
+ * the later rule wins — these have to lose to `.dark`, and the `.dark[…]`
+ * blocks below it have to beat it.
+ */
+[data-palette="graphite"] {
+  --brand-tint: 0;
+  --primary: oklch(0.3 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --ring: oklch(0.55 0 0);
+  --sidebar-primary: oklch(0.3 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-ring: oklch(0.55 0 0);
+  --chart-1: oklch(0.3 0 0);
+}
+
+[data-palette="teal"] {
+  --brand-hue: 192;
+  --primary: oklch(0.52 0.11 192);
+  --primary-foreground: oklch(0.99 0.005 192);
+  --ring: oklch(0.6 0.11 192);
+  --sidebar-primary: oklch(0.52 0.11 192);
+  --sidebar-primary-foreground: oklch(0.99 0.005 192);
+  --sidebar-ring: oklch(0.6 0.11 192);
+  --chart-1: oklch(0.52 0.11 192);
+  --chart-4: oklch(0.54 0.2 277);
+}
+
+[data-palette="rose"] {
+  --brand-hue: 350;
+  --primary: oklch(0.58 0.19 350);
+  --primary-foreground: oklch(0.99 0.005 350);
+  --ring: oklch(0.64 0.17 350);
+  --sidebar-primary: oklch(0.58 0.19 350);
+  --sidebar-primary-foreground: oklch(0.99 0.005 350);
+  --sidebar-ring: oklch(0.64 0.17 350);
+  --chart-1: oklch(0.58 0.19 350);
+  --chart-2: oklch(0.54 0.2 277);
+}
+
+[data-palette="amber"] {
+  --brand-hue: 70;
+  --primary: oklch(0.72 0.15 70);
+  --primary-foreground: oklch(0.24 0.06 70);
+  --ring: oklch(0.68 0.14 70);
+  --sidebar-primary: oklch(0.72 0.15 70);
+  --sidebar-primary-foreground: oklch(0.24 0.06 70);
+  --sidebar-ring: oklch(0.68 0.14 70);
+  --chart-1: oklch(0.72 0.15 70);
+  --chart-5: oklch(0.54 0.2 277);
 }
 
 /*
@@ -216,20 +311,30 @@
  * (`main/main.ts`). Both say so where they are.
  */
 .dark {
-  --background: oklch(0.185 0.012 277);
-  --foreground: oklch(0.965 0.004 277);
-  --card: oklch(0.215 0.013 277);
-  --card-foreground: oklch(0.965 0.004 277);
-  --popover: oklch(0.225 0.014 277);
-  --popover-foreground: oklch(0.965 0.004 277);
+  --background: oklch(0.185 calc(0.012 * var(--brand-tint)) var(--brand-hue));
+  --foreground: oklch(0.965 calc(0.004 * var(--brand-tint)) var(--brand-hue));
+  --card: oklch(0.215 calc(0.013 * var(--brand-tint)) var(--brand-hue));
+  --card-foreground: oklch(
+    0.965 calc(0.004 * var(--brand-tint)) var(--brand-hue)
+  );
+  --popover: oklch(0.225 calc(0.014 * var(--brand-tint)) var(--brand-hue));
+  --popover-foreground: oklch(
+    0.965 calc(0.004 * var(--brand-tint)) var(--brand-hue)
+  );
   --primary: oklch(0.66 0.17 277);
   --primary-foreground: oklch(0.99 0.01 277);
-  --secondary: oklch(0.26 0.012 277);
-  --secondary-foreground: oklch(0.965 0.004 277);
-  --muted: oklch(0.26 0.012 277);
-  --muted-foreground: oklch(0.7 0.018 277);
-  --accent: oklch(0.3 0.016 277);
-  --accent-foreground: oklch(0.95 0.02 277);
+  --secondary: oklch(0.26 calc(0.012 * var(--brand-tint)) var(--brand-hue));
+  --secondary-foreground: oklch(
+    0.965 calc(0.004 * var(--brand-tint)) var(--brand-hue)
+  );
+  --muted: oklch(0.26 calc(0.012 * var(--brand-tint)) var(--brand-hue));
+  --muted-foreground: oklch(
+    0.7 calc(0.018 * var(--brand-tint)) var(--brand-hue)
+  );
+  --accent: oklch(0.3 calc(0.016 * var(--brand-tint)) var(--brand-hue));
+  --accent-foreground: oklch(
+    0.95 calc(0.02 * var(--brand-tint)) var(--brand-hue)
+  );
   --destructive: oklch(0.68 0.19 25);
   /* Alpha rather than a lighter grey, for the reason in the block above; a
      hair more opaque on inputs, which have to read as a field rather than as a
@@ -266,14 +371,66 @@
   --elevation-lg: 0 1px 3px oklch(0 0 0 / 0.45), 0 8px 24px oklch(0 0 0 / 0.5);
   --elevation-xl: 0 2px 4px oklch(0 0 0 / 0.5), 0 16px 48px oklch(0 0 0 / 0.6);
 
-  --sidebar: oklch(0.165 0.012 277);
-  --sidebar-foreground: oklch(0.965 0.004 277);
+  --sidebar: oklch(0.165 calc(0.012 * var(--brand-tint)) var(--brand-hue));
+  --sidebar-foreground: oklch(
+    0.965 calc(0.004 * var(--brand-tint)) var(--brand-hue)
+  );
   --sidebar-primary: oklch(0.66 0.17 277);
   --sidebar-primary-foreground: oklch(0.99 0.01 277);
-  --sidebar-accent: oklch(0.29 0.016 277);
-  --sidebar-accent-foreground: oklch(0.965 0.004 277);
+  --sidebar-accent: oklch(
+    0.29 calc(0.016 * var(--brand-tint)) var(--brand-hue)
+  );
+  --sidebar-accent-foreground: oklch(
+    0.965 calc(0.004 * var(--brand-tint)) var(--brand-hue)
+  );
   --sidebar-border: oklch(1 0 0 / 8%);
   --sidebar-ring: oklch(0.66 0.17 277);
+}
+
+/* The palettes' dark halves — after `.dark`, for the reason on the light ones.
+   The neutrals' hue and tint are already set by the light block, which applies
+   in both modes; only the literal accents need a dark twin. */
+.dark[data-palette="graphite"] {
+  --primary: oklch(0.87 0 0);
+  --primary-foreground: oklch(0.2 0 0);
+  --ring: oklch(0.7 0 0);
+  --sidebar-primary: oklch(0.87 0 0);
+  --sidebar-primary-foreground: oklch(0.2 0 0);
+  --sidebar-ring: oklch(0.7 0 0);
+  --chart-1: oklch(0.87 0 0);
+}
+
+.dark[data-palette="teal"] {
+  --primary: oklch(0.75 0.11 192);
+  --primary-foreground: oklch(0.2 0.04 192);
+  --ring: oklch(0.75 0.11 192);
+  --sidebar-primary: oklch(0.75 0.11 192);
+  --sidebar-primary-foreground: oklch(0.2 0.04 192);
+  --sidebar-ring: oklch(0.75 0.11 192);
+  --chart-1: oklch(0.75 0.11 192);
+  --chart-4: oklch(0.66 0.17 277);
+}
+
+.dark[data-palette="rose"] {
+  --primary: oklch(0.74 0.15 350);
+  --primary-foreground: oklch(0.2 0.05 350);
+  --ring: oklch(0.74 0.15 350);
+  --sidebar-primary: oklch(0.74 0.15 350);
+  --sidebar-primary-foreground: oklch(0.2 0.05 350);
+  --sidebar-ring: oklch(0.74 0.15 350);
+  --chart-1: oklch(0.74 0.15 350);
+  --chart-2: oklch(0.66 0.17 277);
+}
+
+.dark[data-palette="amber"] {
+  --primary: oklch(0.8 0.14 75);
+  --primary-foreground: oklch(0.22 0.06 70);
+  --ring: oklch(0.8 0.14 75);
+  --sidebar-primary: oklch(0.8 0.14 75);
+  --sidebar-primary-foreground: oklch(0.22 0.06 70);
+  --sidebar-ring: oklch(0.8 0.14 75);
+  --chart-1: oklch(0.8 0.14 75);
+  --chart-5: oklch(0.66 0.17 277);
 }
 
 @layer base {
@@ -312,6 +469,16 @@
    */
   .tabular {
     font-variant-numeric: tabular-nums;
+  }
+
+  /*
+   * The space between a transcript's turns, read off the density setting. A
+   * class rather than `gap-(--density-gap)` at the call site so the chat pane
+   * names the *thing* — a transcript — and the number stays here with the
+   * other two densities.
+   */
+  .transcript-gap {
+    gap: var(--density-gap);
   }
 
   /*

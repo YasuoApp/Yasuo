@@ -4,7 +4,7 @@
 
 # Yasuo
 
-**One window for a project's agents, its board and its diff.**
+**One window for a project's agents, the diff they leave, and the commit that ends it.**
 
 [![CI](https://github.com/YasuoApp/Yasuo/actions/workflows/ci.yml/badge.svg)](https://github.com/YasuoApp/Yasuo/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -18,7 +18,14 @@ Yasuo runs `claude` against the folders you already work in, and makes each conv
 
 Agents run **in the folder itself** — no branch to name, no worktree to remove, nothing to merge back, and what an agent changed is what `git status` says it changed. The cost is that two agents on one folder edit the same files: this is a studio for conversations you are watching, not a farm of them you are not.
 
-One **workspace**, any number of **folders**, no switching between them. Each project has its chats, a board, an Explorer with files and changes, and a terminal; Database and API open in windows of their own. [`docs/design.md`](docs/design.md) is what each one is for and why it behaves as it does.
+One **workspace**, any number of **folders**, no switching between them. Each project has its chats, an Explorer with its files, its changes and its commits, and a terminal docked under the pane. [`docs/design.md`](docs/design.md) is what each one is for and why it behaves as it does.
+
+- **Talk while it works.** A message sent mid-answer goes to the same `claude` and is marked `Queued` until the turn ends; `Stop` interrupts rather than kills.
+- **See every chat at a glance.** A row spins while its chat works, shows a shield when it stops on a question, and stays marked unread until you have read the answer — in the column, the menu bar and an OS notification.
+- **Five permission modes, switched mid-chat** — `Plan`, `Read only`, `Ask`, `Edits`, `Full access` — without throwing away the prompt cache.
+- **From diff to commit.** Stage from the `Changes` list, have the message drafted off the staged diff, read the branch's history under `Commits`.
+- **A worktree is a button.** Cut a `git worktree` from a project's row; leave the branch blank and the first chat in it names both.
+- **Find anything.** `⇧⌘F` searches every file and every chat; `⌘F` finds inside the conversation on screen.
 
 ## Install
 
@@ -53,7 +60,7 @@ x64. The `.exe` from [Releases][releases] is an NSIS installer. SmartScreen stop
 
 [releases]: https://github.com/YasuoApp/Yasuo/releases
 
-Yasuo is developed and used day to day on macOS; the Linux and Windows builds come out of the same workflow and the tests run on Linux, but assume rough edges. Docker is needed only for the workspace's own databases and `claude` only for agent sessions and the AI features — neither to start the app.
+Yasuo is developed and used day to day on macOS; the Linux and Windows builds come out of the same workflow and the tests run on Linux, but assume rough edges. `claude` is needed only for agent sessions and the AI features — not to start the app.
 
 ## From source
 
@@ -74,7 +81,7 @@ bun run dev      # bundles the main process, starts Vite, launches Electron at i
 - **[`CONTRIBUTING.md`](CONTRIBUTING.md)**: the layout, the IPC contract the main process and the renderer talk over, and where the seams are.
 - **[`SECURITY.md`](SECURITY.md)**: the security model, and how to report a vulnerability.
 
-Contributions are welcome. A new database engine, a new agent CLI and a new panel are all designed to be added to. Small fixes need no ceremony; anything structural is worth an issue first.
+Contributions are welcome. A new agent CLI and a new panel are both designed to be added to. Small fixes need no ceremony; anything structural is worth an issue first.
 
 ## License
 

@@ -103,6 +103,22 @@
 }
 
 /*
+ * The onboarding tour's spotlight (`onboarding-tour.tsx`) sliding from one
+ * target to the next. A transition rather than a keyframe because the
+ * destination is measured off the page, not known in advance; it is here with
+ * the keyframes because it is the studio's own motion and this is the list.
+ * It moves the box's edges, which lays out — but the box is one `fixed`
+ * element with nothing inside it, so there is nothing else to lay out.
+ */
+.tour-spot {
+  transition:
+    top 220ms var(--ease-out-quint),
+    left 220ms var(--ease-out-quint),
+    width 220ms var(--ease-out-quint),
+    height 220ms var(--ease-out-quint);
+}
+
+/*
  * The entrances are decoration — they say a thing arrived, never what the
  * thing is — so all of them go, and the launch screen assembles in one frame.
  *
@@ -122,7 +138,8 @@
 
   /* Scoped to the launch screen's own crossfade rather than left to a blanket
      rule over every transition in the app. */
-  [data-splash] {
+  [data-splash],
+  .tour-spot {
     transition-duration: 1ms !important;
   }
 

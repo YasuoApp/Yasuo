@@ -3,6 +3,7 @@ import {
   blockOf,
   blocksOf,
   countsOf,
+  dayDividerBetween,
   rowsOf,
   summaryOf,
 } from "../src/renderer/lib/worktree-chat/activity"
@@ -659,5 +660,73 @@ check(
 )
 
 check("empty stays empty", detailOf("") === "" && detailOf("   ") === "")
+
+/**
+ * The divider between days, decided per pair of blocks. A fold is dated by its
+ * first line, and a block with no stamp on that line never earns one — the
+ * case being the transcript that spans the day `at` was added.
+ */
+section("the divider between days")
+{
+  const local = (day: number, hour: number) =>
+    new Date(2026, 8, day, hour).toISOString()
+  const NOW = new Date(2026, 8, 30, 15).getTime()
+  const user = (id: string, at?: string): AssistantMessage => ({
+    id,
+    role: "user",
+    text: id,
+    ...(at ? { at } : {}),
+  })
+  const tool = (id: string, at?: string): AssistantMessage => ({
+    id,
+    role: "tool",
+    name: "Read",
+    summary: id,
+    ...(at ? { at } : {}),
+  })
+  const line = (of: AssistantMessage) => ({
+    kind: "line" as const,
+    id: of.id,
+    line: of,
+  })
+  const fold = (...lines: AssistantMessage[]) => ({
+    kind: "activity" as const,
+    id: `activity-${lines[0]!.id}`,
+    lines,
+    counts: countsOf(lines),
+  })
+
+  check(
+    "two lines across midnight are divided, in the day's own words",
+    dayDividerBetween(
+      line(user("a", local(29, 23))),
+      line(user("b", local(30, 1))),
+      NOW
+    ) === "Today"
+  )
+  check(
+    "and two inside a day are not",
+    dayDividerBetween(
+      line(user("a", local(30, 1))),
+      line(user("b", local(30, 14))),
+      NOW
+    ) === null
+  )
+  check(
+    "a fold is dated by its first line",
+    dayDividerBetween(
+      line(user("a", local(28, 23))),
+      fold(tool("t1", local(29, 1)), tool("t2", local(30, 1))),
+      NOW
+    ) === "Yesterday"
+  )
+  check(
+    "a block with no stamp divides nothing",
+    dayDividerBetween(line(user("a")), line(user("b", local(30, 1))), NOW) ===
+      null &&
+      dayDividerBetween(line(user("a", local(29, 1))), fold(tool("t")), NOW) ===
+        null
+  )
+}
 
 finish()

@@ -39,6 +39,7 @@ import {
   FileCode,
   FileText,
   Image,
+  KeyRound,
   FilePlus,
   Folder,
   FolderOpen,
@@ -708,7 +709,9 @@ function ViewerIcon({ viewer }: { viewer: Viewer }) {
         ? BookOpen
         : viewer === "blocks"
           ? NotebookPen
-          : FileCode
+          : viewer === "env"
+            ? KeyRound
+            : FileCode
   return <Icon className="text-muted-foreground" />
 }
 

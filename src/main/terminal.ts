@@ -1,5 +1,6 @@
 import type { TerminalExit, TerminalOutput } from "../shared/api"
 import { DaemonClient, type TerminalTarget } from "./daemon-client"
+import { processCwd } from "./process-cwd"
 
 export type { TerminalTarget }
 
@@ -21,7 +22,8 @@ type Emit = {
  */
 export class TerminalManager {
   private readonly client: DaemonClient
-  private readonly known = new Set<string>()
+  /** Every shell this run started, and its pid where the daemon said one. */
+  private readonly known = new Map<string, number | null>()
 
   constructor(emit: Emit) {
     this.client = new DaemonClient(emit)
@@ -33,9 +35,15 @@ export class TerminalManager {
     cols: number,
     rows: number
   ): Promise<string> {
-    const terminalId = await this.client.create(target, cols, rows)
-    this.known.add(terminalId)
-    return terminalId
+    const { id, pid } = await this.client.create(target, cols, rows)
+    this.known.set(id, pid)
+    return id
+  }
+
+  /** Where the shell is now, after whatever `cd` was typed into it. */
+  async cwd(terminalId: string): Promise<string | null> {
+    const pid = this.known.get(terminalId)
+    return pid ? processCwd(pid) : null
   }
 
   /** Forwards keystrokes. Unknown ids are ignored: the shell already exited. */
@@ -66,7 +74,7 @@ export class TerminalManager {
    */
   async killAll(): Promise<void> {
     await Promise.allSettled(
-      [...this.known].map((terminalId) => this.kill(terminalId))
+      [...this.known.keys()].map((terminalId) => this.kill(terminalId))
     )
   }
 }

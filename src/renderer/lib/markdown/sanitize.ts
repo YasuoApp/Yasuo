@@ -207,8 +207,8 @@ export function isAllowedAttribute(
  *
  * A relative URL is allowed: the markdown preview resolves a local picture
  * against the document's own directory and reads it in (`baseDir` on
- * `MarkdownView`) — a relative `href`, which has no picture to load, is a
- * link that goes nowhere, and so does nothing either way.
+ * `MarkdownView`), and a relative `href` is opened in the Explorer by the
+ * view's own click handler rather than followed (`lib/markdown/links.ts`).
  */
 export function isAllowedUrl(value: string): boolean {
   // Control characters and whitespace go first, because `java\nscript:` is how a

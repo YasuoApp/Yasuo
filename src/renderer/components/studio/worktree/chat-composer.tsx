@@ -30,6 +30,7 @@ import {
   SignalMedium,
   Square,
   Star,
+  Wallet,
   Check as CheckIcon,
 } from "lucide-react"
 
@@ -83,7 +84,12 @@ import {
 } from "@/lib/worktree-chat/command-text"
 import { attachedIn, imageTag, readImage } from "@/lib/worktree-chat/images"
 import { chatMentions, primeMentions } from "@/lib/worktree-chat/mentions"
-import { compact } from "@/lib/worktree-chat/usage"
+import { budgetLabel, compact, overBudget } from "@/lib/worktree-chat/usage"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
 import {
   bandOf,
   remainingOf,
@@ -222,6 +228,14 @@ export type ChatComposerHandle = {
   /** Holds pictures for the message and writes an `[Image #n]` at the caret
    * for each — see `lib/worktree-chat/images.ts`. */
   insertImages: (images: ChatImage[]) => void
+  /**
+   * Writes text at the caret, spaced off what is around it — a selection
+   * carried over from the dock's shell, fenced, with a question to follow. The
+   * same gesture `insertPaths` is, for something that is not a path.
+   */
+  insertText: (text: string) => void
+  /** Puts the caret in the field. */
+  focus: () => void
 }
 
 export function ChatComposer({
@@ -235,6 +249,7 @@ export function ChatComposer({
   attachRoot,
   folderId = null,
   contextWindow,
+  spentUsd = null,
   initialDraft = "",
   initialImages = NO_IMAGES,
   onLeave,
@@ -288,6 +303,12 @@ export function ChatComposer({
    * has ended — the meter is simply absent until then rather than drawn at zero.
    */
   contextWindow?: ChatWindow
+  /**
+   * What this chat has cost so far in USD, summed off its usage lines, or null
+   * for a chat with no priced turn yet — what the toolbar's budget control
+   * draws its spent-of-cap against. See `budgetUsd` on the options.
+   */
+  spentUsd?: number | null
   /**
    * What the field starts with: this chat's unsent draft, or a message written
    * *for* the user — the `Changes` pane's review, which `Ask AI to fix` puts
@@ -562,7 +583,12 @@ export function ChatComposer({
   // Rebuilt every render on purpose: it closes over the draft and the caret as
   // they stand, and a memoised one would type into the field as it was when the
   // pane last re-rendered.
-  useImperativeHandle(ref, () => ({ insertPaths, insertImages }))
+  useImperativeHandle(ref, () => ({
+    insertPaths,
+    insertImages,
+    insertText: insertAtCaret,
+    focus: () => field.current?.focus(),
+  }))
 
   /**
    * Sends, whatever the chat is doing.
@@ -795,6 +821,11 @@ export function ChatComposer({
                   onPick={(profileId) => onOptions({ ...options, profileId })}
                 />
               )}
+              <BudgetMenu
+                budgetUsd={options.budgetUsd ?? null}
+                spentUsd={spentUsd}
+                onPick={(budgetUsd) => onOptions({ ...options, budgetUsd })}
+              />
             </>
           )}
 
@@ -897,6 +928,7 @@ export function ToolbarButton({
   label,
   on,
   className,
+  children,
   ...rest
 }: {
   icon: ReactNode
@@ -904,6 +936,8 @@ export function ToolbarButton({
   /** A toggle that is on, or a picker with something chosen: either way the
    * control stops being the muted grey of one nobody has touched. */
   on?: boolean
+  /** After the label — the budget button's meter, and nothing else so far. */
+  children?: ReactNode
 } & ComponentProps<"button">) {
   return (
     <button
@@ -920,6 +954,7 @@ export function ToolbarButton({
     >
       {icon}
       {label}
+      {children}
     </button>
   )
 }
@@ -1478,6 +1513,160 @@ function Marks({
         )
       )}
     </>
+  )
+}
+
+/** The caps a click sets without typing — the figures somebody means by "a
+ * small chat" and "an afternoon", not a scale. */
+const BUDGET_PRESETS = [1, 5, 20, 50]
+
+/**
+ * A ceiling on what this chat may spend — `budgetUsd` on the options.
+ *
+ * **A warning and not a lock**, which is why it is in the toolbar beside the
+ * model rather than in the permission menu: the figure it is held against is
+ * the CLI's own estimate, and refusing a message over an estimate is worse
+ * than saying loudly that the chat has cost more than planned. Main writes an
+ * `error` line into the chat the moment a turn takes it past the cap; this
+ * button is the same fact kept on screen, as `$spent / $cap` over a meter that
+ * fills, so the question "how far through the budget is this" is answered
+ * before the line lands and not only after.
+ *
+ * A popover rather than a dropdown menu because the field in it is typed into:
+ * a menu closes on the keystrokes a number is made of.
+ */
+function BudgetMenu({
+  budgetUsd,
+  spentUsd,
+  onPick,
+}: {
+  budgetUsd: number | null
+  spentUsd: number | null
+  onPick: (budgetUsd: number | null) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [typed, setTyped] = useState("")
+  const over = overBudget(spentUsd, budgetUsd)
+  const fraction =
+    budgetUsd === null
+      ? 0
+      : Math.min(1, Math.max(0, (spentUsd ?? 0) / budgetUsd))
+
+  function pick(next: number | null) {
+    onPick(next)
+    setTyped("")
+    setOpen(false)
+  }
+
+  function commitTyped() {
+    const value = Number(typed)
+    if (!Number.isFinite(value) || value <= 0) return
+    pick(value)
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        render={
+          <ToolbarButton
+            icon={<Wallet />}
+            label={
+              budgetUsd === null ? "Budget" : budgetLabel(spentUsd, budgetUsd)
+            }
+            title={
+              over
+                ? "Over budget"
+                : budgetUsd === null
+                  ? "A ceiling on what this chat may spend"
+                  : "What this chat has spent, of its ceiling"
+            }
+            aria-label={
+              over
+                ? `Over budget: ${budgetLabel(spentUsd, budgetUsd!)}`
+                : undefined
+            }
+            on={budgetUsd !== null}
+            className={cn(over && "text-destructive", "tabular-nums")}
+          >
+            {/* The meter sits after the label (`ToolbarButton` draws the
+                label after the icon and this after that): it **fills**, since
+                the label counts up — the window meter beside it drains for the
+                opposite reason. */}
+            {budgetUsd !== null && (
+              <span
+                aria-hidden
+                className="ml-0.5 h-1 w-6 overflow-hidden rounded-full bg-border"
+              >
+                <span
+                  className="block h-full rounded-full bg-current transition-[width]"
+                  style={{ width: `${fraction * 100}%` }}
+                />
+              </span>
+            )}
+          </ToolbarButton>
+        }
+      />
+      <PopoverContent align="start" className="w-56 gap-2 p-2">
+        <div className="px-0.5 text-[0.7rem] text-muted-foreground">
+          {budgetUsd === null
+            ? "Warn once this chat's estimate passes…"
+            : `${budgetLabel(spentUsd, budgetUsd)} so far`}
+        </div>
+        <div className="grid grid-cols-4 gap-1">
+          {BUDGET_PRESETS.map((preset) => (
+            <button
+              key={preset}
+              type="button"
+              onClick={() => pick(preset)}
+              className={cn(
+                "rounded-md border px-1 py-1 text-xs tabular-nums transition-colors hover:bg-accent",
+                budgetUsd === preset
+                  ? "border-foreground/40 text-foreground"
+                  : "border-border text-muted-foreground hover:text-foreground"
+              )}
+            >
+              ${preset}
+            </button>
+          ))}
+        </div>
+        <form
+          className="flex items-center gap-1"
+          onSubmit={(event) => {
+            event.preventDefault()
+            commitTyped()
+          }}
+        >
+          <span className="text-xs text-muted-foreground">$</span>
+          <input
+            type="number"
+            min={0.01}
+            step={0.01}
+            inputMode="decimal"
+            value={typed}
+            onChange={(event) => setTyped(event.target.value)}
+            placeholder={budgetUsd === null ? "Amount" : `${budgetUsd}`}
+            aria-label="Budget in dollars"
+            className="h-6 min-w-0 flex-1 rounded-md border border-input bg-transparent px-1.5 text-xs tabular-nums outline-none focus-visible:border-ring"
+          />
+          <button
+            type="submit"
+            disabled={!(Number(typed) > 0)}
+            className="h-6 rounded-md border border-border px-2 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+          >
+            Set
+          </button>
+        </form>
+        {budgetUsd !== null && (
+          <button
+            type="button"
+            onClick={() => pick(null)}
+            className="rounded-md px-1.5 py-1 text-left text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            No cap
+          </button>
+        )}
+      </PopoverContent>
+    </Popover>
   )
 }
 

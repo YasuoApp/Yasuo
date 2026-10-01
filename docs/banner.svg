@@ -182,7 +182,7 @@
     </g>
     <text x="1216" y="171" text-anchor="end" font-size="10.5" letter-spacing="1.4" fill="#8C83AC">~/work/web</text>
 
-    <!-- the tab strip: the project's chats, its board, its diff. The chat's
+    <!-- the tab strip: the project's chats, a file, its diff. The chat's
          tab is the lit one, because a chat is what the pane below draws. -->
     <g>
       <rect x="824" y="194" width="88" height="28" rx="8" fill="#7C5CFA" fill-opacity="0.24" stroke="#7C5CFA" stroke-opacity="0.55"/>
@@ -195,7 +195,7 @@
 
       <rect x="1004" y="194" width="70" height="28" rx="8" fill="#8FB4FF" fill-opacity="0.13" stroke="#8FB4FF" stroke-opacity="0.34"/>
       <rect x="1013" y="205" width="5" height="5" rx="1.2" fill="#B7D0FF"/>
-      <text x="1024" y="212" font-size="11" fill="#C9C2E4">Board</text>
+      <text x="1024" y="212" font-size="11" fill="#C9C2E4">auth.ts</text>
 
       <rect x="1080" y="194" width="80" height="28" rx="8" fill="#C4B5FD" fill-opacity="0.13" stroke="#C4B5FD" stroke-opacity="0.34"/>
       <rect x="1089" y="205" width="5" height="5" rx="1.2" fill="#DACDFF"/>
@@ -269,6 +269,6 @@
   <!-- ── caption ───────────────────────────────────────────────────── -->
   <path d="M300 578 H980" stroke="url(#rule)" stroke-width="1"/>
   <text x="640" y="606" text-anchor="middle" font-size="13.5" fill="#A99FCB" letter-spacing="0.4">
-    <tspan fill="#E9E4FF" font-weight="600">Chats · Board · Changes</tspan><tspan> — one project's work, in the window its files are already open in.</tspan>
+    <tspan fill="#E9E4FF" font-weight="600">Chats · Changes · Commits</tspan><tspan> — one project's work, in the window its files are already open in.</tspan>
   </text>
 </svg>

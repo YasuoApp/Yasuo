@@ -1,4 +1,5 @@
 import type { AssistantMessage } from "@shared/api"
+import { dayBreak, dayLabel } from "./since"
 
 /**
  * A turn's working, folded away from its answer.
@@ -160,6 +161,29 @@ export function blockOf(blocks: ChatBlock[], lineId: string): string | null {
     if (block.lines.some((line) => line.id === lineId)) return block.id
   }
   return null
+}
+
+/**
+ * The divider's label where two consecutive blocks fall on different local
+ * days, or null where no divider belongs between them.
+ *
+ * Read off each block's **first** line: a fold holds a run of lines, and the
+ * run began when its first one did. Null when either side has no stamp — see
+ * `dayBreak` — so a transcript that spans the day the field was added gets no
+ * divider claiming a jump it cannot date.
+ */
+export function dayDividerBetween(
+  prev: ChatBlock,
+  next: ChatBlock,
+  now: number = Date.now()
+): string | null {
+  const after = firstStampOf(next)
+  if (!after || !dayBreak(firstStampOf(prev), after)) return null
+  return dayLabel(after, now) || null
+}
+
+function firstStampOf(block: ChatBlock): string | undefined {
+  return block.kind === "line" ? block.line.at : block.lines[0]?.at
 }
 
 /** One row of an *open* fold: a run of tool calls that folds again, or a line

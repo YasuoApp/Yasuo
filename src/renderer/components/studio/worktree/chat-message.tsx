@@ -3,6 +3,7 @@ import {
   Archive,
   Brain,
   Check,
+  ChevronRight,
   Circle,
   CircleCheck,
   CircleDot,
@@ -19,6 +20,7 @@ import { iconFor } from "@/lib/files/icons"
 import { nameOf } from "@/lib/files/paths"
 import { cn } from "@/lib/utils"
 import { isAgentTool } from "@/lib/worktree-chat/activity"
+import { dateTimeOf, timeOf } from "@/lib/worktree-chat/since"
 import { usageDetail, usageLine } from "@/lib/worktree-chat/usage"
 import { compactLine } from "@/lib/worktree-chat/window"
 import { MarkdownView } from "../markdown-view"
@@ -61,8 +63,24 @@ export function ChatMessage({
          which are the two the find searches, and at every depth: a message
          inside an open fold is drawn by this same component. */
       <div data-line={of.id} className="group relative ml-4">
-        <div className="rounded-lg rounded-br-sm bg-accent/60 py-1.5 pr-8 pl-2.5 text-xs">
+        <div className="relative rounded-lg rounded-br-sm bg-accent/60 py-1.5 pr-8 pl-2.5 text-xs">
           <MentionText text={of.text} />
+          {/* In the corner the copy button's margin already leaves, and only
+              on hover: a stamp on every bubble is a column of clocks nobody
+              asked for, where one under the cursor answers "when was this".
+              Nothing for a line written before stamps existed. */}
+          {of.at && timeOf(of.at) && (
+            <time
+              dateTime={of.at}
+              title={dateTimeOf(of.at)}
+              className={cn(
+                "absolute right-1.5 bottom-0.5 text-[0.6rem] text-muted-foreground tabular-nums",
+                "opacity-0 transition-opacity select-none group-hover:opacity-100"
+              )}
+            >
+              {timeOf(of.at)}
+            </time>
+          )}
         </div>
         <CopyMessage text={of.text} />
         {/*
@@ -86,18 +104,7 @@ export function ChatMessage({
   }
 
   if (of.role === "thinking") {
-    return (
-      <div className="flex items-baseline gap-1.5 px-1 text-[0.7rem] text-muted-foreground">
-        <Brain className="size-3 shrink-0 translate-y-0.5" />
-        <span className="shrink-0 font-medium">Thinking</span>
-        {/* One line of it, in a box of its own. The whole of a reasoning block
-            is paragraphs, and a chat that ran it out in full would be the
-            model's working louder than its answer. */}
-        <span className="min-w-0 truncate rounded bg-muted/60 px-1.5 py-0.5 opacity-80">
-          {of.text}
-        </span>
-      </div>
-    )
+    return <ThinkingRow of={of} />
   }
 
   if (of.role === "tool") {
@@ -180,10 +187,73 @@ export function ChatMessage({
   // block in a reply reads the way it does in a file.
   return (
     // `data-line` for the same reason as the user's line above: this is the
-    // other half of what `⌘F` searches.
-    <div data-line={of.id} className="group relative">
+    // other half of what `⌘F` searches. The stamp is the hover line alone — a
+    // reply has no corner a clock would sit in without sitting on a word.
+    <div data-line={of.id} title={stampOf(of)} className="group relative">
       <MarkdownView source={of.text} className="pr-8 pl-1 text-xs" />
       <CopyMessage text={of.text} />
+    </div>
+  )
+}
+
+/** The full local date-time for a hover line, or nothing for a line written
+ * before `at` existed — `undefined` so no `title` attribute is drawn at all. */
+function stampOf(line: AssistantMessage): string | undefined {
+  return line.at ? dateTimeOf(line.at) || undefined : undefined
+}
+
+/**
+ * The model's reasoning: one truncated line that opens onto the whole of it.
+ *
+ * Folded by default for the reason the activity fold is — a reasoning block is
+ * paragraphs, and a chat that ran it out in full would be the model's working
+ * louder than its answer. It opens because the one-liner is sometimes the
+ * sentence somebody wants the rest of: why it chose the file it chose is in
+ * here and nowhere else. Open state is the row's own, like a fold's.
+ *
+ * Capped and scrolling rather than unbounded: a long think opened under a reply
+ * must not push the reply off the screen.
+ */
+function ThinkingRow({
+  of,
+}: {
+  of: Extract<AssistantMessage, { role: "thinking" }>
+}) {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <div className="px-1 text-[0.7rem] text-muted-foreground">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+        title={stampOf(of)}
+        className={cn(
+          "flex w-full items-baseline gap-1.5 rounded text-left outline-none",
+          "hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
+        )}
+      >
+        <ChevronRight
+          className={cn(
+            "size-3 shrink-0 translate-y-0.5 transition-transform",
+            open && "rotate-90"
+          )}
+        />
+        <Brain className="size-3 shrink-0 translate-y-0.5" />
+        <span className="shrink-0 font-medium">Thinking</span>
+        {!open && (
+          <span className="min-w-0 truncate rounded bg-muted/60 px-1.5 py-0.5 opacity-80">
+            {of.text}
+          </span>
+        )}
+      </button>
+      {open && (
+        // Under the label and off the chevron, the way a fold's rows are: this
+        // is the row opened, not a second row.
+        <div className="mt-1 ml-2.5 max-h-64 overflow-auto border-l pl-2.5 leading-relaxed break-words whitespace-pre-wrap opacity-80">
+          {of.text}
+        </div>
+      )}
     </div>
   )
 }
@@ -288,6 +358,7 @@ function ToolRow({ of }: { of: Extract<AssistantMessage, { role: "tool" }> }) {
           type="button"
           aria-expanded={open}
           onClick={() => setOpen(!open)}
+          title={stampOf(of)}
           className={cn(TOOL_ROW, "hover:bg-muted/60 hover:text-foreground")}
         >
           {/* The tool's own mark on both kinds of row, openable or not: a
@@ -298,7 +369,7 @@ function ToolRow({ of }: { of: Extract<AssistantMessage, { role: "tool" }> }) {
           <ToolLine of={of} said={said} agent={agent} open={open} />
         </button>
       ) : (
-        <div className={TOOL_ROW}>
+        <div className={TOOL_ROW} title={stampOf(of)}>
           {toolMark(of.name, "size-3 shrink-0 translate-y-0.5")}
           <ToolLine of={of} said={said} agent={agent} />
         </div>

@@ -1,4 +1,5 @@
 import {
+  Fragment,
   useCallback,
   useEffect,
   useMemo,
@@ -6,7 +7,7 @@ import {
   useState,
   type DragEvent,
 } from "react"
-import { Archive, Search } from "lucide-react"
+import { Archive, PictureInPicture2, Search } from "lucide-react"
 
 import {
   chatOptions,
@@ -18,6 +19,7 @@ import { isStudioShortcut } from "@/lib/shortcuts"
 import { useStudio } from "@/lib/store"
 import { cn } from "@/lib/utils"
 import { blockOf, blocksOf } from "@/lib/worktree-chat/activity"
+import { useComposerBus } from "@/lib/worktree-chat/composer-bus"
 import { clearFind, paintFind, rectOfHit } from "@/lib/worktree-chat/find-marks"
 import { readImage } from "@/lib/worktree-chat/images"
 import { hitAt, hitsIn } from "@/lib/worktree-chat/search"
@@ -28,7 +30,7 @@ import { IconButton } from "../icon-button"
 import { ChatAsk } from "./chat-ask"
 import { ChatFind } from "./chat-find"
 import { ChatComposer, type ChatComposerHandle } from "./chat-composer"
-import { ChatActivity } from "./chat-activity"
+import { ChatActivity, DayDivider } from "./chat-activity"
 import { ChatMessage } from "./chat-message"
 import { ChatSkeleton, ChatTranscriptSkeleton } from "./chat-skeleton"
 import { WorktreeWelcome } from "./worktree-welcome"
@@ -50,13 +52,24 @@ import { WorktreeWelcome } from "./worktree-welcome"
  * above it are `lib/panels.ts`'s, gathered under the project when grouping is
  * switched on.
  */
-export function WorktreeChatPane() {
+export function WorktreeChatPane({
+  chatId,
+  popped = false,
+}: {
+  /**
+   * One chat rather than the strip's selection — the popped-out window, which
+   * draws the chat it was opened for whatever the store has selected.
+   */
+  chatId?: string
+  popped?: boolean
+} = {}) {
   const chats = useWorktreeChats((state) => state.chats)
   const selectedId = useWorktreeChats((state) => state.selectedId)
   const openIds = useWorktreeChats((state) => state.openIds)
 
-  const shown =
-    selectedId && openIds.includes(selectedId)
+  const shown = chatId
+    ? chats.find((chat) => chat.id === chatId)
+    : selectedId && openIds.includes(selectedId)
       ? chats.find((chat) => chat.id === selectedId)
       : undefined
 
@@ -106,6 +119,7 @@ export function WorktreeChatPane() {
       // `Edits` over a turn that ran as a plan is the one disagreement worth
       // ruling out.
       options={chatOptions(shown.options)}
+      popped={popped}
     />
   )
 }
@@ -125,37 +139,6 @@ const placeholderFor = (permission: ChatPermission, where: string): string =>
     : permission === "read"
       ? `Ask about ${where}…`
       : `Ask to make changes in ${where}…`
-
-/**
- * The line under the composer: what this chat's next turn may do, in the words
- * somebody would want to have read before it ran.
- *
- * The last two say **where**, and that is the point of them. There was a second
- * wording for a chat in a `git worktree` checkout — "in this branch only",
- * which is the isolation argument — and it does not hold here: the directory
- * *is* the branch the user has checked out, so the caption says so rather than
- * borrowing a reassurance. See `SYSTEM_PROMPT` in `main/worktree-chat.ts`,
- * which tells the model the same thing.
- */
-function captionFor(permission: ChatPermission): string | null {
-  switch (permission) {
-    case "plan":
-      return "Plan mode: this turn reads and changes nothing"
-    case "read":
-      return "Read only: this turn reads and changes nothing"
-    case "ask":
-      return "Like the claude CLI: anything your settings do not allow will ask you"
-    // Nothing for `edits`: it is the mode a chat is normally in, so its caption
-    // was under the composer of every chat all day saying what the toolbar
-    // above it already says. The modes that still speak are the ones somebody
-    // would be surprised by — the two that refuse, and the one that asks
-    // nothing at all.
-    case "edits":
-      return null
-    case "full":
-      return "Full access: nothing is asked, in this project's own working tree"
-  }
-}
 
 /**
  * Where each chat was left reading, by chat id.
@@ -197,12 +180,15 @@ function Conversation({
   title,
   place,
   options,
+  popped = false,
 }: {
   chatId: string
   title: string
   /** Null once the checkout or project a chat names has gone. */
   place: ChatPlace | null
   options: WorktreeChatOptions
+  /** Drawn inside a chat's own window rather than the studio's pane. */
+  popped?: boolean
 }) {
   const messages = useWorktreeChats((state) => state.messages[chatId])
   const reading = useWorktreeChats((state) => state.reading.includes(chatId))
@@ -233,6 +219,9 @@ function Conversation({
    */
   const seeded = useWorktreeChats((state) => state.drafts[chatId])
   const seededImages = useWorktreeChats((state) => state.draftImages[chatId])
+  /** Not written down yet — nothing on disk for a second window to read, so
+   * the pop-out button waits for the first message. */
+  const unsaved = useWorktreeChats((state) => state.unsaved.includes(chatId))
   const keepDraft = useWorktreeChats((state) => state.keepDraft)
   const clearDraft = useWorktreeChats((state) => state.clearDraft)
 
@@ -254,6 +243,24 @@ function Conversation({
   const box = useRef<HTMLDivElement>(null)
   const content = useRef<HTMLDivElement>(null)
   const composer = useRef<ChatComposerHandle>(null)
+
+  /*
+   * Something left for this chat's composer by the dock — a run of terminal
+   * output, a screenshot of the preview. Typed in here rather than where it was
+   * picked up, because this is the only component holding the field's handle.
+   * See `composer-bus.ts`.
+   */
+  const delivery = useComposerBus((state) => state.pending)
+  useEffect(() => {
+    if (!delivery || delivery.chatId !== chatId) return
+    const taken = useComposerBus.getState().take(chatId)
+    if (!taken) return
+    if (taken.images && taken.images.length > 0) {
+      composer.current?.insertImages(taken.images)
+    }
+    if (taken.text) composer.current?.insertText(taken.text)
+    composer.current?.focus()
+  }, [delivery, chatId])
 
   /**
    * `⌘F`, and what it has found — null while the bar is shut.
@@ -658,6 +665,19 @@ function Conversation({
         >
           <Search className="size-3.5" />
         </IconButton>
+        {/* The same chat in a window of its own, for the corner of another
+            editor's screen — see `openChatWindow`. Not shown inside that
+            window, which has no studio to pop out of. */}
+        {!popped && !unsaved && (
+          <IconButton
+            label="Open in its own window"
+            side="bottom"
+            onClick={() => void window.desktop.openChatWindow(chatId)}
+            className="size-6"
+          >
+            <PictureInPicture2 className="size-3.5" />
+          </IconButton>
+        )}
       </header>
 
       {/* The transcript and what hangs over it, in a box of their own so the
@@ -716,7 +736,7 @@ function Conversation({
           {reading ? (
             <div
               ref={content}
-              className="mx-auto flex w-full max-w-2xl flex-col gap-3"
+              className="transcript-gap mx-auto flex w-full max-w-2xl flex-col"
             >
               <ChatTranscriptSkeleton />
             </div>
@@ -729,9 +749,9 @@ function Conversation({
           ) : (
             <div
               ref={content}
-              className="mx-auto flex w-full max-w-2xl flex-col gap-3"
+              className="transcript-gap mx-auto flex w-full max-w-2xl flex-col"
             >
-              {blocks.map((block) => (
+              {blocks.map((block, index) => (
                 /*
                  * A wrapper per block, for the one thing a block cannot carry
                  * itself: where it is. The palette's search opens a chat *at* a
@@ -739,43 +759,50 @@ function Conversation({
                  * the ring below — need a node to find and mark. Drawn for every
                  * block rather than only the found one, so the transcript's
                  * layout does not change under a reader when one is.
+                 *
+                 * The day divider sits between two blocks rather than inside
+                 * either, so neither block's position moves when one appears.
                  */
-                <div
-                  key={block.id}
-                  data-block={block.id}
-                  /*
-                   * A match is marked on the **words**, not on the block — see
-                   * `paintFind`, which paints them into the highlight registry.
-                   *
-                   * The ring is what is left of that for the one case the words
-                   * cannot answer: a **fold**. A turn's working is collapsed, so a
-                   * message the model wrote mid-turn has no text on screen to
-                   * paint — and a match that is counted, scrolled to and then
-                   * invisible is worse than one that was never counted. So a fold
-                   * holding a match says so, and says harder when it is the one
-                   * the arrows are on. An open fold gets both, which is the honest
-                   * answer for a container: the ring is where, the highlight is
-                   * what.
-                   */
-                  className={cn(
-                    "rounded-lg",
-                    block.kind === "activity" &&
-                      foundBlocks.has(block.id) &&
-                      "ring-1 ring-ring/25 ring-offset-4 ring-offset-background",
-                    block.kind === "activity" &&
-                      block.id === currentBlock &&
-                      "ring-2 ring-ring/70"
+                <Fragment key={block.id}>
+                  {index > 0 && (
+                    <DayDivider before={blocks[index - 1]!} after={block} />
                   )}
-                >
-                  {block.kind === "activity" ? (
-                    <ChatActivity of={block} />
-                  ) : (
-                    <ChatMessage
-                      of={block.line}
-                      queued={queued?.includes(block.line.id) === true}
-                    />
-                  )}
-                </div>
+                  <div
+                    data-block={block.id}
+                    /*
+                     * A match is marked on the **words**, not on the block — see
+                     * `paintFind`, which paints them into the highlight registry.
+                     *
+                     * The ring is what is left of that for the one case the words
+                     * cannot answer: a **fold**. A turn's working is collapsed, so a
+                     * message the model wrote mid-turn has no text on screen to
+                     * paint — and a match that is counted, scrolled to and then
+                     * invisible is worse than one that was never counted. So a fold
+                     * holding a match says so, and says harder when it is the one
+                     * the arrows are on. An open fold gets both, which is the honest
+                     * answer for a container: the ring is where, the highlight is
+                     * what.
+                     */
+                    className={cn(
+                      "rounded-lg",
+                      block.kind === "activity" &&
+                        foundBlocks.has(block.id) &&
+                        "ring-1 ring-ring/25 ring-offset-4 ring-offset-background",
+                      block.kind === "activity" &&
+                        block.id === currentBlock &&
+                        "ring-2 ring-ring/70"
+                    )}
+                  >
+                    {block.kind === "activity" ? (
+                      <ChatActivity of={block} />
+                    ) : (
+                      <ChatMessage
+                        of={block.line}
+                        queued={queued?.includes(block.line.id) === true}
+                      />
+                    )}
+                  </div>
+                </Fragment>
               ))}
               {/* At the end of the transcript rather than over it: it is the turn
                 asking, so it belongs where the turn had got to. */}
@@ -872,40 +899,25 @@ function Conversation({
             // store's to say — see `agentCommands`.
             folderId={place?.folderId ?? null}
             contextWindow={contextWindow}
+            // What the chat has cost so far, for the toolbar's budget control
+            // — the same sum the line under the field draws.
+            spentUsd={total?.costUsd ?? null}
           />
 
-          {/* Said plainly rather than left implicit: a turn here edits files
-              and runs commands without asking, in the working tree the user
-              has open. It has to follow the permission rather than describe the
-              usual one — a caption that lies about the turn is worse than none,
-              in either direction. */}
-          <div className="flex items-baseline justify-between gap-3 px-1 text-[0.7rem]">
-            <p
-              className={cn(
-                "min-w-0",
-                options.permission === "full"
-                  ? "text-destructive"
-                  : "text-muted-foreground"
-              )}
-            >
-              {ask
-                ? "The turn is waiting on your answer. Stop ends it instead."
-                : captionFor(options.permission)}
-            </p>
-
-            {/* Beside the caption rather than at the end of the transcript: the
-                per-turn lines are up there, and what belongs here is the one
-                number somebody compares against `/cost` in a terminal — this
-                chat, so far. */}
-            {line && (
+          {/* Under the composer rather than at the end of the transcript: the
+              per-turn lines are up there, and what belongs here is the one
+              number somebody compares against `/cost` in a terminal — this
+              chat, so far. */}
+          {line && (
+            <div className="flex justify-end px-1 text-[0.7rem]">
               <p
                 title={detail}
                 className="shrink-0 text-muted-foreground/80 tabular-nums"
               >
                 {line}
               </p>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

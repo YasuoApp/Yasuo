@@ -82,3 +82,101 @@ export function duration(ms: number): string {
   if (minutes > 0) return `${minutes}m${seconds}s`
   return `${seconds}s`
 }
+
+/**
+ * When a line was written, in the corner of its bubble: `14:05`.
+ *
+ * Local time and twenty-four hours, with no date: the date is the divider's job
+ * (`dayLabel`) and the bubble's corner has room for five characters. Built from
+ * the parts rather than `toLocaleTimeString`, which on some locales adds the
+ * seconds or an `AM` the corner has no room for.
+ *
+ * Empty for a line with no readable `at`, which is every line written before
+ * the field existed — `NaN:NaN` would read as the clock being broken.
+ */
+export function timeOf(iso: string): string {
+  const at = new Date(iso)
+  if (Number.isNaN(at.getTime())) return ""
+  return `${pad(at.getHours())}:${pad(at.getMinutes())}`
+}
+
+/** The same moment in full, for the hover line: the local date and time in the
+ * machine's own locale, since a tooltip is read rather than scanned. */
+export function dateTimeOf(iso: string): string {
+  const at = new Date(iso)
+  if (Number.isNaN(at.getTime())) return ""
+  return at.toLocaleString(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  })
+}
+
+/**
+ * The day a line fell on, as the divider between days says it: `Today`,
+ * `Yesterday`, or `Mon 29 Sep` — with the year on the end only once it is not
+ * this one, which is the one time it says anything.
+ *
+ * Local calendar days, which is why the comparison is on date parts rather than
+ * on 24-hour spans: a line at 23:50 and one at 00:10 are ten minutes apart and
+ * on different days, and the divider is about the day.
+ *
+ * English names rather than the locale's, for the reason `since` is not
+ * `Intl.RelativeTimeFormat`: the label is three short tokens in a thin rule,
+ * and a locale's long form does not fit the rule.
+ */
+export function dayLabel(iso: string, now: number = Date.now()): string {
+  const at = new Date(iso)
+  if (Number.isNaN(at.getTime())) return ""
+  const today = new Date(now)
+  if (sameDay(at, today)) return "Today"
+  if (sameDay(at, new Date(now - DAY))) return "Yesterday"
+  const label = `${WEEKDAYS[at.getDay()]} ${at.getDate()} ${MONTHS[at.getMonth()]}`
+  return at.getFullYear() === today.getFullYear()
+    ? label
+    : `${label} ${at.getFullYear()}`
+}
+
+/**
+ * Whether a divider belongs between two lines: both are stamped, and the stamps
+ * fall on different local days.
+ *
+ * False when either stamp is missing rather than treating the missing one as a
+ * day of its own — a transcript written before `at` existed has none on its
+ * older lines, and a divider between "no day" and today would say the chat
+ * jumped a day it did not.
+ */
+export function dayBreak(prev?: string, next?: string): boolean {
+  if (!prev || !next) return false
+  const a = new Date(prev)
+  const b = new Date(next)
+  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return false
+  return !sameDay(a, b)
+}
+
+function sameDay(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  )
+}
+
+function pad(part: number): string {
+  return part.toString().padStart(2, "0")
+}
+
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+const MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+]

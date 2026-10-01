@@ -18,10 +18,10 @@ import {
   isStudioShortcut,
   isTerminalShortcut,
 } from "@/lib/shortcuts"
+import { applyAppearance } from "@/lib/appearance"
 import { useSettings } from "@/lib/settings"
 import { useDock, DOCK_STRIP_HEIGHT } from "@/lib/dock"
 import { useStudio, RAIL_WIDTH, type Pane } from "@/lib/store"
-import { useRun } from "@/lib/run/store"
 import { useProjects } from "@/lib/projects"
 import { useWorkspaceSearch } from "@/lib/workspace-search"
 import { useClaudeProfiles } from "@/lib/worktree-chat/claude-profiles"
@@ -37,7 +37,9 @@ import { ChangesPane } from "./files/changes-pane"
 import { FileWorkspace } from "./files/file-workspace"
 import { AddFolderDialog } from "./add-folder-dialog"
 import { CommandPalette } from "./command-palette"
+import { CostDashboard } from "./cost-dashboard"
 import { NothingOpen } from "./nothing-open"
+import { OnboardingTour } from "./onboarding-tour"
 import { SettingsDialog } from "./settings-dialog"
 import { SystemBar } from "./system-bar"
 import {
@@ -89,18 +91,29 @@ export function Studio() {
     void useSettings.getState().restore()
     void useFiles.getState().restore()
     void useProjects.getState().restore()
-    void useRun.getState().restore()
     void useWorktreeChats.getState().refresh()
     void useClaudeProfiles.getState().refresh()
   }, [])
 
-  // A run outlives the dock being closed and the tab being switched away from,
-  // so its output is subscribed to here rather than in the panel.
-  useEffect(() => useRun.getState().listen(), [])
-
   // A chat's turn runs in the main process and outlives the
   // pane being switched away from, so its lines are subscribed to here.
   useEffect(() => useWorktreeChats.getState().listen(), [])
+
+  // The appearance settings, written onto `<html>` as they change — here
+  // rather than in the dialog that edits them, so a restored setting is
+  // applied before anybody has opened Settings.
+  useEffect(() => {
+    applyAppearance(useSettings.getState())
+    return useSettings.subscribe(applyAppearance)
+  }, [])
+
+  /** The first-launch tour: once the launch screen has gone and the settings
+   * have said whether it has been seen. Read here rather than in `Workbench`
+   * because `launch` is this component's. */
+  const settingsLoaded = useSettings((state) => state.loaded)
+  const onboarded = useSettings((state) => state.onboarded)
+  const setOnboarded = useSettings((state) => state.setOnboarded)
+  const touring = launch === "done" && settingsLoaded && !onboarded
 
   /*
    * The manifest is a small file on a local disk and usually lands well inside
@@ -144,6 +157,7 @@ export function Studio() {
     <>
       {launch !== "splash" && <Workbench />}
       {launch !== "done" && <Splash closing={launch === "closing"} />}
+      {touring && <OnboardingTour onDone={() => setOnboarded(true)} />}
       {/* The launch screen has nothing clickable, so the top of the window is
           its drag handle. Owned here rather than by the splash because it has to
           outlive it: unmounting a drag region leaves macOS holding it, over the
@@ -163,10 +177,12 @@ function Workbench() {
   /** The Settings dialog — the application menu's ⌘, and nothing else, since
    * a preference is not a thing the workspace holds a row for. */
   const [settingsOpen, setSettingsOpen] = useState(false)
-  /** Whether the dock — `Run` and `Terminal` — is on screen: the button in the
-   * header, and the chevron in the dock's own strip. */
+  /** The cost dashboard — the rail's `Costs` button. */
+  const [costsOpen, setCostsOpen] = useState(false)
+  /** Whether the dock's terminals are on screen: the rail's button, `⌃\``, and
+   * the chevron in the dock's own strip. */
   const dockOpen = useDock((state) => state.open)
-  const toggleDockTab = useDock((state) => state.toggleTab)
+  const toggleDock = useDock((state) => state.toggle)
   /** The left column, and its toggle in the title bar. */
   const projectSidebar = useProjects((state) => state.sidebar)
   const toggleProjectSidebar = useProjects((state) => state.toggleSidebar)
@@ -202,9 +218,9 @@ function Workbench() {
         if (command === "add-folder") setAdding(true)
         if (command === "open-settings") setSettingsOpen(true)
         if (command === "toggle-sidebar") toggleSidebar()
-        if (command === "toggle-terminal") toggleDockTab("terminal")
+        if (command === "toggle-terminal") toggleDock()
       }),
-    [toggleSidebar, toggleDockTab]
+    [toggleSidebar, toggleDock]
   )
 
   // The tree follows the disk for as long as the workbench is up — here rather
@@ -316,29 +332,26 @@ function Workbench() {
   }, [])
 
   /*
-   * `⌃\`` — the dock's Terminal tab, the editors' key for it, and the View
+   * `⌃\`` — the dock's terminals, the editors' key for them, and the View
    * menu's item.
    *
    * On the capture phase for the reason the others are, and one more: this is
    * the only one of them meant to work *inside* the terminal, and xterm would
-   * otherwise hand the key to the pty before the page had it. Showing the tab
-   * when it is not the one on screen, hiding the dock when it is — that is
-   * `toggleTab`, not `toggle`, so the key reaches the terminal from the Run tab
-   * in one press rather than two.
+   * otherwise hand the key to the pty before the page had it.
    */
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (!isTerminalShortcut(event)) return
 
       event.preventDefault()
-      toggleDockTab("terminal")
+      toggleDock()
     }
 
     window.addEventListener("keydown", onKeyDown, { capture: true })
     return () => {
       window.removeEventListener("keydown", onKeyDown, { capture: true })
     }
-  }, [toggleDockTab])
+  }, [toggleDock])
 
   /*
    * The panel on screen, and the notice that stands in for it.
@@ -354,7 +367,7 @@ function Workbench() {
    * strip off the edge of the window with it.
    */
   const paneContent = (
-    <div className="flex h-full min-h-0 min-w-0 flex-col">
+    <div className="flex h-full min-h-0 min-w-0 flex-col" data-tour="composer">
       {/* The strip inside the tab on screen, when the panel is grouping its
           tabs under the folder each belongs to — between the workbench's own
           strip and the pane. */}
@@ -412,7 +425,10 @@ function Workbench() {
       <WindowTitleBar />
 
       <div className="flex min-h-0 flex-1 gap-1.5 px-1.5">
-        <NavRail onOpenSettings={() => setSettingsOpen(true)} />
+        <NavRail
+          onOpenSettings={() => setSettingsOpen(true)}
+          onOpenCosts={() => setCostsOpen(true)}
+        />
 
         <ResizablePanelGroup
           orientation="horizontal"
@@ -583,7 +599,10 @@ function Workbench() {
                   }
                 }}
               >
-                <div className={cn(CARD, "@container relative")}>
+                <div
+                  className={cn(CARD, "@container relative")}
+                  data-tour="explorer"
+                >
                   {/*
                     Hidden rather than unmounted while the column is shut: the
                     tree is what watches the checkout's changes for the count on
@@ -635,6 +654,8 @@ function Workbench() {
       {settingsOpen && (
         <SettingsDialog onClose={() => setSettingsOpen(false)} />
       )}
+
+      {costsOpen && <CostDashboard onClose={() => setCostsOpen(false)} />}
     </div>
   )
 }
@@ -698,6 +719,7 @@ function WindowTitleBar() {
       <button
         type="button"
         onClick={() => usePalette.getState().setOpen(true)}
+        data-tour="palette"
         className="no-drag flex h-7 w-[min(28rem,36vw)] items-center gap-2 rounded-md bg-background px-2.5 text-xs text-muted-foreground outline -outline-offset-1 outline-border transition-colors hover:text-foreground"
       >
         <Search className="size-3.5 shrink-0" />

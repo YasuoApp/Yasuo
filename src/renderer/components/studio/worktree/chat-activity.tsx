@@ -3,6 +3,7 @@ import { ChevronRight } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import {
+  dayDividerBetween,
   rowsOf,
   summaryOf,
   type ActivityCounts,
@@ -49,6 +50,38 @@ export function ChatActivity({
         )
       )}
     </Fold>
+  )
+}
+
+/**
+ * The rule between two top-level blocks that fall on different days, with the
+ * day's name on it: `Today`, `Yesterday`, `Mon 29 Sep`.
+ *
+ * Drawn by the pane between consecutive blocks — it is given the pair rather
+ * than the list, so the decision (`dayDividerBetween`, pure and tested) and
+ * the drawing stay apart. Null when no divider belongs there, which is most
+ * pairs: a chat is usually an afternoon, and the rule earns its place on the
+ * one that was picked up again the next morning. The same shape as the
+ * compaction boundary in `chat-message.tsx`, since both are a line with a side.
+ */
+export function DayDivider({
+  before,
+  after,
+}: {
+  before: ChatBlock
+  after: ChatBlock
+}) {
+  const label = dayDividerBetween(before, after)
+  if (!label) return null
+  return (
+    <div
+      role="separator"
+      className="flex items-center gap-2 px-1 py-0.5 text-[0.7rem] text-muted-foreground/80"
+    >
+      <span className="h-px flex-1 bg-border" />
+      <span className="shrink-0">{label}</span>
+      <span className="h-px flex-1 bg-border" />
+    </div>
   )
 }
 

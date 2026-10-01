@@ -1,4 +1,11 @@
-import { elapsed, since } from "../src/renderer/lib/worktree-chat/since"
+import {
+  dateTimeOf,
+  dayBreak,
+  dayLabel,
+  elapsed,
+  since,
+  timeOf,
+} from "../src/renderer/lib/worktree-chat/since"
 import { check, finish, section } from "./harness"
 
 /**
@@ -93,5 +100,81 @@ check(
   "a clock that went backwards reads zero, not -1",
   elapsed(NOW + MINUTE, NOW) === "0s"
 )
+
+/**
+ * The stamp on a line. Built in **local** time, so the fixtures are made from
+ * local parts rather than ISO literals: a `T14:05Z` literal is `14:05` in
+ * London and `23:05` in Tokyo, and the test has to pass on both machines.
+ */
+section("timeOf and dateTimeOf: the stamp on a line")
+
+/** A local moment, as the ISO string a line carries. */
+function local(
+  year: number,
+  month: number,
+  day: number,
+  hour = 12,
+  minute = 0
+): string {
+  return new Date(year, month - 1, day, hour, minute).toISOString()
+}
+
+check(
+  "the hour and minute, padded",
+  timeOf(local(2026, 9, 29, 9, 5)) === "09:05"
+)
+check(
+  "twenty-four hours, no AM",
+  timeOf(local(2026, 9, 29, 23, 59)) === "23:59"
+)
+check("a line without a readable stamp draws nothing", timeOf("") === "")
+check("and neither does nonsense", timeOf("soon") === "")
+check(
+  "the full form names the year",
+  dateTimeOf(local(2026, 9, 29, 9, 5)).includes("2026"),
+  dateTimeOf(local(2026, 9, 29, 9, 5))
+)
+check("and is empty for nothing", dateTimeOf("") === "")
+
+/**
+ * The divider between days. The cases are the calendar's edges rather than
+ * spans of hours: ten minutes across midnight is two days, and twenty-three
+ * hours inside one is none.
+ */
+section("dayLabel and dayBreak: the divider between days")
+
+const TODAY = new Date(2026, 8, 30, 15, 0).getTime() // Wed 30 Sep 2026, 15:00
+
+check("today is a word", dayLabel(local(2026, 9, 30, 1), TODAY) === "Today")
+check(
+  "so is yesterday, even at 23:59",
+  dayLabel(local(2026, 9, 29, 23, 59), TODAY) === "Yesterday"
+)
+check(
+  "earlier this year is weekday, day and month",
+  dayLabel(local(2026, 9, 28), TODAY) === "Mon 28 Sep",
+  dayLabel(local(2026, 9, 28), TODAY)
+)
+check(
+  "and another year says which",
+  dayLabel(local(2025, 12, 31), TODAY) === "Wed 31 Dec 2025",
+  dayLabel(local(2025, 12, 31), TODAY)
+)
+check("an unreadable stamp has no label", dayLabel("", TODAY) === "")
+
+check(
+  "ten minutes across midnight is a break",
+  dayBreak(local(2026, 9, 29, 23, 55), local(2026, 9, 30, 0, 5))
+)
+check(
+  "twenty-three hours inside a day is not",
+  !dayBreak(local(2026, 9, 30, 0, 30), local(2026, 9, 30, 23, 30))
+)
+check(
+  "a line without a stamp never breaks the day",
+  !dayBreak(undefined, local(2026, 9, 30)) &&
+    !dayBreak(local(2026, 9, 29), undefined)
+)
+check("nor does an unreadable one", !dayBreak("soon", local(2026, 9, 30)))
 
 finish()

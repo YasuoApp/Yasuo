@@ -1,4 +1,4 @@
-import type { AssistantMessage, ChatDigest } from "../shared/api"
+import type { AssistantMessage, ChatDigest, ChatSpend } from "../shared/api"
 
 /**
  * A chat read as a whole rather than as a conversation: which files it wrote to,
@@ -86,6 +86,38 @@ export function spendOf(messages: AssistantMessage[]): {
   }
 
   return { costUsd, turns, unpriced }
+}
+
+/**
+ * One row per usage line, for the cost dashboard — see `ChatSpend`.
+ *
+ * A line written before lines were stamped has no `at`, and the chat's own
+ * `updatedAt` stands in: it is when the chat was last written to, which for a
+ * chat nobody has touched since is the afternoon those turns ran. Wrong by at
+ * most the length of the chat, and never in the future.
+ */
+export function spendRows(
+  chat: {
+    id: string
+    title: string
+    folderId: string | null
+    updatedAt: string
+  },
+  messages: AssistantMessage[]
+): ChatSpend[] {
+  const rows: ChatSpend[] = []
+  for (const message of messages) {
+    if (message.role !== "usage") continue
+    rows.push({
+      chatId: chat.id,
+      title: chat.title,
+      folderId: chat.folderId,
+      model: message.usage.model,
+      costUsd: message.usage.costUsd,
+      at: message.at ?? chat.updatedAt,
+    })
+  }
+  return rows
 }
 
 /** One chat's lines as the record a caller reads them by. */

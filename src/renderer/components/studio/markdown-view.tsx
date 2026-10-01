@@ -1,7 +1,10 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, type MouseEvent } from "react"
 import { markdownToHTML } from "@blocknote/core"
 
 import { cn } from "@/lib/utils"
+import { useFiles } from "@/lib/files/store"
+import { highlightCodeBlocks } from "@/lib/markdown/highlight"
+import { headingSlug, linkOf } from "@/lib/markdown/links"
 import { sanitizeHtml } from "@/lib/markdown/sanitize"
 import { markdownRenderer } from "@/lib/markdown/renderer"
 import "./markdown-view.css"
@@ -95,6 +98,9 @@ export function MarkdownView({
         if (!node) return
         node.replaceChildren(render(source))
         if (baseDir) resolveLocalImages(node, baseDir)
+        // A frame later, once the parser is in: the text is on screen plain
+        // first and coloured when the grammar arrives, the way a file tab is.
+        void highlightCodeBlocks(node, () => alive)
       })
       .catch((error: unknown) => {
         if (!alive) return
@@ -114,7 +120,60 @@ export function MarkdownView({
       </p>
     )
 
-  return <div ref={host} className={cn("markdown-prose text-sm", className)} />
+  return (
+    <div
+      ref={host}
+      onClick={(event) => followLink(event, baseDir)}
+      className={cn("markdown-prose text-sm", className)}
+    />
+  )
+}
+
+/**
+ * A click on a link, read rather than left to the window — `lib/markdown/
+ * links.ts` says what goes wrong otherwise. A web link is the one thing let
+ * through, since main already hands that to the browser.
+ *
+ * A relative link opens in the Explorer, a folder by being revealed in the
+ * tree. In a chat message there is no directory to resolve one against, so it
+ * does nothing, which is still better than what it did.
+ */
+function followLink(event: MouseEvent<HTMLDivElement>, baseDir?: string) {
+  if (!(event.target instanceof Element)) return
+  const anchor = event.target.closest("a[href]")
+  if (!anchor || !event.currentTarget.contains(anchor)) return
+
+  const link = linkOf(anchor.getAttribute("href") ?? "")
+  if (link.kind === "external") return
+  event.preventDefault()
+
+  if (link.kind === "anchor") {
+    const heading = Array.from(
+      event.currentTarget.querySelectorAll("h1, h2, h3, h4, h5, h6")
+    ).find(
+      (node) =>
+        node.id === link.id ||
+        headingSlug(node.textContent ?? "") === link.id.toLowerCase()
+    )
+    heading?.scrollIntoView({ block: "start" })
+    return
+  }
+
+  if (link.kind === "relative" && baseDir)
+    void openRelative(baseDir, link.paths)
+}
+
+async function openRelative(baseDir: string, paths: string[]): Promise<void> {
+  for (const candidate of paths) {
+    const target = await window.desktop.resolveRelativePath(baseDir, candidate)
+    if (!target) continue
+    const files = useFiles.getState()
+    if (target.directory) await files.reveal(target.path)
+    else await files.open(target.path)
+    return
+  }
+  // A dead link stays dead: a README pointing at a file nobody committed is
+  // ordinary, and the window staying where it is says as much.
 }
 
 /**

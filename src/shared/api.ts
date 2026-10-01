@@ -265,22 +265,6 @@ export type FileContent =
   | { kind: "binary" }
   | { kind: "too-large"; size: number }
 
-/** Which stream a line of process output came from. */
-export type ProcessStream = "stdout" | "stderr"
-
-export type ProcessOutput = {
-  processId: string
-  stream: ProcessStream
-  line: string
-}
-
-export type ProcessExit = {
-  processId: string
-  /** `null` when the process was killed by a signal rather than exiting. */
-  code: number | null
-  signal: string | null
-}
-
 /**
  * One line of a chat, as it is drawn and as it is kept on disk.
  *
@@ -305,7 +289,18 @@ export type ChatTodo = {
   status: "pending" | "in_progress" | "completed"
 }
 
-export type AssistantMessage =
+/**
+ * When a line was written, on every kind of line.
+ *
+ * An intersection over the union rather than a field on each member, so a
+ * new role cannot forget it. Optional because a chat is read back from disk and
+ * every line written before this existed has none — a reader draws no time for
+ * those rather than the epoch. Stamped in main's `append`, which is the one
+ * writer, so the clock is one clock.
+ */
+export type AssistantMessage = AssistantLine & { at?: string }
+
+type AssistantLine =
   | { id: string; role: "user"; text: string }
   | { id: string; role: "assistant"; text: string }
   /**
@@ -1342,6 +1337,16 @@ export type WorktreeChatOptions = {
    */
   profileId?: string | null
   /**
+   * A ceiling on what this chat may spend, in USD, or null for none.
+   *
+   * A warning rather than a lock: main writes an `error` line the moment a
+   * turn's usage takes the chat's total past it, and the composer shows the cap
+   * as reached, but the next message still goes — the figure is the CLI's own
+   * estimate, and a chat refused mid-task over an estimate is worse than one
+   * that says loudly it has cost more than planned.
+   */
+  budgetUsd?: number | null
+  /**
    * The plan toggle this replaced, on records written before the picker.
    *
    * Kept only to be read: `chatOptions` turns a `true` here into
@@ -1370,6 +1375,7 @@ export const DEFAULT_CHAT_OPTIONS: WorktreeChatOptions = {
   effort: DEFAULT_CHAT_EFFORT,
   permission: "edits",
   profileId: null,
+  budgetUsd: null,
 }
 
 /**
@@ -1397,6 +1403,12 @@ export function chatOptions(
       options.effort ?? (options.model == null ? null : DEFAULT_CHAT_EFFORT),
     permission: readPermission(options),
     profileId: options.profileId ?? null,
+    // Only a positive figure is a cap; anything else a record carries reads as
+    // none, so a hand-edited `0` cannot mark every turn as over budget.
+    budgetUsd:
+      typeof options.budgetUsd === "number" && options.budgetUsd > 0
+        ? options.budgetUsd
+        : null,
   }
 }
 
@@ -1649,6 +1661,79 @@ export type ChatDigest = {
    * about what it cost, not one that was free. */
   turns: number
   unpriced: number
+}
+
+/**
+ * One turn's bill, for the cost dashboard — a row per usage line across every
+ * chat, which is what a chart by day, by project or by model is drawn from.
+ *
+ * Its own shape beside `ChatDigest` rather than a field on it: the digest is
+ * one row per chat and this is one per turn, and a dashboard that only had the
+ * per-chat sum could not say which afternoon the money went on.
+ */
+export type ChatSpend = {
+  chatId: string
+  /** The chat's title at the time of the read, for a row that names it. */
+  title: string
+  folderId: string | null
+  /** The model the turn ran on, or null where the CLI did not say. */
+  model: string | null
+  /** The CLI's estimate, or null for a turn that reported none. */
+  costUsd: number | null
+  /** When the turn ended, ISO. A line from before lines were stamped falls
+   * back to the chat's own `updatedAt`, which is the nearest honest answer. */
+  at: string
+}
+
+/**
+ * The working tree as it stood at one moment of a chat — a git commit this app
+ * made in `refs/yasuo/snapshots/`, parented on the folder's previous snapshot,
+ * never on a branch. See `main/snapshots.ts`.
+ *
+ * `before` is taken as a turn starts and `turn` as it ends, so "back to before
+ * turn 7" and "back to after turn 6" are both on the timeline; `rewind` is the
+ * safety copy taken as a restore begins, which is what makes a restore itself
+ * undoable. A snapshot whose tree equals the previous one is still recorded
+ * (`changed: false`) so the timeline has a tick per turn.
+ */
+export type Snapshot = {
+  /** The commit, which is also what the blame names. */
+  id: string
+  folderId: string
+  chatId: string
+  kind: "before" | "turn" | "rewind"
+  /** 1-based turn number within the chat; 0 for `before` the first. */
+  turn: number
+  /** The message that started the turn, shortened — what a blame hover shows. */
+  prompt: string | null
+  /** That message's line id, so a click can land the chat on it. */
+  lineId: string | null
+  tree: string
+  changed: boolean
+  at: string
+}
+
+/** What restoring a snapshot would do to the working tree as it stands. */
+export type SnapshotDiff = {
+  files: {
+    path: string
+    status: "added" | "modified" | "deleted"
+    added: number
+    removed: number
+  }[]
+}
+
+/**
+ * Which chat wrote each line of a file, read off the snapshot chain with
+ * `git blame`. `lines[i]` is the snapshot id for line `i` of the text that was
+ * handed over, or null for a line no snapshot introduced — written by hand, or
+ * older than the first snapshot of the folder.
+ */
+export type ChatBlame = {
+  lines: (string | null)[]
+  snapshots: Record<string, Snapshot>
+  /** Titles for the chats named, so the gutter can label a line. */
+  chats: Record<string, { title: string }>
 }
 
 /*
@@ -2015,6 +2100,17 @@ export type DesktopApi = {
    */
   readImageRelative: (dir: string, relative: string) => Promise<string>
   /**
+   * Where a document's relative link goes — `./CONTRIBUTING.md`, `../src/` —
+   * joined in main for the same reason as `readImageRelative`.
+   *
+   * Null for a target that does not exist or sits outside the workspace's
+   * folders: either way there is nothing the Explorer could open.
+   */
+  resolveRelativePath: (
+    dir: string,
+    relative: string
+  ) => Promise<{ path: string; directory: boolean } | null>
+  /**
    * The TypeScript server's answers, for the editor's tooltips and its
    * go-to-definition.
    *
@@ -2220,6 +2316,59 @@ export type DesktopApi = {
    */
   chatDigests: () => Promise<ChatDigest[]>
   /**
+   * Every turn's bill across every chat — see `ChatSpend`. Folded the way
+   * `chatDigests` is, from lines already in memory where there are any.
+   */
+  chatSpend: () => Promise<ChatSpend[]>
+  /**
+   * Writes text to a file the user picks in a save dialog — a chat exported as
+   * Markdown or HTML. Resolves with the path written, or null when the dialog
+   * was cancelled. The one write outside the workspace's roots, and it is the
+   * user naming the destination that makes it one.
+   */
+  saveTextFile: (input: {
+    defaultName: string
+    text: string
+    filters?: { name: string; extensions: string[] }[]
+  }) => Promise<string | null>
+  /**
+   * Opens one chat in a window of its own, or focuses the one it already has.
+   *
+   * The window loads this same renderer with `?chat=<id>`, which `App` reads
+   * and draws as a single conversation — composer and all, against the same
+   * main-process session the studio's tab is on. Chat events are broadcast to
+   * every window, so both stay current.
+   */
+  openChatWindow: (chatId: string) => Promise<void>
+  /** Pins or unpins the **calling** window above every other app's. For the
+   * popped-out chat, which is the one somebody wants to keep in the corner of
+   * another editor. */
+  setAlwaysOnTop: (on: boolean) => Promise<void>
+  /** Whether the calling window is pinned. */
+  isAlwaysOnTop: () => Promise<boolean>
+  /** One chat's snapshots, oldest first — the timeline. Empty for a chat
+   * whose project is not a git repository. */
+  listSnapshots: (chatId: string) => Promise<Snapshot[]>
+  /** What restoring `snapshotId` would change, against the working tree now. */
+  snapshotDiff: (folderId: string, snapshotId: string) => Promise<SnapshotDiff>
+  /**
+   * Puts the working tree back to a snapshot. A `rewind` snapshot of the tree
+   * as it stood is taken first and returned, so the restore can be undone from
+   * the same timeline. Ignored files are left alone either way. Resolves null
+   * when nothing could be restored.
+   */
+  restoreSnapshot: (
+    chatId: string,
+    snapshotId: string
+  ) => Promise<Snapshot | null>
+  /** Which chat wrote each line of `text`, the file's current buffer — see
+   * `ChatBlame`. Null for a file outside a git repository or one with no
+   * snapshots behind it. */
+  chatBlame: (filePath: string, text: string) => Promise<ChatBlame | null>
+  /** A folder's snapshots changed — a turn ended, a restore ran. Returns an
+   * unsubscribe. */
+  onSnapshotsChanged: (listener: (folderId: string) => void) => () => void
+  /**
    * The left column's Search: `query` across every file in the workspace and
    * everything said in every chat — see `WorkspaceSearch`.
    *
@@ -2365,19 +2514,6 @@ export type DesktopApi = {
    */
   writeNoteFile: (fileName: string, bytes: Uint8Array) => Promise<void>
 
-  /** Runs a command in one of the folders; resolves with its process id. */
-  startProcess: (
-    folderId: string,
-    command: string,
-    args: string[]
-  ) => Promise<string>
-  stopProcess: (processId: string) => Promise<void>
-
-  /** Subscribes to process output. Returns an unsubscribe function. */
-  onProcessOutput: (listener: (event: ProcessOutput) => void) => () => void
-  /** Subscribes to process exits. Returns an unsubscribe function. */
-  onProcessExit: (listener: (event: ProcessExit) => void) => () => void
-
   /**
    * Opens a shell in one of the folders and resolves with the id its events are
    * tagged with.
@@ -2406,6 +2542,9 @@ export type DesktopApi = {
     rows: number
   ) => Promise<void>
   terminalKill: (terminalId: string) => Promise<void>
+  /** The directory a shell is in now — what its dock tab is named after.
+   * Null when it cannot be said. */
+  terminalCwd: (terminalId: string) => Promise<string | null>
 
   /** Subscribes to shell output. Returns an unsubscribe function. */
   onTerminalData: (listener: (event: TerminalOutput) => void) => () => void
@@ -2554,6 +2693,7 @@ export const IPC = {
   revealPath: "files:reveal",
   readImageFile: "files:read-image",
   readImageRelative: "files:read-image-relative",
+  resolveRelativePath: "files:resolve-relative",
   listWorkspaceFiles: "files:index",
   watchDirectories: "files:watch",
   directoryChanged: "files:changed",
@@ -2575,6 +2715,16 @@ export const IPC = {
   createWorktreeChat: "worktree-chats:create",
   readWorktreeChat: "worktree-chats:read",
   chatDigests: "worktree-chats:digests",
+  chatSpend: "worktree-chats:spend",
+  saveTextFile: "files:save-text",
+  openChatWindow: "window:open-chat",
+  setAlwaysOnTop: "window:set-always-on-top",
+  isAlwaysOnTop: "window:is-always-on-top",
+  listSnapshots: "snapshots:list",
+  snapshotDiff: "snapshots:diff",
+  restoreSnapshot: "snapshots:restore",
+  chatBlame: "snapshots:blame",
+  snapshotsChanged: "snapshots:changed",
   searchWorkspace: "search:workspace",
   deleteWorktreeChat: "worktree-chats:delete",
   clearWorktreeChat: "worktree-chats:clear",
@@ -2591,14 +2741,11 @@ export const IPC = {
   writeDrawing: "drawings:write",
   writeDrawingSvg: "drawings:write-svg",
   writeNoteFile: "note-files:write",
-  startProcess: "process:start",
-  stopProcess: "process:stop",
-  processOutput: "process:output",
-  processExit: "process:exit",
   terminalCreate: "terminal:create",
   terminalWrite: "terminal:write",
   terminalResize: "terminal:resize",
   terminalKill: "terminal:kill",
+  terminalCwd: "terminal:cwd",
   terminalData: "terminal:data",
   terminalExit: "terminal:exit",
   systemUsage: "system:usage",

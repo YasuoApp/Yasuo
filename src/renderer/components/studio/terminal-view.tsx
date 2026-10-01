@@ -1,9 +1,28 @@
-import { useEffect, useRef } from "react"
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from "react"
 import { FitAddon } from "@xterm/addon-fit"
 import { WebLinksAddon } from "@xterm/addon-web-links"
 import { WebglAddon } from "@xterm/addon-webgl"
 import { Terminal } from "@xterm/xterm"
+import { ClipboardPaste, Copy, Eraser, MessageSquarePlus } from "lucide-react"
+
+import { monoFontFamily } from "@/lib/appearance"
+import { useSettings } from "@/lib/settings"
 import { useTheme } from "next-themes"
+
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu"
+import { fencedOutput, useComposerBus } from "@/lib/worktree-chat/composer-bus"
 
 import "@xterm/xterm/css/xterm.css"
 
@@ -87,6 +106,34 @@ function shellWord(path: string): string {
   return `'${path.replaceAll("'", `'\\''`)}'`
 }
 
+/**
+ * The selection, into the chat's composer as a fenced block — the pill's and
+ * the menu's one verb. The selection is cleared because it has been taken:
+ * what was marked is in the composer now, and a highlight left behind reads
+ * as a second copy waiting to be sent.
+ */
+function askAbout(terminal: Terminal) {
+  const text = terminal.getSelection()
+  if (!text.trim()) return
+  useComposerBus.getState().deliver({ text: fencedOutput(text) })
+  terminal.clearSelection()
+}
+
+function copySelection(terminal: Terminal) {
+  const text = terminal.getSelection()
+  if (!text) return
+  void navigator.clipboard.writeText(text)
+  terminal.clearSelection()
+  terminal.focus()
+}
+
+function pasteInto(terminal: Terminal) {
+  void navigator.clipboard.readText().then((text) => {
+    if (text) terminal.paste(text)
+    terminal.focus()
+  })
+}
+
 export type TerminalHandle = {
   write: (chunk: string) => void
   onData: (listener: (data: string) => void) => void
@@ -113,6 +160,7 @@ type TerminalViewProps = {
 export function TerminalView({ onReady, onResize }: TerminalViewProps) {
   const hostRef = useRef<HTMLDivElement>(null)
   const overlayRef = useRef<HTMLDivElement>(null)
+  const pillRef = useRef<HTMLDivElement>(null)
   const { resolvedTheme } = useTheme()
   const terminalRef = useRef<Terminal | null>(null)
 
@@ -132,15 +180,15 @@ export function TerminalView({ onReady, onResize }: TerminalViewProps) {
       convertEol: true,
       cursorBlink: true,
       /*
-       * The list from `index.css`'s `--font-mono`, written out rather than
-       * referenced: this string is handed to a canvas `ctx.font`, where a CSS
-       * variable is not a value but a parse error — the whole declaration is
-       * dropped and the atlas is rasterised in some default face at the wrong
-       * metrics. The DOM renderer put it in real CSS, so `var()` worked there
-       * and hid this until the day something else measured the font.
+       * The resolved stack, never `var(--font-mono)`: this string is handed to
+       * a canvas `ctx.font`, where a CSS variable is not a value but a parse
+       * error — the whole declaration is dropped and the atlas is rasterised
+       * in some default face at the wrong metrics. The DOM renderer put it in
+       * real CSS, so `var()` worked there and hid this until the day something
+       * else measured the font. `monoFontFamily` is the same stack the editors
+       * get, from Settings › Appearance.
        */
-      fontFamily:
-        'ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace',
+      fontFamily: monoFontFamily(useSettings.getState().fontMono),
       fontSize: 12,
       // Room to read, nothing more. The seams this used to have to avoid came
       // from the text renderer stretching box-drawing glyphs across a taller
@@ -359,6 +407,59 @@ export function TerminalView({ onReady, onResize }: TerminalViewProps) {
     host.addEventListener("dragleave", onDragLeave)
     host.addEventListener("drop", onDrop)
 
+    /*
+     * The `Ask about this` pill, shown under the end of a selection and moved
+     * by hand for the same reason the tint above is: no React state here.
+     *
+     * Placed from the buffer rather than the DOM, since the WebGL renderer
+     * draws the selection to a canvas and there is no element to anchor to.
+     * A cell's size is the screen's divided by the grid, which is what the
+     * fit addon sized the grid from. Repositioned on scroll because the
+     * selection stays in buffer rows while the viewport moves under it, and
+     * hidden rather than clamped once its end has scrolled out of view —
+     * a pill floating at the edge of the terminal points at nothing.
+     */
+    const pill = pillRef.current
+    const showPill = (on: boolean) => {
+      pill?.classList.toggle("hidden", !on)
+      pill?.classList.toggle("flex", on)
+    }
+    const placePill = () => {
+      if (!pill) return
+      const range = terminal.getSelectionPosition()
+      if (!range || !terminal.getSelection().trim()) {
+        showPill(false)
+        return
+      }
+      const screen = host.querySelector<HTMLElement>(".xterm-screen")
+      if (!screen) return
+      const row = range.end.y - terminal.buffer.active.viewportY
+      if (row < 0 || row >= terminal.rows) {
+        showPill(false)
+        return
+      }
+      const cellHeight = screen.clientHeight / terminal.rows
+      const cellWidth = screen.clientWidth / terminal.cols
+
+      // Shown before it is measured: a hidden element has no size.
+      showPill(true)
+      const gap = 4
+      let top = (row + 1) * cellHeight + gap
+      if (top + pill.offsetHeight > host.clientHeight)
+        top = Math.max(gap, row * cellHeight - pill.offsetHeight - gap)
+      const left = Math.max(
+        gap,
+        Math.min(
+          range.end.x * cellWidth,
+          host.clientWidth - pill.offsetWidth - gap
+        )
+      )
+      pill.style.top = `${top}px`
+      pill.style.left = `${left}px`
+    }
+    terminal.onSelectionChange(placePill)
+    terminal.onScroll(placePill)
+
     let observer: ResizeObserver | undefined
     let disposeResize: { dispose: () => void } | undefined
     let teardown: (() => void) | undefined
@@ -428,8 +529,18 @@ export function TerminalView({ onReady, onResize }: TerminalViewProps) {
     terminal.options.theme = resolvedTheme === "dark" ? darkTheme : lightTheme
   }, [resolvedTheme])
 
+  // Settings › Appearance's monospace face, applied to a live terminal: the
+  // atlas is rebuilt by xterm on the option change, so a refit follows for the
+  // new cell size.
+  const fontMono = useSettings((state) => state.fontMono)
+  useEffect(() => {
+    const terminal = terminalRef.current
+    if (!terminal) return
+    terminal.options.fontFamily = monoFontFamily(fontMono)
+  }, [fontMono])
+
   return (
-    <div className="relative h-full w-full">
+    <TerminalMenu terminalRef={terminalRef}>
       <div ref={hostRef} className="h-full w-full" />
       {/* Shown only while a file is being dragged over, by the effect above
           rather than by a render — see the drag handlers for why. Inert, so it
@@ -438,6 +549,128 @@ export function TerminalView({ onReady, onResize }: TerminalViewProps) {
         ref={overlayRef}
         className="pointer-events-none absolute inset-0 hidden bg-primary/10 ring-2 ring-primary/50 ring-inset"
       />
-    </div>
+      {/* Placed by `placePill` in the effect above. `onMouseDown` is refused
+          so the click does not take focus from the terminal's textarea —
+          `Copy` hands it straight back, and a terminal that lost focus to its
+          own button is a terminal that stops taking keys for no reason. */}
+      <div
+        ref={pillRef}
+        onMouseDown={(event) => event.preventDefault()}
+        className="absolute z-10 hidden items-center gap-px rounded-md border bg-popover p-0.5 text-xs text-popover-foreground shadow-md"
+      >
+        <PillButton
+          onClick={() => {
+            const terminal = terminalRef.current
+            if (terminal) askAbout(terminal)
+          }}
+        >
+          <MessageSquarePlus className="size-3" />
+          Ask about this
+        </PillButton>
+        <PillButton
+          onClick={() => {
+            const terminal = terminalRef.current
+            if (terminal) copySelection(terminal)
+          }}
+        >
+          <Copy className="size-3" />
+          Copy
+        </PillButton>
+      </div>
+    </TerminalMenu>
+  )
+}
+
+function PillButton({
+  onClick,
+  children,
+}: {
+  onClick: () => void
+  children: ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex h-6 items-center gap-1 rounded-sm px-1.5 font-medium hover:bg-accent"
+    >
+      {children}
+    </button>
+  )
+}
+
+/**
+ * The right-click menu over the terminal.
+ *
+ * A component of its own so that the one piece of state it needs — whether
+ * there was a selection when the menu opened, which is what greys `Ask about
+ * this` — lives here and not in `TerminalView`, whose effect owns the xterm
+ * instance and is written to never run twice. It reads the terminal through
+ * the ref at the moment of opening rather than tracking the selection live:
+ * the menu is the only reader, and it only reads once.
+ */
+function TerminalMenu({
+  terminalRef,
+  children,
+}: {
+  terminalRef: RefObject<Terminal | null>
+  children: ReactNode
+}) {
+  const [hasSelection, setHasSelection] = useState(false)
+
+  return (
+    <ContextMenu
+      onOpenChange={(open) => {
+        if (open) setHasSelection(terminalRef.current?.hasSelection() ?? false)
+      }}
+    >
+      <ContextMenuTrigger render={<div className="relative h-full w-full" />}>
+        {children}
+      </ContextMenuTrigger>
+      <ContextMenuContent className="w-44">
+        <ContextMenuItem
+          disabled={!hasSelection}
+          onClick={() => {
+            const terminal = terminalRef.current
+            if (terminal) copySelection(terminal)
+          }}
+        >
+          <Copy />
+          Copy
+        </ContextMenuItem>
+        <ContextMenuItem
+          onClick={() => {
+            const terminal = terminalRef.current
+            if (terminal) pasteInto(terminal)
+          }}
+        >
+          <ClipboardPaste />
+          Paste
+        </ContextMenuItem>
+        <ContextMenuSeparator />
+        <ContextMenuItem
+          disabled={!hasSelection}
+          onClick={() => {
+            const terminal = terminalRef.current
+            if (terminal) askAbout(terminal)
+          }}
+        >
+          <MessageSquarePlus />
+          Ask about this
+        </ContextMenuItem>
+        <ContextMenuSeparator />
+        <ContextMenuItem
+          onClick={() => {
+            const terminal = terminalRef.current
+            if (!terminal) return
+            terminal.clear()
+            terminal.focus()
+          }}
+        >
+          <Eraser />
+          Clear
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   )
 }

@@ -1,15 +1,15 @@
 # desktop
 
 The studio as an Electron app: a workspace points at real directories on disk
-rather than rows in a browser database, and every tool over them — database,
-API, terminal, agent — is a tab in one window rather than an
-application of its own.
+rather than rows in a browser database, and every tool over them —
+the agents' chats, their diffs, the files, a terminal — is a tab in one window
+rather than an application of its own.
 
 ## Layout
 
 | Path            | What it is                                                    |
 | --------------- | ------------------------------------------------------------- |
-| `src/main/`     | Main process: storage, databases, terminals, IPC.             |
+| `src/main/`     | Main process: storage, chats, git, terminals, IPC.            |
 | `src/preload/`  | The one bridge script, sandboxed.                             |
 | `src/shared/`   | The typed IPC contract, imported by both sides (`@shared/*`). |
 | `src/renderer/` | Renderer: the Vite + React studio.                            |
@@ -24,15 +24,14 @@ for; the manifest records an absolute path and the files stay yours.
 
 ```
 ~/.yasuo/
-  manifest.json     the workspace, its folders, its databases, settings
+  manifest.json     the workspace, its folders, settings
   workspace/
-    requests.json   the API panel's collection
-    environments.json
-    folders.json    the groups those requests are filed under
-    cookies.json
+    worktree-chats.json      the chats, listed
+    worktree-chats/<id>.json one chat's lines
+    worktrees/<folderId>/    `git worktree` checkouts cut from a project
+    claude-profiles/<slug>/  one Claude profile's `CLAUDE_CONFIG_DIR`
     note-files/     pictures dropped into a block document
     drawings/       one `<id>.excalidraw` per drawing
-    db/<db-id>/     one Docker-managed database's own data
 ```
 
 **There is no switching.** That is the point of the design rather than a
@@ -42,12 +41,10 @@ take one of them — along with every tab, shell and connection opened against
 it — off the screen. Adding a folder brings its files into view; removing one
 takes its shells and its chats with it and leaves the directory untouched.
 
-Everything else belongs to the workspace rather than to a folder: the
-databases, the saved requests, the cookie jar. A
-project's database is generally the same database its frontend and its API both
-talk to, and filing it under one of the two would only decide which panel is
-allowed to see it. What _is_ per folder is what is genuinely per repository — a
-shell's working directory, a run command and a branch name.
+Files left by deleted panels — `requests.json`, `cookies.json`, `db/` and the
+rest — stay where they are and nothing reads them; see the removed sections
+below. What _is_ per folder is what is genuinely per repository — a
+shell's working directory and a branch name.
 
 Sign-in is what will bring a second workspace. Until then the studio always
 holds this one, which is why its id is a constant rather than something the
@@ -55,16 +52,14 @@ manifest has to be read to learn.
 
 ## The left column
 
-What the workspace **holds**, stacked: `Search`, then `Projects`, `Database`
-and `API` as folding sections, as many open at once as there is room for
-(`workspace-sidebar.tsx`). It is the whole of the left edge and it does not go
+What the workspace **holds**: its sections, or **Search** in their place
+(`workspace-sidebar.tsx`, switched from the nav rail or with `⇧⌘F`). It is the whole of the left edge and it does not go
 away while you work, which is the point: reaching any of them is a click in a
 list already on screen rather than a trip through one.
 
 **Today it draws `Projects` and nothing else** — `SIDEBAR_SECTIONS` is that one
-line — and the other two open in a window each from the footer; see Panel
-windows below. There was a fourth, `Notes`, and it is gone rather than hidden:
-see Notes, removed.
+line. `Database`, `API` and `Notes` were sections once, and they are gone rather
+than hidden: see Database and API, removed and Notes, removed.
 
 **It took two moves to arrive at this, and the first went too far.** The
 activity rail went first — Conductor's left column is navigation and the
@@ -129,7 +124,7 @@ onto the foot of the rail; both are the window's rather than the workspace's.
 The rail's Search button is not the palette: it turns the column over to the
 workspace's `Find in files` (§ Searching inside the files and the chats).
 
-The dock — `Run` and `Terminal` — is under the **pane**, spanning its width; it
+The dock — the shells, a tab each — is under the **pane**, spanning its width; it
 used to be the lower half of this column, and see The dock for why it moved.
 
 **A project's rows are its chats**, and clicking one opens it — see Chats
@@ -1698,10 +1693,10 @@ and that path stays the chat's.
 
 ## The dock
 
-The strip under the pane, spanning its whole width: `Run` and `Terminal` — the
-tail of Conductor's own `Setup / Run / Terminal`.
-`components/studio/dock.tsx` is the strip, `lib/dock.ts` is whether it is open
-and which tab it holds, and the chevron in its corner collapses it — a close
+The strip under the pane, spanning its whole width: a tab per shell and a `+`
+for another — what is left of Conductor's own `Setup / Run / Terminal`.
+`components/studio/dock.tsx` is the strip, `lib/dock.ts` is whether it is open,
+`lib/shell/store.ts` which shells there are, and the chevron in its corner collapses it — a close
 button would be wrong, because this is one of two halves a column is split into
 and collapsing gives the other the whole of it.
 
@@ -1711,8 +1706,7 @@ to inherit, because the geometry is not Conductor's: its file list is on the lef
 and as wide as somebody drags it, while the Explorer here is on the right and
 capped at 520px. So the shell got roughly 60 columns — under the 80 that
 virtually every CLI's output is written for, which is the width `git diff`, a
-stack trace and a build log all assume — and `Run` was no better off, since what
-it prints is compiler and test output, wide for the same reason. The second cost
+stack trace and a build log all assume. The second cost
 was the stacking itself: opening the dock took the tree's height, so the two
 things somebody wants _together_ after running a command — the output, and
 `Changes` — were competing for one column.
@@ -1733,10 +1727,11 @@ Nothing was lost while it was gone, since collapsing does not unmount and the
 pty went on running; there was simply no way to see it without bringing the
 Explorer back. `⌘B` and the dock's toggle now govern one thing each.
 
-The two tabs are what this app actually has to put there: the things that are
-_about_ what is on screen rather than things that were opened. There was an
-`Assistant` tab in front of them, and the button at the right of the title bar
-opened the dock on it (see The assistant, removed).
+Shells are what this app actually has to put there: things that are _about_
+what is on screen rather than things that were opened. There was an `Assistant`
+tab in front of them, and the button at the right of the title bar opened the
+dock on it (see The assistant, removed); there was a `Run` tab beside them (see
+Run, removed).
 
 The dock is **collapsed rather than unmounted**, and the shell is the reason. A
 pty taken out of the React tree ends; it does not hide. While the dock held only
@@ -1748,10 +1743,11 @@ running in it.
 
 **It collapses to its own tab row**, not to nothing: `collapsedSize` is
 `DOCK_STRIP_HEIGHT` from `lib/dock.ts`, the 36px that row is tall. So what is on
-screen with the dock shut is the chevron — pointing up now — and `Run` and
-`Terminal`, each of which opens the dock on itself. Neither tab is drawn as
-selected while it is shut, because a lit tab would be pointing at a panel that
-is not there.
+screen with the dock shut is the chevron — pointing up now — the shells' tabs,
+each of which opens the dock on itself, and the `+`. No tab is drawn as selected
+while it is shut, because a lit tab would be pointing at a panel that is not
+there. With no shell started yet the row holds one `Terminal` tab, which is the
+way in.
 
 **This is what replaced the button in the title bar.** The dock used to collapse
 to nothing, which made its chevron a one-way door and meant the way back had to
@@ -1776,7 +1772,7 @@ is already down and one press of `⌃\`` doing nothing.
 
 ### Terminal
 
-A shell in the project the column last had clicked (`lib/shell/store.ts`,
+Shells in the workspace's projects, a dock tab each (`lib/shell/store.ts`,
 `dock-terminal.tsx`).
 
 **This is where the Terminal panel went.** There was a panel — a pane of its own,
@@ -1786,9 +1782,27 @@ not be demoted into a corner. A project's chat is that work now, hosted rather
 than tailed, and what was left of the panel is what Conductor's tab always
 was: a shell beside the work. So the panel is gone, and this is the whole of it.
 
-**One shell per place**, keyed by the project's folder id. Clicking a project
-row, or one of its chats, points the dock at that project's shell, so the
-terminal beside a chat is in the directory the chat is editing. A pty's cwd is
+**Any number per project**, each a tab named for its project — numbered from
+the second one in the same project on. It was one shell per place, keyed by the
+folder id, and that was one too few: a dev server left running in the shell is a
+shell nobody can type `git log` into. The `+` opens another in the project last
+clicked; a tab's `×`, or a middle click, ends its pty, and closing the last one
+shuts the dock rather than leaving it open onto nothing.
+
+**A tab is named for the directory its shell is in now**, so a `cd` renames it
+the way a terminal app's own tab does, with the full path on hover; before
+that is known it carries the project's name. Main asks the kernel rather than
+the shell (`main/process-cwd.ts` — `lsof` on macOS, `/proc/<pid>/cwd` on
+Linux, off the pid the daemon now reports on `created`), because getting it out
+of the shell means an OSC 7 escape somebody's `.zshrc` would have to be edited
+to print. It is asked once output goes quiet after an Enter, so typing and a dev
+server's streaming log cost no lookups. A daemon left by an older build sends
+no pid, and its tabs simply keep the project's name.
+
+Clicking a project row, or one of its chats, still points the dock at that
+project — at one of its shells, staying on the one on screen if it is already
+that project's — so the terminal beside a chat is in the directory the chat is
+editing. A pty's cwd is
 fixed when it starts and cannot be moved, so
 "the terminal follows the project" can only mean a second pty. A `cd` sent into
 the first would be worse than a second one: it lands in whatever is half-typed at
@@ -1799,43 +1813,32 @@ Clicking a row only records the **target**. The pty is started by the panel whil
 it is on screen, which is what keeps a process from being spawned behind a
 collapsed dock because a row in a list was clicked — showing the tab is the
 asking. Every shell then stays mounted, hidden rather than unmounted, so
-switching project does not kill the command left running in the last one.
+switching tab does not kill the command left running in the last one.
 
 Not remembered across a launch, unlike the sessions this replaced. A shell here
 is ad-hoc — something opened beside the work for one command — and replaying five
 of them on every launch would be a surprise rather than a convenience. A folder
-removed from the workspace takes its shell with it.
+removed from the workspace takes its shells with it.
 
-### Run
+### Run, removed
 
-One command per folder (`lib/run/store.ts`, `run-panel.tsx`): the dev server or
-the test watcher, so that changing something and seeing whether it still builds
-does not mean leaving for a terminal.
+There was a `Run` tab beside the terminal: one command per folder — the dev
+server, the test watcher — started and stopped from the dock, its output kept as
+a log of the last 2000 lines. It ran through a `ProcessManager` in main
+(`process:start`, `process:stop`, `process:output`, `process:exit`) with
+`shell: false`, so the command was split on whitespace and nothing quoted.
 
-It called nothing new into being. `ProcessManager` in `src/main/process.ts` has
-been in the app since before this panel, and its own comment said so — "nothing
-calls `start` yet: this is the seam". The whole contract was already there,
-`startProcess` already took a folder id and resolved the cwd in main, and
-`processes.stopAll()` was already awaited on quit. This is the caller.
+It is deleted — the tab, `run-panel.tsx`, `lib/run/store.ts`,
+`main/process.ts` and the four channels — because a second terminal does the
+same job better. A run script is a command somebody would otherwise type into a
+shell, and in a shell it gets what the log could not give it: colours, a
+prompt that answers, `⌃C`, quoting, and the login shell's whole environment
+rather than the GUI app's. What the log had over a shell was that the shell was
+already busy — one per project — and the dock's shells are now as many as
+anybody opens.
 
-Per **folder**: `bun run dev` is a property of a repository, not of what you
-happen to be doing in it, so two branches of one folder still mean one command
-rather than the same one typed twice. The
-commands live in one settings key holding a map, so reading them is one call at
-launch.
-
-The command is split on whitespace and nothing cleverer. `ProcessManager` runs
-with `shell: false` on purpose — a shell would make a project's path part of a
-command line — so there is no shell to do quoting, and writing a quote-aware
-tokeniser would be inventing one in the renderer. `bun run dev`, `npm start`,
-`make watch` is what a run script is; anything needing a quoted argument wants a
-script in the repository, which this can then run.
-
-The log keeps its last 2000 lines and follows the bottom **only while it is
-already there** — yanking the view down while somebody reads further up is the
-one behaviour that makes a log unusable. Both panels stay mounted once shown, so
-switching tabs does not throw away a log the process behind it is still writing
-to.
+The commands a user saved stay on their disk: nothing reads the `run.commands`
+setting any more, and nothing deletes it.
 
 ## The tab strip
 
@@ -2459,13 +2462,11 @@ hiding the panel from inside the shell, having just run something in it, is most
 of what the key is for. That is also why it is claimed on the capture phase:
 xterm would otherwise hand the key to the process before the page saw it.
 
-What it toggles is the **Terminal tab**, not the dock: `toggleTab` shows that tab
-when it is not the one on screen and hides the dock when it is, so the key
-reaches a terminal from the `Run` tab in one press rather than two. **View ›
-Terminal** lists it with `registerAccelerator: false`, the same arrangement
-**Close tab** and **Sidebar** have and for the sharper version of the same
-reason: whether the key shows or hides depends on which tab the dock is on, which
-is the renderer's answer alone.
+What it toggles is the dock, which holds nothing but terminals now — it toggled
+the Terminal _tab_ while a `Run` tab sat beside it, so the key reached a shell
+from there in one press. **View › Terminal** lists it with
+`registerAccelerator: false`, the same arrangement **Close tab** and **Sidebar**
+have, since whether the key shows or hides is the renderer's answer alone.
 
 ## Settings
 

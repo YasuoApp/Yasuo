@@ -99,7 +99,7 @@ function handleCreate(socket: net.Socket, request: CreateRequest): void {
   })
 
   socket.write(
-    `${JSON.stringify({ type: "created", reqId: request.reqId, id })}\n`
+    `${JSON.stringify({ type: "created", reqId: request.reqId, id, pid: pty.pid })}\n`
   )
 }
 

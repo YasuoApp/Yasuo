@@ -12,9 +12,21 @@ import path from "node:path"
  * agree on on Windows, so it is not "under `~/.yasuo`" there — just a
  * name both processes know. */
 export function socketPath(): string {
-  if (process.platform === "win32") return "\\\\.\\pipe\\yasuo-agent-daemon"
-  return path.join(homedir(), ".yasuo", "agent-daemon.sock")
+  const name = `agent-daemon-v${PROTOCOL_VERSION}`
+  if (process.platform === "win32") return `\\\\.\\pipe\\yasuo-${name}`
+  return path.join(homedir(), ".yasuo", `${name}.sock`)
 }
+
+/**
+ * Bumped whenever a message changes shape, and part of the socket's name.
+ *
+ * The daemon is per machine and outlives any one app: an installed build with
+ * a shell open keeps its daemon alive indefinitely, so a newer build on the
+ * same socket was talking to the older daemon — `created` arrived without the
+ * `pid` the dock's tab names are read off, and nothing said why. A socket per
+ * version gives each build the daemon it was compiled against.
+ */
+const PROTOCOL_VERSION = 2
 
 export type CreateRequest = {
   op: "create"
@@ -38,7 +50,14 @@ export type KillRequest = { op: "kill"; id: string }
 export type DaemonRequest =
   CreateRequest | AttachRequest | WriteRequest | ResizeRequest | KillRequest
 
-export type CreatedResponse = { type: "created"; reqId: string; id: string }
+export type CreatedResponse = {
+  type: "created"
+  reqId: string
+  id: string
+  /** The shell's own pid, for asking where it has `cd`'d to. Optional because
+   * a daemon left running by an older build does not send it. */
+  pid?: number
+}
 export type AttachedResponse = {
   type: "attached"
   reqId: string

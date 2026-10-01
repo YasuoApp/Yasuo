@@ -119,7 +119,6 @@ function keepInside(window: BrowserWindow): void {
 registerAppScheme()
 
 const {
-  processes,
   terminals,
   worktreeChats,
   tsServers,
@@ -127,7 +126,67 @@ const {
   tray,
   startTray,
   noteFilePath,
-} = registerIpc(() => mainWindow)
+} = registerIpc(
+  () => mainWindow,
+  (chatId) => openChatWindow(chatId)
+)
+
+/** The window each popped-out chat is in, by chat id, so a second pop-out of
+ * the same chat focuses the one it has rather than opening a twin. */
+const chatWindows = new Map<string, BrowserWindow>()
+
+/**
+ * One chat in a window of its own.
+ *
+ * The same renderer, told which chat by `?chat=`, which `App` reads before it
+ * draws anything. Smaller and narrower than the studio because it is meant for
+ * the corner of another editor's screen; `alwaysOnTop` is the renderer's to set
+ * through `setAlwaysOnTop`, from a button in the window's own bar.
+ */
+function openChatWindow(chatId: string): void {
+  const existing = chatWindows.get(chatId)
+  if (existing && !existing.isDestroyed()) {
+    if (existing.isMinimized()) existing.restore()
+    existing.show()
+    existing.focus()
+    return
+  }
+
+  const window = new BrowserWindow({
+    width: 520,
+    height: 720,
+    minWidth: 360,
+    minHeight: 400,
+    backgroundColor: "#111218",
+    show: false,
+    ...(DEV_SERVER_URL && process.platform !== "darwin"
+      ? { icon: DEV_ICON }
+      : {}),
+    ...(process.platform === "darwin"
+      ? {
+          titleBarStyle: "hiddenInset" as const,
+          trafficLightPosition: { x: 14, y: 12 },
+        }
+      : {}),
+    webPreferences: {
+      preload: path.join(__dirname, "preload.cjs"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  })
+
+  chatWindows.set(chatId, window)
+  window.once("ready-to-show", () => window.show())
+  window.on("closed", () => {
+    if (chatWindows.get(chatId) === window) chatWindows.delete(chatId)
+  })
+  keepInside(window)
+
+  const url = new URL(rendererUrl())
+  url.searchParams.set("chat", chatId)
+  void window.loadURL(url.toString())
+}
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -163,6 +222,10 @@ function createWindow(): void {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      // The dock's `Preview` tab is a `<webview>` of the project's dev server
+      // (`dock-preview.tsx`): a separate renderer the studio can screenshot
+      // into a chat, which an `<iframe>` of another origin cannot be.
+      webviewTag: true,
     },
   })
 
@@ -249,7 +312,6 @@ app.on("before-quit", (event) => {
 
   void (async () => {
     // Synchronous kills first, so the slow work below cannot delay them.
-    processes.stopAll()
     // Child processes with nothing to flush: a TypeScript server holds a
     // project in memory and no state worth writing.
     tsServers.stopAll()

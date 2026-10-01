@@ -222,7 +222,7 @@ export class DaemonClient {
     target: TerminalTarget,
     cols: number,
     rows: number
-  ): Promise<string> {
+  ): Promise<{ id: string; pid: number | null }> {
     const message = await this.request({
       op: "create",
       reqId: randomUUID(),
@@ -235,7 +235,7 @@ export class DaemonClient {
     if (message.type !== "created") {
       throw new Error("Unexpected response creating a session.")
     }
-    return message.id
+    return { id: message.id, pid: message.pid ?? null }
   }
 
   /** `null` means the daemon does not know this id — the caller falls back

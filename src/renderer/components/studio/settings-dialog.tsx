@@ -18,6 +18,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
 import {
@@ -36,6 +43,18 @@ import {
 } from "lucide-react"
 
 import type { McpListing, McpServerInfo } from "@shared/api"
+import {
+  ACCENT_PALETTES,
+  isDensity,
+  isFontSize,
+  isMonoFont,
+  isSansFont,
+  MONO_FONT_LABELS,
+  monoFontFamily,
+  PALETTE_LABELS,
+  SANS_FONT_LABELS,
+  sansFontFamily,
+} from "@/lib/appearance"
 import { useProjects } from "@/lib/projects"
 import { useSettings } from "@/lib/settings"
 import { useStudio } from "@/lib/store"
@@ -144,7 +163,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
 
           <div className="min-h-0 flex-1 overflow-y-auto p-5">
             {section === "appearance" ? (
-              <AppearanceSection />
+              <AppearanceSection onReplayTour={onClose} />
             ) : section === "tabs" ? (
               <TabsSection />
             ) : section === "chats" ? (
@@ -213,30 +232,208 @@ const SECTIONS: {
   },
 ]
 
-function AppearanceSection() {
+/**
+ * How the studio looks. Every row here applies as it is picked — the window
+ * behind the dialog is the preview — through `applyAppearance`, which the
+ * workbench subscribes to the settings store with; nothing in this section
+ * touches the document itself.
+ */
+function AppearanceSection({ onReplayTour }: { onReplayTour: () => void }) {
   // `theme` is the choice, `resolvedTheme` what it came out as — the choice is
   // what a settings row is asking about, so `system` stays visible as `system`
   // rather than as whichever of the two it happens to be right now.
   const { theme, setTheme } = useTheme()
+  const palette = useSettings((state) => state.palette)
+  const setPalette = useSettings((state) => state.setPalette)
+  const fontSans = useSettings((state) => state.fontSans)
+  const setFontSans = useSettings((state) => state.setFontSans)
+  const fontMono = useSettings((state) => state.fontMono)
+  const setFontMono = useSettings((state) => state.setFontMono)
+  const fontSize = useSettings((state) => state.fontSize)
+  const setFontSize = useSettings((state) => state.setFontSize)
+  const density = useSettings((state) => state.density)
+  const setDensity = useSettings((state) => state.setDensity)
+  const setOnboarded = useSettings((state) => state.setOnboarded)
 
   return (
-    <Card>
-      <Row
-        title="Theme"
-        description="Follow the system, or pin the studio to one of the two."
-      >
-        <Segmented
-          value={theme ?? "system"}
-          options={[
-            { value: "system", label: "System" },
-            { value: "light", label: "Light" },
-            { value: "dark", label: "Dark" },
-          ]}
-          onPick={setTheme}
-        />
-      </Row>
-    </Card>
+    <div className="space-y-4">
+      <Card>
+        <Row
+          title="Theme"
+          description="Follow the system, or pin the studio to one of the two."
+        >
+          <Segmented
+            value={theme ?? "system"}
+            options={[
+              { value: "system", label: "System" },
+              { value: "light", label: "Light" },
+              { value: "dark", label: "Dark" },
+            ]}
+            onPick={setTheme}
+          />
+        </Row>
+        <Row
+          title="Accent"
+          description="The colour of buttons, selections and the active row, and the tint every grey in the window carries."
+        >
+          <div role="radiogroup" className="flex items-center gap-1.5">
+            {ACCENT_PALETTES.map((candidate) => (
+              <button
+                key={candidate}
+                type="button"
+                role="radio"
+                aria-checked={candidate === palette}
+                aria-label={PALETTE_LABELS[candidate]}
+                title={PALETTE_LABELS[candidate]}
+                // The swatch is the palette's own `--primary`: the same
+                // `[data-palette]` rule the window reads, on a span instead of
+                // `<html>`, so there is no second table of colours to keep in
+                // step. It is the light accent in both modes, since the dark
+                // rule wants `.dark` on the same element.
+                data-palette={candidate}
+                onClick={() => setPalette(candidate)}
+                className={cn(
+                  "flex size-6 items-center justify-center rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+                  candidate === palette
+                    ? "ring-2 ring-foreground ring-offset-2 ring-offset-popover"
+                    : "ring-1 ring-border"
+                )}
+              >
+                <span className="size-4 rounded-full bg-primary" />
+              </button>
+            ))}
+          </div>
+        </Row>
+      </Card>
+
+      <Card>
+        <Row
+          title="Font"
+          description="The interface's typeface. A family not installed on this machine falls back to the system's."
+        >
+          <FontPicker
+            value={fontSans}
+            labels={SANS_FONT_LABELS}
+            onPick={(value) => {
+              if (isSansFont(value)) setFontSans(value)
+            }}
+          />
+        </Row>
+        <Row
+          title="Monospace font"
+          description="For code: the editors, the diff and the terminal. Open editors pick it up when they are next opened."
+        >
+          <FontPicker
+            value={fontMono}
+            labels={MONO_FONT_LABELS}
+            onPick={(value) => {
+              if (isMonoFont(value)) setFontMono(value)
+            }}
+          />
+        </Row>
+        <Row
+          title="Font size"
+          description="Scales the whole window — the rows and paddings go with the text, not only the text."
+        >
+          <Segmented
+            value={fontSize}
+            options={[
+              { value: "small", label: "Small" },
+              { value: "default", label: "Default" },
+              { value: "large", label: "Large" },
+            ]}
+            onPick={(value) => {
+              if (isFontSize(value)) setFontSize(value)
+            }}
+          />
+        </Row>
+        <Row
+          title="Density"
+          description="How tightly the sidebar's rows and a chat's turns sit."
+        >
+          <Segmented
+            value={density}
+            options={[
+              { value: "compact", label: "Compact" },
+              { value: "comfortable", label: "Comfortable" },
+              { value: "spacious", label: "Spacious" },
+            ]}
+            onPick={(value) => {
+              if (isDensity(value)) setDensity(value)
+            }}
+          />
+        </Row>
+      </Card>
+
+      <Card>
+        <Row
+          title="Tour"
+          description="The five cards shown on first launch, pointing at the parts of the window."
+        >
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              // Unset first, then close: the tour is mounted by the workbench
+              // off this flag, and it has to land over a window with no
+              // dialog still holding focus.
+              setOnboarded(false)
+              onReplayTour()
+            }}
+          >
+            Replay the tour
+          </Button>
+        </Row>
+      </Card>
+    </div>
   )
+}
+
+/** One of a short list of typefaces, each drawn in itself so the list is its
+ * own preview — and so a family that is not installed is visibly the fallback
+ * before it is picked. */
+function FontPicker<Value extends string>({
+  value,
+  labels,
+  onPick,
+}: {
+  value: Value
+  labels: Record<Value, string>
+  onPick: (value: string) => void
+}) {
+  const values = Object.keys(labels) as Value[]
+  return (
+    <Select
+      value={value}
+      items={labels}
+      onValueChange={(next) => {
+        if (typeof next === "string") onPick(next)
+      }}
+    >
+      <SelectTrigger size="sm" className="w-52 text-xs">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent align="end">
+        {values.map((candidate) => (
+          <SelectItem
+            key={candidate}
+            value={candidate}
+            className="text-xs"
+            style={{ fontFamily: previewFamily(candidate) }}
+          >
+            {labels[candidate]}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  )
+}
+
+/** The stack a row is drawn in: a key is a sans or a mono name, never both. */
+function previewFamily(value: string): string {
+  if (isMonoFont(value) && value !== "system") return monoFontFamily(value)
+  if (isSansFont(value) && value !== "system") return sansFontFamily(value)
+  return "inherit"
 }
 
 function TabsSection() {
