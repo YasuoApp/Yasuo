@@ -7,7 +7,7 @@ import { fileRoots, rootOf } from "./roots"
 import { isRememberedTabs, recall, remember } from "../tab-memory"
 import { resetDoc } from "./documents"
 import { isInside, movedPath, parentOf } from "./paths"
-import { defaultViewer, type Viewer } from "./viewers"
+import { defaultViewer, viewersFor, type Viewer } from "./viewers"
 
 /** Which files were open in the strip, and which was on screen. */
 const OPEN_TABS_KEY = "files.tabs"
@@ -994,7 +994,11 @@ export function viewOf(
    * shown as" is per pane, and `views` is per path. */
   preferred?: Viewer
 ): Viewer {
-  return state.views[filePath] ?? preferred ?? defaultViewer(filePath)
+  // Only where the file can be shown that way: a PNG in the `Changes` tab was
+  // forced into a diff, read as text, and drawn as "Not a text file".
+  const offered =
+    preferred && viewersFor(filePath).includes(preferred) ? preferred : null
+  return state.views[filePath] ?? offered ?? defaultViewer(filePath)
 }
 
 /** One image read into the shape the image view draws — a failure is a

@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/empty"
 import { useChanges } from "@/lib/files/changes"
 import { fileRootsOf } from "@/lib/files/roots"
+import { isImage } from "@/lib/files/viewers"
 import { useFiles } from "@/lib/files/store"
 import { isStudioShortcut } from "@/lib/shortcuts"
 import { useStudio } from "@/lib/store"
@@ -116,7 +117,10 @@ export function ChangesPane() {
     <FilePane
       path={path}
       visible={shown}
-      preferred={conflicted ? "text" : "diff"}
+      // A picture as the committed one beside the working one, an SVG
+      // included: its text diff is a right-click away, and a changed
+      // `viewBox` is read faster as a drawing than as a number.
+      preferred={conflicted ? "text" : isImage(path) ? "image" : "diff"}
     />
   ) : (
     <Notice

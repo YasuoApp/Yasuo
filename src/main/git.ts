@@ -425,6 +425,34 @@ export async function fileAtHead(
 }
 
 /**
+ * `fileAtHead` for a picture: the committed bytes, or null when HEAD has none.
+ *
+ * Its own read because `git` decodes stdout as UTF-8, and a PNG through that is
+ * a string with every invalid byte replaced — the left-hand side of an image
+ * comparison that never decodes.
+ */
+export async function fileBytesAtHead(
+  dir: string,
+  filePath: string,
+  maxBytes: number
+): Promise<Buffer | null> {
+  const relative = await inRepository(dir, filePath)
+  if (relative === null) return null
+
+  try {
+    const { stdout } = await run("git", ["show", `HEAD:${relative}`], {
+      cwd: dir,
+      windowsHide: true,
+      encoding: "buffer",
+      maxBuffer: maxBytes,
+    })
+    return stdout
+  } catch {
+    return null
+  }
+}
+
+/**
  * The patch between `HEAD` and the working tree for one file, or null when
  * there is none to be had.
  *

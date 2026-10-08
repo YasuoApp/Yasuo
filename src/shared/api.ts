@@ -2123,6 +2123,12 @@ export type DesktopApi = {
    * of a file in the workspace, and is gated the same way.
    */
   fileDiff: (filePath: string) => Promise<FileDiff>
+  /**
+   * A picture as it was committed, as a `data:` URL — the left-hand side of the
+   * `Changes` tab's image comparison. Null for one that is not in HEAD, which is
+   * what an added picture is. Gated and capped like `readImageFile`.
+   */
+  imageAtHead: (filePath: string) => Promise<string | null>
 
   /**
    * Who last changed each line of `text`, the editor's buffer of `filePath` —
@@ -2740,6 +2746,7 @@ export const IPC = {
   gitCommit: "git:commit",
   draftCommitMessage: "git:draft-message",
   fileDiff: "git:file-diff",
+  imageAtHead: "git:image-at-head",
   gitBlame: "git:blame",
   getSetting: "settings:get",
   setSetting: "settings:set",

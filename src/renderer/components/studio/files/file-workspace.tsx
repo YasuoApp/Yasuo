@@ -30,6 +30,7 @@ import { IconButton } from "../icon-button"
 import { FileDiff } from "./file-diff"
 import { FileEditor } from "./file-editor"
 import { FileImage } from "./file-image"
+import { FileImageDiff } from "./file-image-diff"
 import { FileMarkdown } from "./file-markdown"
 import { FileBlocks } from "./file-blocks"
 import { FileEnv } from "./file-env"
@@ -310,7 +311,15 @@ export function FilePane({
       )}
 
       <div className="min-h-0 flex-1">
-        {viewer === "image" ? (
+        {viewer === "image" && preferred === "image" ? (
+          // Only the `Changes` tab prefers a picture, and there the question is
+          // what changed in it rather than what it looks like now.
+          <FileImageDiff
+            path={path}
+            image={image ?? { kind: "loading" }}
+            revision={status}
+          />
+        ) : viewer === "image" ? (
           <FileImage image={image ?? { kind: "loading" }} alt={path} />
         ) : (
           <Body

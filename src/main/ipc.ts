@@ -34,6 +34,7 @@ import {
   discardAll,
   blame,
   fileAtHead,
+  fileBytesAtHead,
   fileDiff,
   stage,
   unstage,
@@ -860,6 +861,25 @@ export function createIpc(host: Host): {
       fileDiff(root.path, target),
     ])
     return { head, patch }
+  })
+
+  handle(IPC.imageAtHead, async (_event, filePath: string) => {
+    const target = await inWorkspace(filePath)
+    const root = (await fileRoots())
+      .filter((candidate) => files.insideAny([candidate.path], target))
+      .sort((a, b) => b.path.length - a.path.length)[0]
+    if (!root) return null
+
+    // Over the ceiling is a failed read, so a committed 40MP photograph is
+    // "nothing to compare against" rather than a base64 string over the bridge.
+    const bytes = await fileBytesAtHead(
+      root.path,
+      target,
+      MAX_IMAGE_PREVIEW_BYTES
+    )
+    if (!bytes) return null
+    const mime = IMAGE_MIME_TYPES[path.extname(target).toLowerCase()]
+    return `data:${mime ?? "application/octet-stream"};base64,${bytes.toString("base64")}`
   })
 
   // The narrowest root again, for the same reason as above.
