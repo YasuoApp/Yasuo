@@ -7,7 +7,6 @@ import {
   FolderOpen,
   GitBranch,
   GitBranchPlus,
-  GraduationCap,
   Loader2,
   MessageSquare,
   Pencil,
@@ -40,7 +39,6 @@ import { useStudio } from "@/lib/store"
 import { IconButton } from "../icon-button"
 import { RenameRow, useMenuFocusHandoff } from "../rename-row"
 import { SideRow } from "../side-row"
-import { DistillDialog } from "../worktree/distill-dialog"
 import { NewWorktreeDialog } from "./new-worktree-dialog"
 import { useShells } from "@/lib/shell/store"
 import {
@@ -753,9 +751,10 @@ function ProjectChats({
   /** Which chat's name is a field right now. In place, the way every other
    * sidebar in the studio renames — see `RenameRow`. */
   const [renamingId, setRenamingId] = useState<string | null>(null)
-  /** Which chat is being distilled — the dialog under the list. One at a
-   * time, because each is a turn of the second, read-only CLI. */
-  const [distilling, setDistilling] = useState<WorktreeChat | null>(null)
+  /** Which chat the delete confirmation is up for. Here rather than on the
+   * row, for the reason `removing` is on the section: a dialog inside the row
+   * would be unmounted by the deletion it is confirming. */
+  const [deleting, setDeleting] = useState<WorktreeChat | null>(null)
   const menuFocus = useMenuFocusHandoff()
 
   /** Whether the list runs past `CHAT_LIMIT`. Per project and in memory: a
@@ -895,14 +894,6 @@ function ProjectChats({
                 <Pencil />
                 Rename
               </ContextMenuItem>
-              {/* Only under a project: the turn reads in the project's own
-                  directory, and an ungrouped chat has none to read in. */}
-              {folderId && (
-                <ContextMenuItem onClick={() => setDistilling(chat)}>
-                  <GraduationCap />
-                  Distill learnings…
-                </ContextMenuItem>
-              )}
               <ContextMenuSeparator />
               {/* The transcript as a document — see `lib/worktree-chat/export.ts`.
                   Three items rather than one dialog with a format picker: the
@@ -949,13 +940,14 @@ function ProjectChats({
                 Export as HTML…
               </ContextMenuItem>
               <ContextMenuSeparator />
-              {/* The conversation is on disk, so this is the one way it goes. */}
+              {/* The conversation is on disk, so this is the one way it goes —
+                  and there is no undo, which is why it asks. */}
               <ContextMenuItem
                 variant="destructive"
-                onClick={() => void remove(chat.id)}
+                onClick={() => setDeleting(chat)}
               >
                 <Trash2 />
-                Delete chat
+                Delete chat…
               </ContextMenuItem>
             </ContextMenuContent>
           </ContextMenu>
@@ -972,14 +964,41 @@ function ProjectChats({
           </span>
         </SideRow>
       )}
-      {distilling && folderId && (
-        <DistillDialog
-          chatId={distilling.id}
-          chatTitle={distilling.title}
-          folderId={folderId}
-          onClose={() => setDistilling(null)}
-        />
-      )}
+      <AlertDialog
+        open={deleting !== null}
+        onOpenChange={(next) => {
+          if (!next) setDeleting(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this chat?</AlertDialogTitle>
+            <AlertDialogDescription>
+              &ldquo;{deleting?.title}&rdquo; and everything said in it are
+              deleted from Yasuo, and there is no undo.
+              {/* Said only when it is true: main kills a turn still running
+                  in a chat it deletes, and that is the one part of this that
+                  reaches past the transcript. */}
+              {deleting && sending.includes(deleting.id)
+                ? " It is still working, and the running turn is stopped."
+                : ""}{" "}
+              Files it changed in the project stay as they are.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => {
+                if (deleting) void remove(deleting.id)
+                setDeleting(null)
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   )
 }

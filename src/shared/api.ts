@@ -6,10 +6,6 @@
  * frontend reaches it through the `@shared` alias.
  */
 
-// Type-only, so the circle with `learnings.ts` (which takes `AssistantMessage`
-// from here) never exists at runtime.
-import type { LearningProposal } from "./learnings"
-
 /**
  * One folder the workspace has been pointed at — a repository on this machine,
  * edited and run where it already is.
@@ -901,6 +897,36 @@ export type McpServerInfo = {
  * very different things to be told, and the second one is the one somebody needs
  * to act on.
  */
+/**
+ * One claude.ai plan rate-limit window — the five-hour one, the seven-day one,
+ * or a per-model one — as `/usage` in the CLI reports it.
+ */
+export type PlanWindow = {
+  /** The CLI's own key (`five_hour`, `seven_day`, `seven_day_opus`, …). Kept
+   * as a string so a window this build has never heard of is still drawn. */
+  id: string
+  /** Percent of the window used, 0–100. */
+  utilization: number
+  /** ISO time the window resets, or null if the CLI did not say. */
+  resetsAt: string | null
+}
+
+/**
+ * How much of an account's plan its `claude` says it has used — the composer's
+ * usage meter. `available` is false for an API key, Bedrock or Vertex, where
+ * plan limits do not apply; `error` is set when the CLI could not be asked at
+ * all. See `main/plan-usage.ts`.
+ */
+export type PlanUsage = {
+  available: boolean
+  /** `pro`, `max`, `team`, `enterprise` — or null for a non-plan account. */
+  subscription: string | null
+  windows: PlanWindow[]
+  error: string | null
+  /** When the CLI answered, ISO. */
+  at: string
+}
+
 export type McpListing = {
   /** The directory the CLI was asked in — an MCP config is per directory (a
    * repository's own `.mcp.json`), so the listing is only true of one. */
@@ -1319,16 +1345,6 @@ export type WorktreeChatOptions = {
    */
   profileId?: string | null
   /**
-   * A ceiling on what this chat may spend, in USD, or null for none.
-   *
-   * A warning rather than a lock: main writes an `error` line the moment a
-   * turn's usage takes the chat's total past it, and the composer shows the cap
-   * as reached, but the next message still goes — the figure is the CLI's own
-   * estimate, and a chat refused mid-task over an estimate is worse than one
-   * that says loudly it has cost more than planned.
-   */
-  budgetUsd?: number | null
-  /**
    * The MCP tools this chat's turns may not call, as wire names.
    *
    * This app's refusal rather than anything written into the user's own
@@ -1379,7 +1395,6 @@ export const DEFAULT_CHAT_OPTIONS: WorktreeChatOptions = {
   effort: DEFAULT_CHAT_EFFORT,
   permission: "edits",
   profileId: null,
-  budgetUsd: null,
   disabledTools: [],
 }
 
@@ -1408,12 +1423,6 @@ export function chatOptions(
       options.effort ?? (options.model == null ? null : DEFAULT_CHAT_EFFORT),
     permission: readPermission(options),
     profileId: options.profileId ?? null,
-    // Only a positive figure is a cap; anything else a record carries reads as
-    // none, so a hand-edited `0` cannot mark every turn as over budget.
-    budgetUsd:
-      typeof options.budgetUsd === "number" && options.budgetUsd > 0
-        ? options.budgetUsd
-        : null,
     // Sorted and deduplicated, so two lists naming the same tools are the same
     // signature in main and do not close a session for nothing.
     disabledTools: Array.isArray(options.disabledTools)
@@ -1771,18 +1780,6 @@ export type ChatBlame = {
  */
 export type AgentTurnAnswer = { text: string } | { error: string }
 
-/** What `distillLearnings` came back with. An empty list is a real answer —
- * the chat taught nothing worth keeping — and the dialog says it as one. The
- * proposal type itself lives in `shared/learnings.ts` with the parsing and the
- * file shapes, which is also where the argument for the feature is. */
-export type DistillAnswer =
-  { proposals: LearningProposal[] } | { error: string }
-
-/** What `saveLearning` came back with: the path written, relative to the
- * project, for the dialog to show — or the refusal, which is an answer too
- * (`A skill named … already exists.`). */
-export type SaveLearningAnswer = { path: string } | { error: string }
-
 /**
  * The language a fenced block carries when it holds a drawing.
  *
@@ -2060,8 +2057,8 @@ export type DesktopApi = {
   /**
    * A commit message for what is staged, drafted by the read-only `claude`.
    *
-   * The same shape as `distillLearnings` and for the same reasons — the same
-   * three settings, and an answer either way rather than a rejection: a draft
+   * The three settings from Settings › Claude, and an answer either way rather
+   * than a rejection: a draft
    * that did not arrive leaves the box as it was. What comes back goes into an
    * editable field, never straight into a commit.
    */
@@ -2243,6 +2240,13 @@ export type DesktopApi = {
    * asks for the same directory at once share the one process.
    */
   installedMcpServers: (folderId: string | null) => Promise<McpListing>
+  /**
+   * How much of the claude.ai plan the account behind `profileId` has used —
+   * null for the default login. Asked of the CLI over its control channel,
+   * held for a minute per account in main; `fresh` skips the hold, for a
+   * Refresh and for the ask after a turn ends. See `main/plan-usage.ts`.
+   */
+  planUsage: (profileId: string | null, fresh: boolean) => Promise<PlanUsage>
   /**
    * Removes one of those servers from the user's own `claude` config — the
    * **Remove** button on a row in the composer's MCP menu.
@@ -2478,34 +2482,6 @@ export type DesktopApi = {
   onRevealWorktreeChat: (listener: (chatId: string) => void) => () => void
 
   /**
-   * What one chat taught about its project, proposed by the read-only
-   * `claude` — never written. Asked for from the chat's own row, and each
-   * proposal in the answer is saved or discarded by hand (`saveLearning`).
-   *
-   * The chat id says which transcript, the folder id says which project the
-   * turn reads in — resolved on the main side, the same as a chat's own cwd.
-   * `model`, `effort` and `profileId` are the draft's three, for the draft's
-   * reason: it is the same second CLI.
-   */
-  distillLearnings: (
-    chatId: string,
-    folderId: string,
-    model: string | null,
-    effort: ChatEffort | null,
-    profileId: string | null
-  ) => Promise<DistillAnswer>
-  /**
-   * One approved proposal, written where the user's own `claude` will find it:
-   * a skill under `.claude/skills/`, a memory as a bullet in `CLAUDE.md`. The
-   * one write this feature makes, and only ever per press of Save — see
-   * `main/learnings.ts`.
-   */
-  saveLearning: (
-    folderId: string,
-    proposal: LearningProposal
-  ) => Promise<SaveLearningAnswer>
-
-  /**
    * One drawing's scene, as the text of its `.excalidraw` file — Excalidraw's
    * own format, so a scene can be opened at excalidraw.com or in the editor's
    * desktop app without this studio.
@@ -2735,6 +2711,7 @@ export const IPC = {
   agentModels: "agent:models",
   agentCommands: "agent:commands",
   installedMcpServers: "mcp:installed",
+  planUsage: "claude:plan-usage",
   removeMcpServer: "mcp:remove",
   listClaudeProfiles: "claude-profiles:list",
   saveClaudeProfiles: "claude-profiles:save",
@@ -2764,8 +2741,6 @@ export const IPC = {
   stopWorktreeChat: "worktree-chats:stop",
   worktreeChatEvent: "worktree-chats:event",
   revealWorktreeChat: "worktree-chats:reveal",
-  distillLearnings: "agent:distill",
-  saveLearning: "agent:save-learning",
   readDrawing: "drawings:read",
   writeDrawing: "drawings:write",
   writeDrawingSvg: "drawings:write-svg",

@@ -6,7 +6,6 @@ import {
   CHAT_NOTIFICATIONS_KEY,
   CHAT_TRAY_KEY,
   IPC,
-  chatOptions,
   type ChatImage,
   type ChatPlace,
   type ChatSeed,
@@ -41,9 +40,8 @@ import {
 } from "./git"
 import { ChatNotices, noticeText, type ChatNotice } from "./notify"
 import { installedMcpServers, removeMcpServer } from "./mcp-servers"
-import { transcriptOf, type LearningProposal } from "../shared/learnings"
-import { saveLearning } from "./learnings"
-import { distillLearnings, draftCommitMessage } from "./one-turn-agent"
+import { planUsage } from "./plan-usage"
+import { draftCommitMessage } from "./one-turn-agent"
 import type { Host } from "./host"
 import { expandHome, quote } from "./shell-env"
 import { systemUsage } from "./system-usage"
@@ -193,8 +191,8 @@ export function createIpc(host: Host): {
    * A picked `profileId` as a `CLAUDE_CONFIG_DIR`, for a one-turn agent.
    *
    * The same resolve `worktree-chat.ts` does at send time (`profileConfigDir`
-   * there), asked here instead because a drafted message and a distilled chat
-   * have no chat and no `WorktreeChats` record to resolve it on. Looked up by id
+   * there), asked here instead because a drafted message has no chat and no
+   * `WorktreeChats` record to resolve it on. Looked up by id
    * rather than trusted from the renderer, same reason: a profile can be
    * renamed or deleted between the picker being drawn and the button being
    * pressed.
@@ -215,10 +213,10 @@ export function createIpc(host: Host): {
    * The larger of the two `claude`s this app spawns, and the only one that is a
    * conversation. What the old "no second one" rule was about is still refused —
    * a feature calling the CLI as a helper, an AI filter or an import button —
-   * because a helper turn is a turn nobody asked for. `draftCommitMessage` and
-   * `distillLearnings` below are the turns beside these, and neither is one of
-   * those: each is a button pressed by the person who reads its answer. See the
-   * top of `one-turn-agent.ts`.
+   * because a helper turn is a turn nobody asked for. `draftCommitMessage`
+   * below is the turn beside these, and is not one of those: it is a button
+   * pressed by the person who reads its answer. See the top of
+   * `one-turn-agent.ts`.
    */
   const worktreeChats = new WorktreeChats(
     {
@@ -359,6 +357,14 @@ export function createIpc(host: Host): {
    */
   handle(IPC.installedMcpServers, async (_event, folderId: unknown) =>
     installedMcpServers(await folderDirOf(folderId))
+  )
+
+  // The profile resolved here rather than a path trusted from the renderer —
+  // the same `configDirOf` the commit draft goes through.
+  handle(
+    IPC.planUsage,
+    async (_event, profileId: string | null, fresh: boolean) =>
+      planUsage(await configDirOf(profileId), fresh === true)
   )
 
   // The CLI's own `mcp remove`, in the same directory the listing was asked in —
@@ -787,10 +793,8 @@ export function createIpc(host: Host): {
   /*
    * A commit message drafted from the staged diff by the read-only `claude`.
    *
-   * The same three settings the distilling turn takes, resolved the same way —
-   * it is the same second CLI, billed to the same profile. Answers rather than
-   * throws, like the other call into `one-turn-agent.ts`: a draft that did
-   * not arrive leaves the box exactly as it was, which is a message somebody
+   * Settings › Claude's three, `profileId` resolved through `configDirOf`.
+   * Answers rather than throws: a draft that did not arrive leaves the box exactly as it was, which is a message somebody
    * types themselves.
    */
   handle(
@@ -1076,47 +1080,6 @@ export function createIpc(host: Host): {
     // since nothing else here re-reads it.
     if (key === CHAT_TRAY_KEY) await applyTraySetting()
   })
-
-  /**
-   * What one chat taught, distilled by the same read-only `claude` the drafted
-   * commit message runs on. The transcript is read here and handed over as text: a chat's
-   * file lives under `~/.yasuo`, which the turn — running in the project's own
-   * directory — has no business reaching into. `model`, `effort` and
-   * `profileId` are the draft's three, resolved the same way.
-   */
-  handle(
-    IPC.distillLearnings,
-    async (
-      _event,
-      chatId: string,
-      folderId: string,
-      model: string | null,
-      effort: string | null,
-      profileId: string | null
-    ) =>
-      distillLearnings({
-        cwd: await store.resolveFolderDir(folderId),
-        transcript: transcriptOf(await worktreeChats.read(chatId)),
-        model,
-        effort,
-        configDir: await configDirOf(profileId),
-        // The distilled chat's own switched-off tools: they are out of its
-        // turns' prompts, and have no business in this one's either.
-        disabledTools: chatOptions(
-          (await store.listWorktreeChats()).find((chat) => chat.id === chatId)
-            ?.options
-        ).disabledTools,
-      })
-  )
-
-  /** One approved proposal written into the project — see `main/learnings.ts`.
-   * The folder id is resolved here for the reason every write is: a path
-   * built in main is a path gated in main. */
-  handle(
-    IPC.saveLearning,
-    async (_event, folderId: string, proposal: LearningProposal) =>
-      saveLearning(await store.resolveFolderDir(folderId), proposal)
-  )
 
   handle(IPC.readDrawing, (_event, id: string) => store.readDrawing(id))
 

@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto"
 
-import { proposalsIn, type LearningProposal } from "../shared/learnings"
 import { startAgentSession } from "./claude-agent"
 import { recentSubjects, stagedDiff } from "./git"
 
@@ -12,9 +11,9 @@ import { recentSubjects, stagedDiff } from "./git"
  * **The rule it is measured against is worth restating.** `ipc.ts` says the old
  * "no second one" rule still refuses a feature that calls the CLI as a helper —
  * an AI filter, an import button — because a helper turn is a turn nobody asked
- * for. Neither turn here is one: each is asked for out loud by a button or a
- * menu item, and each answers in the place it was asked from, as text somebody
- * still has to press Commit on or as proposals somebody saves one by one.
+ * for. The turn here is not one: it is asked for out loud by a button, and it
+ * answers in the place it was asked from, as text somebody still has to press
+ * Commit on.
  *
  * What separates these from a chat, and why they are not one:
  *
@@ -31,9 +30,10 @@ import { recentSubjects, stagedDiff } from "./git"
  * about a conversation that persists — the transcript, the resume, the idle
  * reaper, the ask table — and none of it applies.
  *
- * There used to be two more turns here, `reviewReply` and `reviewChanges`: the
- * agent half of the review, deleted with it. What survives is the **comments**
- * somebody writes by hand — see `docs/design.md` § Comments.
+ * There used to be three more turns here: `reviewReply` and `reviewChanges`, the
+ * agent half of the review (`docs/design.md` § Comments, removed), and
+ * `distillLearnings`, which proposed skills and `CLAUDE.md` bullets out of a
+ * chat (§ Distilling learnings, removed).
  */
 
 export type OneTurnResult =
@@ -46,10 +46,9 @@ export type OneTurnResult =
  * One read-only turn, opened for a question and closed on the answer./**
  * One read-only turn, opened for a question and closed on the answer.
  *
- * The shape both of this file's turns are: a drafted commit message, and one
- * chat distilled. They differ in what they are told, what they may call and how
- * long they are given — everything else about running a `claude` once is here,
- * once.
+ * Split from `draftCommitMessage` so that what is particular to a draft — what
+ * it is told, what it may call and how long it is given — is apart from what
+ * running a `claude` once takes.
  *
  * The assistant's text is collected across replies and joined, because a turn
  * that thinks out loud sends several: `thinking` lines are dropped, which is the
@@ -157,9 +156,8 @@ async function oneTurn(request: {
 /**
  * How long a drafted commit message is given.
  *
- * Shorter than the distilling turn's, because it is a different amount of work
- * and a different amount of patience: this one has somebody sitting in front of it
- * with the message box open, and a draft that has not arrived in a minute is one
+ * A minute, because this one has somebody sitting in front of it with the
+ * message box open, and a draft that has not arrived in a minute is one
  * they have already typed past.
  */
 const DRAFT_TIMEOUT_MS = 60_000
@@ -220,9 +218,8 @@ export type DraftCommitRequest = {
  * button, pressed by the person who is about to commit, and its whole output is
  * text handed to them in an editable box. Nothing happens on its way past —
  * a draft nobody presses costs nothing and changes nothing, and a draft that is
- * wrong is a sentence somebody rewrites before pressing Commit. That is the same
- * test `distillLearnings` passes: asked for out loud, answered in the place it
- * was asked from.
+ * wrong is a sentence somebody rewrites before pressing Commit: asked for out
+ * loud, answered in the place it was asked from.
  *
  * The patch is gathered here rather than left to the turn to fetch: a read-only
  * tool list has no `git`, and this process already knows how to ask
@@ -274,130 +271,4 @@ export async function draftCommitMessage(
     configDir: request.configDir,
     disabledTools: request.disabledTools,
   })
-}
-
-/**
- * How long a distilling turn is given. Five times the draft's, because it
- * reads a whole conversation and then the repository's existing skills and
- * `CLAUDE.md` to avoid proposing what is already written down.
- */
-const DISTILL_TIMEOUT_MS = 300_000
-
-/**
- * How much of the transcript goes over, and it is the **tail** that is kept:
- * a long chat's early turns are the attempts, and the corrections that
- * superseded them — the part worth learning from — come later. Said out loud
- * in the prompt when it happens, so the turn knows it is reading an excerpt.
- */
-const DISTILL_TRANSCRIPT_LIMIT = 160_000
-
-/**
- * The draft's list, plus `Glob` and `Grep`: the turn has to find what
- * `.claude/skills/` and `CLAUDE.md` already say before proposing to say it
- * again. No web — the learnings are in the conversation, not on a page.
- */
-const DISTILL_TOOLS = ["ToolSearch", "Read", "Glob", "Grep"]
-
-/**
- * What the distilling turn is told.
- *
- * The output shape is again the whole difficulty, and the second difficulty is
- * restraint. A model asked what a conversation taught will find a lesson in
- * every turn of it; what is wanted is the two or three things the *next* chat
- * in this project would otherwise have to rediscover — so the number is said
- * out loud, and so is the test ("had to be found out", not "was mentioned").
- * The split between the two kinds is said in terms of rent: a memory line is
- * read at the top of every turn forever, a skill is read when its description
- * matches, so anything longer than a sentence or two goes to a skill.
- */
-const DISTILL_PROMPT = [
-  "You are reading one finished conversation between a user and a coding agent, in the project the conversation was about. Your job is to distill what it taught — the facts, conventions and procedures the next conversation in this project would otherwise have to rediscover.",
-  "",
-  'Answer with a single fenced ```json block and nothing else: an array of proposals, each `{ "kind", "name", "description", "body" }`.',
-  "",
-  '- `kind` is `"skill"` or `"memory"`. A **memory** is one or two sentences of standing fact — a constraint, a convention, a decision and its reason — that becomes a bullet in this project\'s `CLAUDE.md`, read at the start of every future conversation; keep it short, its cost is paid forever. A **skill** is a procedure — steps that were worked out and would be followed again — and becomes `.claude/skills/<name>/SKILL.md`, loaded only when relevant; this is where anything longer than two sentences belongs.',
-  "- `name` is a short kebab-case slug: a skill's directory name, a memory's label.",
-  "- `description` is one line saying when the learning applies — for a skill it is what the agent matches against before loading it.",
-  "- `body` is the learning itself, markdown. For a memory: the sentence or two, stating the why. For a skill: the procedure, concrete enough to follow without this conversation open.",
-  "",
-  "Before proposing anything, read what is already written down: this project's `CLAUDE.md`, and the skills under `.claude/skills/` if there are any. Propose nothing that restates them, and nothing derivable from the code itself — a learning is what had to be found out the hard way: a command that only works a certain way, a constraint that cost a debugging session, an approach that was tried and rejected and why.",
-  "",
-  "Fewer, better. Two or three proposals is a good answer; most conversations teach nothing worth keeping, and for those return an empty array and say nothing else. Never propose a learning about the conversation itself, the user's mood, or the one-off task that was done.",
-  "",
-  "This turn is read-only on purpose: the editing tools and the shell are unavailable, so do not try them. Nothing you propose is written anywhere — each proposal is shown to the user, who saves or discards it.",
-].join("\n")
-
-export type DistillRequest = {
-  /** The project the chat belongs to — the directory the turn reads in. */
-  cwd: string
-  /** The chat's lines as plain text — `transcriptOf` in `shared/learnings.ts`
-   * builds it, main hands it over. Gathered here rather than left to the turn
-   * for the reason the draft gathers its patch: a chat's file lives under
-   * `~/.yasuo`, which is nowhere a turn in the project's directory reads. */
-  transcript: string
-  model?: string | null
-  effort?: string | null
-  configDir?: string | null
-  disabledTools?: string[]
-}
-
-export type DistillResult =
-  { proposals: LearningProposal[] } | { error: string }
-
-/**
- * What one conversation taught, proposed — never written.
- *
- * **Why this is not the helper turn the "no second CLI" rule refuses**: it is a
- * menu item on the chat it reads, pressed by the person who had the
- * conversation, and its whole output is a list of proposals in a dialog with a
- * Save button on each. Nothing happens on its way past — a proposal nobody
- * saves costs nothing and changes nothing. That is the same test
- * `draftCommitMessage` passes: asked for out loud, answered in the place it was
- * asked from, acted on by a person.
- */
-export async function distillLearnings(
-  request: DistillRequest
-): Promise<DistillResult> {
-  const transcript = request.transcript.trim()
-  if (!transcript) {
-    return { error: "This chat has nothing in it to learn from." }
-  }
-
-  const clipped = transcript.length > DISTILL_TRANSCRIPT_LIMIT
-  const shown = clipped
-    ? transcript.slice(-DISTILL_TRANSCRIPT_LIMIT)
-    : transcript
-
-  const prompt = [
-    "Distill what this conversation taught about the project in this directory.",
-    "",
-    ...(clipped
-      ? [
-          "The conversation is long, so this is its latter part — read it as an excerpt.",
-          "",
-        ]
-      : []),
-    "```",
-    shown,
-    "```",
-  ].join("\n")
-
-  const answer = await oneTurn({
-    cwd: request.cwd,
-    prompt,
-    system: DISTILL_PROMPT,
-    tools: DISTILL_TOOLS,
-    timeoutMs: DISTILL_TIMEOUT_MS,
-    model: request.model,
-    effort: request.effort,
-    configDir: request.configDir,
-    disabledTools: request.disabledTools,
-  })
-  if ("error" in answer) return answer
-
-  const proposals = proposalsIn(answer.text)
-  if (proposals === null) {
-    return { error: "Claude answered, but not with proposals this could read." }
-  }
-  return { proposals }
 }

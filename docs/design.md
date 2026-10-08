@@ -271,8 +271,8 @@ the twelve `clickup:*` channels; `ClickupWatch`, `ClickupChange`,
 `test/clickup-watch.ts` and `test/clickup-agents.ts`.
 
 `readOnlyTurn` went out of `one-turn-agent.ts` with the agents that were its only
-caller — `draftCommitMessage` and `distillLearnings` stay, and they remain the
-whole of what that module is for. The board that used to be named here never
+caller — `draftCommitMessage` stays, and is the whole of what that module is
+for (`distillLearnings` was deleted later — see Distilling learnings, removed). The board that used to be named here never
 imported from ClickUp either (see the import argument this section replaced,
 which was deleted before the watcher was), and is itself gone now — see Board,
 removed.
@@ -1642,7 +1642,21 @@ because somebody with two projects open needs to know which one they are about
 to change. It says the opposite of a reassurance, on purpose: this is the
 working tree you have checked out, and an edit here is an edit to your work.
 
-## Distilling learnings
+## Distilling learnings, removed
+
+**It is deleted** — `Distill learnings…` on a chat row, `distill-dialog.tsx`,
+`distillLearnings` in `main/one-turn-agent.ts`, `main/learnings.ts`,
+`shared/learnings.ts`, `test/learnings.ts`, and the `agent:distill` /
+`agent:save-learning` channels. It was not used. Writing down what a project
+taught is something the user's own `claude` already does where it is asked —
+`#` appends a memory to `CLAUDE.md`, and a chat in `Edits` mode writes a skill
+when told to — so a second, separate path to the same two files was a menu
+item, a dialog and a five-minute read-only turn duplicating a sentence typed
+into the chat. What it wrote stays: skills under `.claude/skills/` and bullets
+under `## Learnings` are the user's files, read by the CLI, and nothing here
+touches them. Settings › `Helper turns` now governs the commit draft alone.
+
+What follows is the section as it stood.
 
 The learning loop: the more a project is worked on in its chats, the more of
 what was learned should be waiting for the next one. `Distill learnings…` in a
@@ -2828,7 +2842,7 @@ browser is a protocol error rather than a sign-in page.
 section came with them: the listing, Remove and the sign-in link are a `Plug`
 menu in the composer's toolbar (`worktree/chat-mcp.tsx`), and Settings › MCP is
 deleted. The list of what is off is `disabledTools` on `WorktreeChatOptions`,
-saved with the model and the budget, normalised (sorted, deduplicated) by
+saved with the model and the profile, normalised (sorted, deduplicated) by
 `chatOptions` so main's signature cannot tell two orders of one set apart.
 
 The argument for one workspace list was the cached prefix, and it did not
@@ -2847,7 +2861,7 @@ would. The old workspace list is not carried over: nothing reads
 the menu is opened rather than when the composer mounts — it is a `claude`
 process and several seconds, and a composer is mounted per chat switched to.
 The commit draft gets no list at all (its `permits` already refuses every MCP
-call); a distil gets the distilled chat's own.
+call).
 
 ### The fence that used to be here
 
@@ -3680,7 +3694,7 @@ never press Commit. It is shown the recent subjects rather than taught a
 convention here, because this app has no business telling somebody's repository
 how to write its own history; ten subjects say more about a house style than a
 rule would. It is billed to the model and profile Settings › `Helper turns`
-picks, since it is the same second CLI as `distillLearnings`.
+picks, since it is the second CLI rather than a chat.
 
 **Where it stops is the whole of the decision.** No amend, no log, no branch, no
 push, no stash — and the reason is unchanged from the paragraph above: those are
@@ -4896,6 +4910,55 @@ Nothing polls for it. The fold is re-read when the chat listing moves — which 
 what the end of a turn does — and again off the `Changes` list's own watcher,
 which needs the same call for its chat filter. Both are `chatDigests`, and
 neither is a timer.
+
+### The plan's own limits
+
+Beside the context meter in the composer's toolbar is a second one: how much of
+the claude.ai plan's **five-hour** window the chat's account has used, as
+`5h ▬ 42%`, and behind it a popover with every window the plan has — five-hour,
+seven-day, the per-model ones — each with its bar and when it resets
+(`worktree/chat-plan-usage.tsx`, words in `lib/worktree-chat/plan-usage.ts`).
+Amber from 80%, red from 95%. It is the number `/usage` prints in the CLI.
+
+Where the dashboard above answers "what has this cost", this answers "how much
+is left before the plan stops me" — the question somebody on a Pro or Max plan
+actually has mid-afternoon, and one no figure this app adds up could answer,
+because the limit is the account's across every client, not this app's.
+
+- **Asked, not computed** (`main/plan-usage.ts`): the CLI holds the OAuth token
+  and knows the endpoint, so it is a `claude` with no turn and one control
+  request, the MCP listing's construction. The request is the SDK's
+  `usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET` — named that way
+  by the SDK — so the answer is narrowed field by field (`readPlanUsage`,
+  tested), an unknown window is kept, and a missing method is a sentence in the
+  popover rather than a throw.
+- **Per account.** A chat on a profile spends that profile's plan, so the ask
+  carries the profile's `CLAUDE_CONFIG_DIR`; two chats on two accounts show two
+  meters.
+- **Held a minute per account** in main, and the renderer keeps the last answer
+  per profile, so switching chats draws at once and does not spawn. A turn
+  ending asks again past the hold, since that is when the number moved; so does
+  Refresh.
+- **Nothing drawn** for an API key, Bedrock or Vertex (`rate_limits_available`
+  false), or before the first answer — a meter at 0% would claim a measurement
+  nobody made.
+
+### A chat's budget, removed
+
+There was a `Budget` control in the composer's toolbar: a cap in dollars per
+chat (`budgetUsd` on `WorktreeChatOptions`), drawn as `$spent / $cap` over a
+meter, with presets and a typed amount. It was a warning rather than a lock —
+`checkBudget` in `worktree-chat.ts` appended one `error` line per cap crossed,
+and the next message still went.
+
+It is deleted — `BudgetMenu`, `budgetUsd`, `checkBudget` and its
+`budgetWarned` map, `budgetLabel` / `capLabel` / `overBudget` in
+`lib/worktree-chat/usage.ts` and their checks in `test/chat-spend.ts` — because
+it was not used. What a chat has cost is still on screen: the line under the
+composer, the per-turn usage rows, and this dashboard. A cap nobody sets is a
+button in the one row every message passes, and the warning it existed for
+said the same number the line under the field already says. A cap already on a
+chat's record stays on disk and is read by nothing; `chatOptions` drops it.
 
 ## Updating
 

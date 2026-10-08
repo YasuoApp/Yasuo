@@ -21,9 +21,9 @@ import {
 
 /**
  * Merge conflicts resolved in the file itself, the way VS Code does it: each
- * `<<<<<<<` block gets a row of actions over it — **Accept Current**, **Accept
- * Incoming**, **Accept Both** — and its two sides are tinted so which is which
- * reads without counting markers.
+ * `<<<<<<<` block gets a row of actions over it — **Accept Current Change**,
+ * **Accept Incoming Change**, **Accept Both Changes** — and its two sides are
+ * tinted and named so which is which reads without counting markers.
  *
  * An edit, not a git command. A button rewrites the block in the buffer like
  * typing would — undoable with ⌘Z, unsaved until ⌘S, and forwarded to any other
@@ -62,8 +62,44 @@ function decorationsOf(state: EditorState): DecorationSet {
       }).range(conflict.from)
     )
 
+    // The markers in the order `conflictsIn` found them: the opener, the base
+    // marker when there is one, the separator, the closer. Each opener gets a
+    // header band and the name of its side after the text, the way VS Code
+    // draws them; the separator gets neither, since it belongs to both.
+    const opener = conflict.markers[0]!
+    const closer = conflict.markers[conflict.markers.length - 1]!
+    const baseMarker = conflict.base ? conflict.markers[1]! : null
+    const headers: { at: number; className: string; note: string }[] = [
+      {
+        at: opener,
+        className: "cm-conflictCurrentHeader",
+        note: "Current Change",
+      },
+      ...(baseMarker === null
+        ? []
+        : [
+            {
+              at: baseMarker,
+              className: "cm-conflictBaseHeader",
+              note: "Base",
+            },
+          ]),
+      {
+        at: closer,
+        className: "cm-conflictIncomingHeader",
+        note: "Incoming Change",
+      },
+    ]
+    for (const { at, className, note } of headers) {
+      ranges.push(Decoration.line({ class: className }).range(at))
+      ranges.push(
+        Decoration.widget({ widget: new Note(note), side: 1 }).range(
+          state.doc.lineAt(at).to
+        )
+      )
+    }
+
     const tinted: { at: number; className: string }[] = [
-      ...conflict.markers.map((at) => ({ at, className: "cm-conflictMarker" })),
       ...linesIn(state, conflict.current).map((at) => ({
         at,
         className: "cm-conflictCurrent",
@@ -104,10 +140,29 @@ function linesIn(state: EditorState, range: Range): number[] {
 }
 
 const ACTIONS: { choice: Resolution; label: string }[] = [
-  { choice: "current", label: "Accept Current" },
-  { choice: "incoming", label: "Accept Incoming" },
-  { choice: "both", label: "Accept Both" },
+  { choice: "current", label: "Accept Current Change" },
+  { choice: "incoming", label: "Accept Incoming Change" },
+  { choice: "both", label: "Accept Both Changes" },
 ]
+
+/** `(Current Change)` after a marker's own text — said rather than coloured
+ * alone, since green and blue are not a distinction everybody can see. */
+class Note extends WidgetType {
+  constructor(readonly text: string) {
+    super()
+  }
+
+  eq(other: Note) {
+    return this.text === other.text
+  }
+
+  toDOM() {
+    const note = document.createElement("span")
+    note.className = "cm-conflictNote"
+    note.textContent = ` (${this.text})`
+    return note
+  }
+}
 
 class Actions extends WidgetType {
   constructor(
@@ -179,41 +234,40 @@ function accept(view: EditorView, row: HTMLElement, choice: Resolution) {
 }
 
 /**
- * The tints, as translucent colours so one rule serves both themes: the
- * current side green and the incoming one blue, which is the pairing VS Code
- * has taught everybody who has resolved a conflict in it.
+ * VS Code's own merge colours, header and content: the current side green and
+ * the incoming one blue, a marker line at half strength over its side's body
+ * at a fifth — the pairing everybody who has resolved a conflict there already
+ * reads without thinking. Translucent, so one rule serves both themes.
  */
 const conflictTheme = EditorView.baseTheme({
-  ".cm-conflictCurrent": { backgroundColor: "rgba(64, 200, 174, 0.12)" },
-  ".cm-conflictIncoming": { backgroundColor: "rgba(64, 166, 255, 0.12)" },
-  ".cm-conflictBase": { backgroundColor: "rgba(140, 140, 140, 0.1)" },
-  ".cm-conflictMarker": { opacity: "0.6", fontWeight: "600" },
+  ".cm-conflictCurrentHeader": { backgroundColor: "rgba(64, 200, 174, 0.5)" },
+  ".cm-conflictCurrent": { backgroundColor: "rgba(64, 200, 174, 0.2)" },
+  ".cm-conflictIncomingHeader": { backgroundColor: "rgba(64, 166, 255, 0.5)" },
+  ".cm-conflictIncoming": { backgroundColor: "rgba(64, 166, 255, 0.2)" },
+  ".cm-conflictBaseHeader": { backgroundColor: "rgba(96, 96, 96, 0.4)" },
+  ".cm-conflictBase": { backgroundColor: "rgba(96, 96, 96, 0.16)" },
+  ".cm-conflictNote": { opacity: "0.55" },
   ".cm-conflictActions": {
     display: "flex",
-    gap: "2px",
-    padding: "2px 0 1px 6px",
+    alignItems: "center",
+    padding: "1px 0 1px 6px",
     fontFamily: "var(--font-sans, system-ui)",
-    fontSize: "0.7rem",
-    lineHeight: "1.4",
+    fontSize: "0.72rem",
+    lineHeight: "1.5",
+    opacity: "0.7",
   },
   ".cm-conflictActions button": {
     border: "none",
     background: "transparent",
     color: "inherit",
-    opacity: "0.65",
-    padding: "0 4px",
-    borderRadius: "3px",
+    padding: "0",
     cursor: "pointer",
   },
-  ".cm-conflictActions button:hover": {
-    opacity: "1",
-    textDecoration: "underline",
-  },
+  ".cm-conflictActions button:hover": { textDecoration: "underline" },
   ".cm-conflictActions button + button::before": {
     content: '"|"',
-    marginRight: "6px",
-    opacity: "0.4",
-    textDecoration: "none",
+    margin: "0 6px",
     display: "inline-block",
+    textDecoration: "none",
   },
 })

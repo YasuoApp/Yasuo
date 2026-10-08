@@ -977,9 +977,6 @@ function Conversation({
             // store's to say — see `agentCommands`.
             folderId={place?.folderId ?? null}
             contextWindow={contextWindow}
-            // What the chat has cost so far, for the toolbar's budget control
-            // — the same sum the line under the field draws.
-            spentUsd={total?.costUsd ?? null}
           />
 
           {/* Under the composer rather than at the end of the transcript: the

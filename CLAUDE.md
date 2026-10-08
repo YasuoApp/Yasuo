@@ -169,24 +169,29 @@ under `src/main/` that `ipc.ts` imports may reach `electron`, and
   may call — **per chat**, `WorktreeChatOptions.disabledTools`, handed over as
   `disallowedTools`.
 
+- **`plan-usage.ts`** — how much of the claude.ai plan's five-hour and
+  seven-day windows an account has used, for the composer's usage meter
+  (`worktree/chat-plan-usage.tsx`). Asked the way the MCP listing is — a
+  `claude` and no tokens, one control request — under the chat's profile's
+  `CLAUDE_CONFIG_DIR`, held a minute per account. The request is the SDK's
+  `usage_EXPERIMENTAL_…`, so `readPlanUsage` narrows everything
+  (`test/plan-usage.ts`) and a missing method is an answer, not a throw.
+
 - **`one-turn-agent.ts`** — the **second** `claude`, and the only one that is not
   a conversation: one read-only turn, opened for a question and closed on the
   answer, with no transcript, no resume and nothing to send a second message to.
-  Two of them — `draftCommitMessage`, which reads the staged diff and the last
+  One of them — `draftCommitMessage`, which reads the staged diff and the last
   ten subjects and answers with a message for the box above the piles, never
-  with a commit; and `distillLearnings`, which reads one chat's transcript and
-  answers with **proposals** — a skill for `.claude/skills/`, a memory bullet
-  for the project's `CLAUDE.md` — each written only when its Save is pressed
-  (`main/learnings.ts`, shapes in `shared/learnings.ts`). It was
-  `review-agent.ts` and had two more, `reviewReply` and `reviewChanges`: **the
-  agent half of the review is deleted**, and so are the hand-written comments
-  that outlived it — `docs/design.md` § Comments, removed. The rule
-  below still holds — a feature calling the CLI as a helper is refused — and
-  neither of the two is one: each is asked for out loud by a button or a menu
-  item, and each answers in the place it was asked from, as proposals somebody
-  saves one by one or text in a box somebody still has to press Commit on.
-  `docs/design.md` § Committing and § Distilling learnings have the argument;
-  `proposalsIn` is checked in `test/learnings.ts`.
+  with a commit. It was `review-agent.ts` and had two more, `reviewReply` and
+  `reviewChanges`: **the agent half of the review is deleted**, and so are the
+  hand-written comments that outlived it — `docs/design.md` § Comments,
+  removed. **`distillLearnings` is deleted too** — the chat row's `Distill
+learnings…`, its dialog, `main/learnings.ts`, `shared/learnings.ts` and the
+  two `agent:*` channels (§ Distilling learnings, removed). The rule below still
+  holds — a feature calling the CLI as a helper is refused — and the draft is
+  not one: it is asked for out loud by a button and answers as text in a box
+  somebody still has to press Commit on. `docs/design.md` § Committing has the
+  argument.
 
 - **`content-search.ts`** — the left column's Search (`Find in files`): a query
   with `Aa` / `ab` / `.*` over every file under the workspace's folders and what
@@ -210,9 +215,9 @@ under `src/main/` that `ipc.ts` imports may reach `electron`, and
   the line's `at` — served by `WorktreeChats.spend` the same three-source way.
 
 - **Every chat line carries `at`** (ISO), stamped in `WorktreeChats.append`,
-  the one writer; lines from before it have none and draw no time. A chat's
-  `budgetUsd` (toolbar) is a **warning, not a lock**: `checkBudget` appends one
-  `error` line per cap crossed and the next message still goes.
+  the one writer; lines from before it have none and draw no time. There is
+  **no per-chat budget** any more — the toolbar's `Budget`, `budgetUsd` and
+  `checkBudget` are deleted (`docs/design.md` § A chat's budget, removed).
 
 - **A chat can be popped out** into a window of its own: `openChatWindow` in
   `main.ts` loads this same renderer with `?chat=<id>`, which `App.tsx` reads
@@ -570,7 +575,8 @@ by `lib/editor-conflicts.ts` in the file editor (`test/conflicts.ts`),
 `lib/worktree-chat/claude-profiles.ts`'s `accountLabel` / `accountCaption` with
 `main/claude-auth.ts`'s own `readAuthStatus` and `main/claude-profiles.ts`'s
 naming of a profile's directory (`test/claude-account.ts`),
-`shared/learnings.ts` (`test/learnings.ts`),
+`lib/worktree-chat/plan-usage.ts` — the usage meter's words, with
+`main/plan-usage.ts`'s own `readPlanUsage` (`test/plan-usage.ts`),
 `lib/worktree-chat/spend.ts` — the cost dashboard's grouping by day, project,
 model and chat (`test/chat-spend.ts`), `lib/worktree-chat/export.ts` — a chat as
 Markdown (`test/chat-export.ts`; `export-html.ts` is the DOM half),

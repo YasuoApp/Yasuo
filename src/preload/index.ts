@@ -123,6 +123,8 @@ const api: DesktopApi = {
   agentCommands: (folderId) => ipcRenderer.invoke(IPC.agentCommands, folderId),
   installedMcpServers: (folderId) =>
     ipcRenderer.invoke(IPC.installedMcpServers, folderId),
+  planUsage: (profileId, fresh) =>
+    ipcRenderer.invoke(IPC.planUsage, profileId, fresh),
   removeMcpServer: (input) => ipcRenderer.invoke(IPC.removeMcpServer, input),
   listClaudeProfiles: () => ipcRenderer.invoke(IPC.listClaudeProfiles),
   saveClaudeProfiles: (profiles) =>
@@ -167,17 +169,6 @@ const api: DesktopApi = {
     subscribe<WorktreeChatEvent>(IPC.worktreeChatEvent, listener),
   onRevealWorktreeChat: (listener) =>
     subscribe<string>(IPC.revealWorktreeChat, listener),
-  distillLearnings: (chatId, folderId, model, effort, profileId) =>
-    ipcRenderer.invoke(
-      IPC.distillLearnings,
-      chatId,
-      folderId,
-      model,
-      effort,
-      profileId
-    ),
-  saveLearning: (folderId, proposal) =>
-    ipcRenderer.invoke(IPC.saveLearning, folderId, proposal),
   readDrawing: (id) => ipcRenderer.invoke(IPC.readDrawing, id),
   writeDrawing: (id, scene) => ipcRenderer.invoke(IPC.writeDrawing, id, scene),
   writeDrawingSvg: (id, svg) =>

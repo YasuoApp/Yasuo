@@ -12,11 +12,6 @@ import {
   stacksOf,
   totals,
 } from "../src/renderer/lib/worktree-chat/spend"
-import {
-  budgetLabel,
-  capLabel,
-  overBudget,
-} from "../src/renderer/lib/worktree-chat/usage"
 import { check, finish, section } from "./harness"
 
 /**
@@ -229,22 +224,6 @@ check(
   "nothing is nothing",
   JSON.stringify(totals([])) ===
     JSON.stringify({ costUsd: 0, turns: 0, chats: 0, unpriced: 0 })
-)
-
-section("the budget button's words")
-
-check(
-  "a cap is a round figure",
-  capLabel(5) === "$5" && capLabel(2.5) === "$2.50"
-)
-check("spent of cap", budgetLabel(1.234, 5) === "$1.23 / $5")
-check("nothing spent yet", budgetLabel(null, 20) === "$0 / $20")
-check(
-  "over budget on the cap itself, never without one",
-  overBudget(5, 5) &&
-    !overBudget(4.99, 5) &&
-    !overBudget(50, null) &&
-    !overBudget(null, 5)
 )
 
 finish()

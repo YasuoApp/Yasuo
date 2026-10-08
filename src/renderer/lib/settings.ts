@@ -35,8 +35,7 @@ type Stored = {
   diffWhitespace: boolean
   /**
    * `--model`, `--effort` and the `CLAUDE_CONFIG_DIR` profile the read-only
-   * one-turn agent runs on — `draftCommitMessage` and `distillLearnings` in
-   * `main/one-turn-agent.ts`.
+   * one-turn agent runs on — `draftCommitMessage` in `main/one-turn-agent.ts`.
    *
    * A setting rather than a picker beside each button: unlike a chat, one of
    * these turns is not something anybody sits in front of for the length of a
