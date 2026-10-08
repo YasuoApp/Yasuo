@@ -144,6 +144,32 @@ export type GitCommit = {
   refs: string[]
 }
 
+/**
+ * Who last changed each line of a file — see `blame` in `main/git.ts`.
+ * `lines[i]` is the commit for line `i + 1` of the text that was handed over,
+ * or null for a line nobody has committed yet.
+ */
+export type GitBlame = {
+  lines: (string | null)[]
+  commits: Record<string, GitBlameCommit>
+  /** The file from the repository's root, `/`-separated — what a forge's
+   * `blob/<hash>/…` URL takes. */
+  path: string
+  /** `https://github.com/owner/repo` and the like, when `origin` is a forge a
+   * commit can be opened on — the base of the hover's links. */
+  webUrl: string | null
+}
+
+export type GitBlameCommit = {
+  hash: string
+  author: string
+  email: string
+  /** The author date, ISO 8601. */
+  date: string
+  /** The message's first line. */
+  summary: string
+}
+
 export type GitChange = {
   path: string
   state: GitFileState
@@ -2077,6 +2103,13 @@ export type DesktopApi = {
    */
   fileDiff: (filePath: string) => Promise<FileDiff>
 
+  /**
+   * Who last changed each line of `text`, the editor's buffer of `filePath` —
+   * see `GitBlame`. Null for a file with no history to read. Gated like
+   * `fileDiff`.
+   */
+  gitBlame: (filePath: string, text: string) => Promise<GitBlame | null>
+
   getSetting: (key: string) => Promise<string | null>
   setSetting: (key: string, value: string) => Promise<void>
 
@@ -2686,6 +2719,7 @@ export const IPC = {
   gitCommit: "git:commit",
   draftCommitMessage: "git:draft-message",
   fileDiff: "git:file-diff",
+  gitBlame: "git:blame",
   getSetting: "settings:get",
   setSetting: "settings:set",
   listDirectory: "files:list",

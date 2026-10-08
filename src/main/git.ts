@@ -4,6 +4,8 @@ import path from "node:path"
 import { promisify } from "node:util"
 
 import type {
+  GitBlame,
+  GitBlameCommit,
   GitChange,
   GitCommit,
   GitFileState,
@@ -474,6 +476,130 @@ export async function fileDiff(
     // No commits yet, or not a repository.
     return null
   }
+}
+
+/**
+ * Who last changed each line of a file, for the editor's line annotation and
+ * its hover — or null for a file no blame can be had for: outside a
+ * repository, never committed, or in a repository with no commit at all.
+ *
+ * **The editor's text, not the disk's** (`--contents -`, fed on stdin): the
+ * answer is indexed by line, and a buffer with three unsaved lines typed above
+ * the caret would otherwise be annotated three lines off. Lines nobody has
+ * committed come back as git's all-zero hash, and are null here.
+ *
+ * A read, like `log`: this is the history of a line rather than a git client.
+ * `webUrl` is the forge the history can be opened on, when `origin` is one this
+ * knows how to address — see `webUrlOf`.
+ */
+export async function blame(
+  dir: string,
+  filePath: string,
+  text: string
+): Promise<GitBlame | null> {
+  const relative = await inRepository(dir, filePath)
+  if (relative === null) return null
+
+  let out: string
+  try {
+    const pending = run(
+      "git",
+      ["blame", "--porcelain", "--contents", "-", "--", relative],
+      { cwd: dir, windowsHide: true, maxBuffer: 64 * 1024 * 1024 }
+    )
+    pending.child.stdin?.end(text)
+    out = (await pending).stdout
+  } catch {
+    // Untracked, or no `HEAD` to blame against.
+    return null
+  }
+
+  const remote = await git(dir, ["remote", "get-url", "origin"]).catch(() => "")
+  return {
+    ...parseBlame(out),
+    path: relative.split(path.sep).join("/"),
+    webUrl: webUrlOf(remote.trim()),
+  }
+}
+
+const UNCOMMITTED = /^0{40}$/
+
+/**
+ * `git blame --porcelain`, read: a header per line — `<hash> <orig> <final>`,
+ * with a fourth number when it starts a group — then, the first time a commit
+ * is named, its `key value` lines, then the line itself behind a tab.
+ *
+ * Exported for `test/git-blame.ts`.
+ */
+export function parseBlame(out: string): Omit<GitBlame, "webUrl" | "path"> {
+  const lines: (string | null)[] = []
+  const commits: Record<string, GitBlameCommit> = {}
+  let current: { hash: string; final: number } | null = null
+  let fields: Record<string, string> = {}
+
+  for (const row of out.split("\n")) {
+    if (row.startsWith("\t")) {
+      if (!current) continue
+      const { hash, final } = current
+      if (!UNCOMMITTED.test(hash) && !commits[hash]) {
+        const time = Number(fields["author-time"])
+        commits[hash] = {
+          hash,
+          author: fields.author ?? "",
+          email: (fields["author-mail"] ?? "").replace(/^<|>$/g, ""),
+          date: Number.isFinite(time)
+            ? new Date(time * 1000).toISOString()
+            : "",
+          summary: fields.summary ?? "",
+        }
+      }
+      lines[final - 1] = UNCOMMITTED.test(hash) ? null : hash
+      current = null
+      continue
+    }
+
+    const header = /^([0-9a-f]{40}) \d+ (\d+)/.exec(row)
+    if (header) {
+      current = { hash: header[1]!, final: Number(header[2]) }
+      // A commit's fields are printed once, on its first line; a later line of
+      // the same commit has a bare header and keeps what was read then.
+      if (!commits[header[1]!]) fields = {}
+      continue
+    }
+
+    const space = row.indexOf(" ")
+    if (space > 0) fields[row.slice(0, space)] = row.slice(space + 1)
+  }
+
+  // A buffer git was handed may end without a newline, and a line it never
+  // reached is not a line anybody committed.
+  return { lines: Array.from(lines, (hash) => hash ?? null), commits }
+}
+
+/**
+ * Where a repository's commits can be opened in a browser: GitHub, GitLab and
+ * Bitbucket all answer `<base>/commit/<hash>`, so one base is the whole
+ * address. Null for anything else — a self-hosted remote under another name, a
+ * path on disk — rather than a guess at a URL that is a 404.
+ *
+ * **An SSH host alias is the forge it names.** Somebody with two GitHub
+ * accounts reaches them as `github.com-personal` and `github.com-work` through
+ * `~/.ssh/config`, and the first cut of this read that as an unknown host —
+ * so the hover's links were missing on exactly the machines that juggle the
+ * most repositories. A suffix after `-` is the alias's and is dropped; a forge's
+ * own domain with anything else on it (`gitlab.example.com`) is still not
+ * the forge.
+ *
+ * Exported for `test/git-blame.ts`.
+ */
+export function webUrlOf(remote: string): string | null {
+  const match =
+    /^(?:https?:\/\/(?:[^@/]+@)?|ssh:\/\/(?:[^@/]+@)?|[^@/]+@)(github|gitlab|bitbucket)(?:\.(?:com|org))?(?:-[\w.-]+)?(?::\d+)?[:/](.+?)(?:\.git)?\/?$/.exec(
+      remote
+    )
+  if (!match) return null
+  const host = match[1] === "bitbucket" ? "bitbucket.org" : `${match[1]}.com`
+  return `https://${host}/${match[2]}`
 }
 
 /**

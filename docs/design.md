@@ -3667,6 +3667,54 @@ re-read, which is already behind the watchers — main watches each root's own
 (`ORIG_HEAD`, `FETCH_HEAD`) in the dock's shell moves the list without Refresh
 and without a timer of its own.
 
+### Who last changed a line
+
+**A file's editor writes the caret's line's blame faintly after it — `Ada, 2
+months ago • fix: …` — and hovering those words opens the commit in a card**:
+author, relative and absolute date, the summary with its `#27`s linked, the
+short hash (a click copies the whole one) and `Open on GitHub`. What GitLens
+calls current-line blame. `blame` in `main/git.ts`, `IPC.gitBlame`,
+`lib/editor-git-blame.ts` over the words in `lib/files/git-blame.ts`;
+`test/git-blame.ts` drives a real repository. Settings › Tabs & editor switches
+it off.
+
+**One `git blame --porcelain` per file, not per caret move**, asked on open, on
+focus — a commit made in the dock's shell meanwhile — and 800ms after typing
+stops. **The buffer goes on stdin** (`--contents -`), since the answer is indexed
+by line and three unsaved lines above the caret would otherwise put every name
+three lines off; and between an edit and the next answer the annotation is
+hidden rather than shown one line wrong.
+
+**Laid over the line, never in it.** The first cut wrote the words into the
+line as an inline widget, and the file editor wraps: the caret's line grew a
+second row and pushed everything under it down as the caret moved. The line now
+holds a zero-width anchor and the words hang off it absolutely, cut with an
+ellipsis to the room left before the edge and hidden when there is too little.
+
+The second read of history after `Commits`, and moved only as far: a line's last
+commit, read-only. Left out on purpose: **avatars** (Gravatar or a forge would be
+handed every author's email), GitLens's **Explain** (a feature calling the CLI
+as a helper is what `CLAUDE.md` refuses), **connecting to GitHub** (no forge
+API here — the links are URLs built from `origin`, opened in the browser), and
+the commit's **diff** (the second git client `Commits` already declined to be).
+`webUrlOf` knows GitHub, GitLab and Bitbucket by host — an SSH alias like
+`github.com-personal` included, which the first cut missed and so drew no links
+on the machines with the most accounts — and answers nothing for any other
+remote rather than a guessed URL.
+
+**The card's buttons are one row of icons, named by their tooltips**: in the
+app — the short hash (copies the whole one), copy the message, `Ask in chat` —
+then, past a rule, out to the forge — the commit, the file as that commit left
+it at this line, and each `#27` the summary names. They were labelled buttons
+in two rows first, which made the card a second paragraph to read past to get
+back to the line. The row is React (`components/studio/files/blame-actions.tsx`,
+for `IconButton` and lucide), mounted into the editor-built card through a facet
+the file editor fills, so `lib/` does not import a component. `Ask in chat` is
+what stands in for Explain: it types the commit and an `@path#L` into the
+selected chat's composer through `composer-bus.ts`, unsent, so the question is
+the user's and it costs nothing until they send it. The forge row is absent, not
+greyed, when there is no forge to open.
+
 ### Committing
 
 **The rule above said a commit is a sentence somebody writes, and that is still

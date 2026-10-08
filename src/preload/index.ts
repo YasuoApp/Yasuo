@@ -83,6 +83,8 @@ const api: DesktopApi = {
       profileId
     ),
   fileDiff: (filePath) => ipcRenderer.invoke(IPC.fileDiff, filePath),
+  gitBlame: (filePath, text) =>
+    ipcRenderer.invoke(IPC.gitBlame, filePath, text),
 
   listDirectory: (dirPath) => ipcRenderer.invoke(IPC.listDirectory, dirPath),
   readTextFile: (filePath) => ipcRenderer.invoke(IPC.readTextFile, filePath),

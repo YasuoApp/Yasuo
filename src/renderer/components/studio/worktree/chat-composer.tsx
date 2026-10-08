@@ -30,6 +30,8 @@ import {
   SignalMedium,
   Square,
   Star,
+  TextSelect,
+  X,
   Check as CheckIcon,
 } from "lucide-react"
 
@@ -58,7 +60,9 @@ import {
   DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu"
 import { Claude } from "@/components/ui/svgs/claude"
-import { quotePath, relativeTo } from "@/lib/files/paths"
+import { useEditorSelection } from "@/lib/files/editor-selection"
+import { nameOf, quotePath, relativeTo } from "@/lib/files/paths"
+import { selectionLabel, selectionMention } from "@/lib/files/selected-lines"
 import { useGitStatus } from "@/lib/files/git-status"
 import { iconFor } from "@/lib/files/icons"
 import { useFiles } from "@/lib/files/store"
@@ -380,6 +384,17 @@ export function ChatComposer({
     []
   )
 
+  /**
+   * The lines last selected in a file, carried by the next message as a chip
+   * rather than typed into the draft — the file is a tab behind this one, so
+   * the selection is made out of sight of the field. The path is the chat's
+   * own when the file is in its checkout, and absolute when it is not.
+   */
+  const selection = useEditorSelection((state) => state.current)
+  const selectionPath =
+    selection &&
+    (attachRoot ? relativeTo(attachRoot, selection.path) : selection.path)
+
   const field = useRef<HTMLTextAreaElement>(null)
   const mirror = useRef<HTMLDivElement>(null)
   /** Where the caret has to be put once a pick has re-rendered the value. */
@@ -590,7 +605,15 @@ export function ChatComposer({
   function submit() {
     if (!draft.trim()) return
     const message = attachedIn(draft, images)
-    onSend(message.text, message.images)
+    // After the question rather than before it, so the transcript reads as
+    // what was asked and then what it was about.
+    const text =
+      selection && selectionPath
+        ? `${message.text}\n\n${selectionMention(selectionPath, selection)}`
+        : message.text
+    onSend(text, message.images)
+    // Taken: the next message is about whatever is selected next.
+    if (selection) useEditorSelection.getState().clear()
     setDraft("")
     setImages(NO_IMAGES)
     setMenu(null)
@@ -730,6 +753,35 @@ export function ChatComposer({
             the whole box: `inset-0` used to be the box, and with a toolbar in it
             the tint behind the last line would have been drawn over the
             buttons. */}
+        {selection && selectionPath && (
+          <div className="flex px-2 pt-1.5">
+            <span
+              title={selectionMention(selectionPath, selection)}
+              className="inline-flex h-5 max-w-full items-center gap-1 rounded-md border bg-muted/50 pr-0.5 pl-1.5 text-[0.7rem] text-muted-foreground"
+            >
+              <TextSelect className="size-3 shrink-0" />
+              <span className="truncate">
+                <span className="font-medium text-foreground">
+                  {nameOf(selection.path)}
+                </span>
+                :{selection.fromLine}
+                {selection.toLine !== selection.fromLine &&
+                  `–${selection.toLine}`}{" "}
+                · {selectionLabel(selection)}
+              </span>
+              <button
+                type="button"
+                aria-label="Leave the selection out"
+                title="Leave the selection out"
+                onClick={() => useEditorSelection.getState().clear()}
+                className="inline-flex size-4 shrink-0 items-center justify-center rounded-sm hover:bg-accent hover:text-foreground"
+              >
+                <X className="size-3" />
+              </button>
+            </span>
+          </div>
+        )}
+
         <div className="relative">
           <div
             ref={mirror}

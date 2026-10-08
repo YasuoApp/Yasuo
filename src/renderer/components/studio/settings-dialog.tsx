@@ -170,8 +170,9 @@ const SECTIONS: {
   },
   {
     id: "tabs",
-    label: "Tabs",
-    blurb: "Where the workbench's tab strip sits, and how much it gathers.",
+    label: "Tabs & editor",
+    blurb:
+      "Where the workbench's tab strip sits, how much it gathers, and what a file's editor shows beside the code.",
     icon: Columns2,
   },
   {
@@ -401,6 +402,8 @@ function previewFamily(value: string): string {
 function TabsSection() {
   const groupTabs = useSettings((state) => state.groupTabs)
   const setGroupTabs = useSettings((state) => state.setGroupTabs)
+  const gitBlame = useSettings((state) => state.gitBlame)
+  const setGitBlame = useSettings((state) => state.setGitBlame)
 
   return (
     <Card>
@@ -418,6 +421,12 @@ function TabsSection() {
         description="One tab per folder in the strip, with that folder's own files, requests or notes in a second strip inside it. Off, every file and request is a tab of its own."
       >
         <Switch checked={groupTabs} onCheckedChange={setGroupTabs} />
+      </Row>
+      <Row
+        title="Show who last changed the line"
+        description="The author, the date and the commit message after the line the caret is on, with the commit in a card when you hover it — the way GitLens does. Read from git blame; nothing leaves this machine."
+      >
+        <Switch checked={gitBlame} onCheckedChange={setGitBlame} />
       </Row>
     </Card>
   )

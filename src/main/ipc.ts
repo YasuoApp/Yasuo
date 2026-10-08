@@ -32,6 +32,7 @@ import {
   currentBranch,
   discard,
   discardAll,
+  blame,
   fileAtHead,
   fileDiff,
   stage,
@@ -858,6 +859,16 @@ export function createIpc(host: Host): {
       fileDiff(root.path, target),
     ])
     return { head, patch }
+  })
+
+  // The narrowest root again, for the same reason as above.
+  handle(IPC.gitBlame, async (_event, filePath: string, text: string) => {
+    const target = await inWorkspace(filePath)
+    const root = (await fileRoots())
+      .filter((candidate) => files.insideAny([candidate.path], target))
+      .sort((a, b) => b.path.length - a.path.length)[0]
+    if (!root || typeof text !== "string") return null
+    return blame(root.path, target, text)
   })
 
   /**

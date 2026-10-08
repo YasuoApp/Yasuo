@@ -59,6 +59,12 @@ type Stored = {
    * can flip belongs in the bag the dialog edits.
    */
   onboarded: boolean
+  /**
+   * The faint `who, when • why` after the caret's line in a file, and its hover
+   * — `lib/editor-git-blame.ts`. On by default: it is the editor saying what
+   * it knows about a line, and somebody who finds it noise turns it off once.
+   */
+  gitBlame: boolean
 } & Appearance
 
 function isStored(value: unknown): value is Stored {
@@ -95,7 +101,8 @@ function isStored(value: unknown): value is Stored {
     (record.fontMono === undefined || isMonoFont(record.fontMono)) &&
     (record.fontSize === undefined || isFontSize(record.fontSize)) &&
     (record.density === undefined || isDensity(record.density)) &&
-    (record.onboarded === undefined || typeof record.onboarded === "boolean")
+    (record.onboarded === undefined || typeof record.onboarded === "boolean") &&
+    (record.gitBlame === undefined || typeof record.gitBlame === "boolean")
   )
 }
 
@@ -143,6 +150,7 @@ type SettingsState = Stored & {
   setFontSize: (size: Appearance["fontSize"]) => void
   setDensity: (density: Appearance["density"]) => void
   setOnboarded: (onboarded: boolean) => void
+  setGitBlame: (on: boolean) => void
   /** Reads the stored preferences. Called once, at launch. */
   restore: () => Promise<void>
 }
@@ -181,6 +189,7 @@ export const useSettings = create<SettingsState>((set, get) => {
       fontSize,
       density,
       onboarded,
+      gitBlame,
     } = get()
     remember(SETTINGS_KEY, {
       groupTabs,
@@ -195,6 +204,7 @@ export const useSettings = create<SettingsState>((set, get) => {
       fontSize,
       density,
       onboarded,
+      gitBlame,
     })
   }
 
@@ -212,6 +222,7 @@ export const useSettings = create<SettingsState>((set, get) => {
     // the tour existed, which is read as "show it once" rather than as a
     // preference somebody already made.
     onboarded: false,
+    gitBlame: true,
     chatNotifications: true,
     chatTray: true,
     loaded: false,
@@ -284,6 +295,11 @@ export const useSettings = create<SettingsState>((set, get) => {
 
     setOnboarded(onboarded) {
       set({ onboarded })
+      save()
+    },
+
+    setGitBlame(gitBlame) {
+      set({ gitBlame })
       save()
     },
 

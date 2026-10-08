@@ -145,7 +145,10 @@ under `src/main/` that `ipc.ts` imports may reach `electron`, and
   is ending a reading of the diff rather than writing a paragraph in a panel with
   no room for one. **`log` is the one read of history** — the checked-out
   branch's commits a page at a time (`--skip`) for the `Commits` view, nothing
-  written (`docs/design.md` § Commits). Amend, branch and push stay out — that is
+  written (`docs/design.md` § Commits). **`blame` is the second**, one per file
+  with the editor's buffer on stdin, for the current-line annotation
+  (`lib/editor-git-blame.ts`, § Who last changed a line). Amend, branch and
+  push stay out — that is
   the git client the dock's shell already is. `discard`
   answers with the paths it could not restore instead of deleting them: they go
   to the trash in `ipc.ts`, because this module stays free of `electron` so the

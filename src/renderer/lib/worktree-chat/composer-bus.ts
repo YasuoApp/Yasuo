@@ -29,17 +29,21 @@ type BusState = {
    * project the workbench is on when none is selected, and shows it.
    */
   deliver: (input: { text: string }) => void
+  /**
+   * The same addressing with nothing to type: the chat is shown and its field
+   * focused. For a file's selection, which the composer already carries as a
+   * chip of its own (`editor-selection.ts`) — typing it in as well would put
+   * it in the message twice.
+   */
+  reveal: () => void
   /** The delivery for this chat, taken — the pane calls it once it has typed
    * the contents in. Null when there is nothing for this chat. */
   take: (chatId: string) => Delivery | null
 }
 
-export const useComposerBus = create<BusState>((set, get) => ({
-  pending: null,
-
-  deliver({ text }) {
-    if (!text) return
-
+export const useComposerBus = create<BusState>((set, get) => {
+  /** A delivery of `text` — empty for one that only shows the chat. */
+  function address(text: string) {
     const chats = useWorktreeChats.getState()
     const selected =
       chats.selectedId && chats.openIds.includes(chats.selectedId)
@@ -60,15 +64,28 @@ export const useComposerBus = create<BusState>((set, get) => ({
     void chats.create({ folderId }).then((chatId) => {
       if (chatId) set({ pending: { chatId, text } })
     })
-  },
+  }
 
-  take(chatId) {
-    const { pending } = get()
-    if (!pending || pending.chatId !== chatId) return null
-    set({ pending: null })
-    return pending
-  },
-}))
+  return {
+    pending: null,
+
+    deliver({ text }) {
+      if (!text) return
+      address(text)
+    },
+
+    reveal() {
+      address("")
+    },
+
+    take(chatId) {
+      const { pending } = get()
+      if (!pending || pending.chatId !== chatId) return null
+      set({ pending: null })
+      return pending
+    },
+  }
+})
 
 /**
  * A run of terminal output as the composer should receive it: fenced, so the

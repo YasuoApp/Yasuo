@@ -256,7 +256,8 @@ function Conversation({
 
   /*
    * Something left for this chat's composer by the dock — a run of terminal
-   * output. Typed in here rather than where it was
+   * output — or a file's `Ask about this`, which brings nothing but the
+   * chat to the front. Typed in here rather than where it was
    * picked up, because this is the only component holding the field's handle.
    * See `composer-bus.ts`.
    */
@@ -265,7 +266,8 @@ function Conversation({
     if (!delivery || delivery.chatId !== chatId) return
     const taken = useComposerBus.getState().take(chatId)
     if (!taken) return
-    composer.current?.insertText(taken.text)
+    // Empty for `reveal`, which only came to show the field.
+    if (taken.text) composer.current?.insertText(taken.text)
     composer.current?.focus()
   }, [delivery, chatId])
 
