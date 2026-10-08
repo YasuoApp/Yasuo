@@ -26,6 +26,7 @@ import { compactLine } from "@/lib/worktree-chat/window"
 import { MarkdownView } from "../markdown-view"
 import { IconButton } from "../icon-button"
 import { MentionText } from "./chat-composer"
+import { NoteImages } from "./chat-images"
 import { toolLabel, toolMark } from "./chat-marks"
 
 /**
@@ -65,6 +66,9 @@ export function ChatMessage({
       <div data-line={of.id} className="group relative ml-4">
         <div className="relative rounded-lg rounded-br-sm bg-accent/60 py-1.5 pr-8 pl-2.5 text-xs">
           <MentionText text={of.text} />
+          {of.images && of.images.length > 0 && (
+            <NoteImages files={of.images} />
+          )}
           {/* In the corner the copy button's margin already leaves, and only
               on hover: a stamp on every bubble is a column of clocks nobody
               asked for, where one under the cursor answers "when was this".
@@ -376,6 +380,13 @@ function ToolRow({ of }: { of: Extract<AssistantMessage, { role: "tool" }> }) {
       )}
 
       {openable && open && <ToolDetail of={of} />}
+      {/* Outside the fold: a screenshot is the result, and a picture somebody
+          has to open a row to find is one nobody looks at. */}
+      {of.images && of.images.length > 0 && (
+        <div className="pl-5">
+          <NoteImages files={of.images} />
+        </div>
+      )}
     </div>
   )
 }

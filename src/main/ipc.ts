@@ -234,6 +234,7 @@ export function createIpc(host: Host): {
       readChat: (id) => store.readWorktreeChat(id),
       writeChat: (id, messages) => store.writeWorktreeChat(id, messages),
       deleteChat: (id) => store.deleteWorktreeChat(id),
+      writeImage: (fileName, bytes) => store.writeNoteFile(fileName, bytes),
     },
     (event) => {
       send(IPC.worktreeChatEvent, event)

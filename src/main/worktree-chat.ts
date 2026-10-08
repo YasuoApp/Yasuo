@@ -24,6 +24,7 @@ import {
   type WorktreeChatEvent,
   type WorktreeChatOptions,
 } from "../shared/api"
+import { extensionForType } from "../shared/note-files"
 import { digestOf, spendRows } from "./chat-digest"
 import { chatMatchesIn } from "./content-search"
 import {
@@ -172,6 +173,9 @@ export type WorktreeChatSource = {
   readChat: (id: string) => Promise<AssistantMessage[]>
   writeChat: (id: string, messages: AssistantMessage[]) => Promise<void>
   deleteChat: (id: string) => Promise<void>
+  /** Writes one of the workspace's note files — how a picture a tool returned
+   * is kept for its row. See `shared/note-files.ts`. */
+  writeImage: (fileName: string, bytes: Uint8Array) => Promise<void>
 }
 
 /**
@@ -838,9 +842,18 @@ export class WorktreeChats {
     // which is where a record older than either field is brought up to date.
     const options = chatOptions(chat.options)
 
-    // The line keeps the `[Image #n]` and not the picture: a transcript that
-    // carried base64 would be megabytes re-read every time the chat is opened.
-    await this.append(id, { id: lineId(), role: "user", text: prompt })
+    // The line keeps the `[Image #n]` and the names of the note files the
+    // renderer stored, never the picture: a transcript that carried base64
+    // would be megabytes re-read every time the chat is opened.
+    const files = images.flatMap((image) =>
+      image.fileName ? [image.fileName] : []
+    )
+    await this.append(id, {
+      id: lineId(),
+      role: "user",
+      text: prompt,
+      ...(files.length > 0 && { images: files }),
+    })
     await this.deliver(id, cwd, options, prompt, images)
   }
 
@@ -1286,8 +1299,18 @@ export class WorktreeChats {
       },
       {
         onMessage: (message) => void this.append(id, message),
-        onToolResult: (toolId, result, output, failed) =>
-          this.recordResult(id, toolId, result, output, failed),
+        // A result with pictures waits on their files, so the row never names
+        // one that is not written yet. Matched by `toolId`, so arriving after
+        // the lines that followed it puts it on the right row all the same.
+        onToolResult: (toolId, result, output, failed, images) => {
+          if (images.length === 0) {
+            this.recordResult(id, toolId, result, output, failed)
+            return
+          }
+          void this.keepImages(images).then((files) =>
+            this.recordResult(id, toolId, result, output, failed, files)
+          )
+        },
         // A line like any other, so it is written down and read back with the
         // rest of the conversation rather than held for the window that
         // happened to be open when the turn ended.
@@ -1743,16 +1766,18 @@ export class WorktreeChats {
     toolId: string,
     result: string,
     output: string | undefined,
-    failed: boolean
+    failed: boolean,
+    images: string[] = []
   ): void {
     const messages = this.messages.get(id)
     if (!messages) return
 
+    const kept = images.length > 0 ? { images } : {}
     let found = false
     const next = messages.map((line) => {
       if (found || line.role !== "tool" || line.toolId !== toolId) return line
       found = true
-      return { ...line, result, failed, ...(output ? { output } : {}) }
+      return { ...line, result, failed, ...(output ? { output } : {}), ...kept }
     })
     if (!found) return
     this.messages.set(id, next)
@@ -1764,6 +1789,7 @@ export class WorktreeChats {
       result,
       ...(output ? { output } : {}),
       failed,
+      ...kept,
     })
 
     // Written without awaiting, like the line itself: losing the record of what
@@ -1771,6 +1797,30 @@ export class WorktreeChats {
     void this.source.writeChat(id, next).catch((error: unknown) => {
       console.error("Could not write the chat", error)
     })
+  }
+
+  /**
+   * A tool's pictures written as note files, answering with the names of the
+   * ones that landed. Best effort: a picture that could not be written costs
+   * the row its thumbnail, never the result.
+   */
+  private async keepImages(images: ChatImage[]): Promise<string[]> {
+    const kept = await Promise.all(
+      images.map(async (image) => {
+        const fileName = `${randomUUID()}.${extensionForType(image.mediaType) ?? "png"}`
+        try {
+          await this.source.writeImage(
+            fileName,
+            Buffer.from(image.data, "base64")
+          )
+          return fileName
+        } catch (error) {
+          console.error("Could not keep a tool's picture", error)
+          return null
+        }
+      })
+    )
+    return kept.filter((name) => name !== null)
   }
 
   private async append(id: string, line: AssistantMessage): Promise<void> {

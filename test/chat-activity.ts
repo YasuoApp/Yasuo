@@ -11,6 +11,7 @@ import {
   changeOf,
   describeCall,
   detailOf,
+  resultImages,
   resultLine,
   resultText,
   todosOf,
@@ -726,6 +727,45 @@ section("the divider between days")
       null &&
       dayDividerBetween(line(user("a", local(29, 1))), fold(tool("t")), NOW) ===
         null
+  )
+}
+
+section("resultImages")
+{
+  const shot = [
+    { type: "text", text: "Took a screenshot" },
+    {
+      type: "image",
+      source: { type: "base64", media_type: "image/png", data: "AAAA" },
+    },
+  ]
+  const images = resultImages(shot)
+  check(
+    "an image block is a picture",
+    images.length === 1 &&
+      images[0]?.mediaType === "image/png" &&
+      images[0]?.data === "AAAA",
+    images
+  )
+  check(
+    "and the text is still the text",
+    resultText(shot) === "Took a screenshot"
+  )
+  check("a string result has none", resultImages("just text").length === 0)
+  check(
+    "a URL source is not fetched",
+    resultImages([
+      { type: "image", source: { type: "url", url: "https://example.com" } },
+    ]).length === 0
+  )
+  check(
+    "nor is a type the API does not take",
+    resultImages([
+      {
+        type: "image",
+        source: { type: "base64", media_type: "image/tiff", data: "AAAA" },
+      },
+    ]).length === 0
   )
 }
 

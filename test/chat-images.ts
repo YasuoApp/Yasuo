@@ -1,5 +1,10 @@
 import type { ChatImage } from "../src/shared/api"
-import { attachedIn, imageTag } from "../src/renderer/lib/worktree-chat/images"
+import {
+  attachedIn,
+  imageTag,
+  namedIn,
+  withoutTag,
+} from "../src/renderer/lib/worktree-chat/images"
 import { check, finish, section } from "./harness"
 
 /**
@@ -61,6 +66,37 @@ section("attachedIn")
     stray.text === "[Image #4] is not held"
   )
   check("and sends nothing", stray.images.length === 0)
+}
+
+section("namedIn")
+{
+  const shown = namedIn(`${imageTag(3)} then ${imageTag(1)}`, [a, b, c])
+  check(
+    "a thumbnail for each picture the text names, in the order added",
+    shown.length === 2 &&
+      shown[0]?.n === 1 &&
+      shown[0]?.image === a &&
+      shown[1]?.n === 3 &&
+      shown[1]?.image === c,
+    shown
+  )
+  check("none for a draft without tags", namedIn("plain", [a]).length === 0)
+}
+
+section("withoutTag")
+{
+  check(
+    "takes the tag and the space before it",
+    withoutTag(`look ${imageTag(1)} here`, 1) === "look here"
+  )
+  check(
+    "a tag at the start goes too",
+    withoutTag(`${imageTag(2)} and ${imageTag(1)}`, 2) === ` and ${imageTag(1)}`
+  )
+  check(
+    "#1 does not take #10",
+    withoutTag(`${imageTag(10)}`, 1) === imageTag(10)
+  )
 }
 
 finish()

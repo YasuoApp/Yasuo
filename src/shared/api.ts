@@ -323,7 +323,14 @@ export type ChatTodo = {
 export type AssistantMessage = AssistantLine & { at?: string }
 
 type AssistantLine =
-  | { id: string; role: "user"; text: string }
+  | {
+      id: string
+      role: "user"
+      text: string
+      /** The note files of the pictures sent with it, in `[Image #n]` order —
+       * see `ChatImage.fileName`. None on a line from before they were kept. */
+      images?: string[]
+    }
   | { id: string; role: "assistant"; text: string }
   /**
    * The model's own reasoning, drawn as one folded line.
@@ -389,6 +396,12 @@ type AssistantLine =
        * through every write for the life of the conversation.
        */
       output?: string
+      /**
+       * The pictures it came back with — a `Read` of an image, a browser
+       * tool's screenshot — as note files, drawn under the row. Kept beside
+       * the line rather than in it for the reason `ChatImage` gives.
+       */
+      images?: string[]
       /**
        * How much an edit moved — `+3 −1` — read off the call's own input rather
        * than its result.
@@ -583,6 +596,8 @@ export type AssistantEvent =
        * tool line. */
       output?: string
       failed: boolean
+      /** See `images` on the tool line. */
+      images?: string[]
     }
   /**
    * The turn has stopped and is waiting to be answered.
@@ -1593,13 +1608,19 @@ export type WorktreeChatEvent = AssistantEvent & { chatId: string }
  * the turn tried to `Read` it. Read at the drop, it is the picture the person
  * was looking at.
  *
- * Not written down with the chat: the transcript keeps the `[Image #n]` the
- * message was sent with, and the CLI's own session holds the picture.
+ * Not inlined into the chat: a transcript carrying base64 would be megabytes
+ * re-read every time the chat is opened. The renderer stores each picture as a
+ * note file before sending (`storeImages`), and the user line keeps only the
+ * names — `images` on its `AssistantMessage`.
  */
 export type ChatImage = {
   mediaType: "image/png" | "image/jpeg" | "image/gif" | "image/webp"
   /** Base64, without a `data:` prefix. */
   data: string
+  /** The note file the same bytes were written to, for the transcript to draw
+   * — see `shared/note-files.ts`. Absent when that write failed: the picture
+   * still goes, it is only the preview that is lost. */
+  fileName?: string
 }
 
 /**

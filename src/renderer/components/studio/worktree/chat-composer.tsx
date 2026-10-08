@@ -85,7 +85,14 @@ import {
   rankCommands,
   type CommandQuery,
 } from "@/lib/worktree-chat/command-text"
-import { attachedIn, imageTag, readImage } from "@/lib/worktree-chat/images"
+import {
+  attachedIn,
+  dataUrlOf,
+  imageTag,
+  namedIn,
+  readImage,
+  withoutTag,
+} from "@/lib/worktree-chat/images"
 import { chatMentions, primeMentions } from "@/lib/worktree-chat/mentions"
 import { compact } from "@/lib/worktree-chat/usage"
 import {
@@ -110,6 +117,7 @@ import {
   type PlainMentionKind,
 } from "@/lib/worktree-chat/mention-text"
 import { IconButton } from "../icon-button"
+import { ImageThumb } from "./chat-images"
 import { McpMenu } from "./chat-mcp"
 import { PlanUsageMeter } from "./chat-plan-usage"
 
@@ -716,6 +724,7 @@ export function ChatComposer({
   }
 
   const segments = markMentions(draft, chatMentions(attachRoot))
+  const pictures = namedIn(draft, images)
 
   return (
     <div className="relative">
@@ -779,6 +788,26 @@ export function ChatComposer({
                 <X className="size-3" />
               </button>
             </span>
+          </div>
+        )}
+
+        {/* The pictures the text still names, so a pasted screenshot is seen
+            before it goes rather than as a tag. Taking one out deletes its tag,
+            which is what leaves it out of the message — the tag stays the one
+            truth about what is attached. */}
+        {pictures.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 px-2 pt-2">
+            {pictures.map(({ n, image }) => (
+              <ImageThumb
+                key={n}
+                n={n}
+                src={dataUrlOf(image)}
+                onRemove={() => {
+                  setDraft(withoutTag(draft, n))
+                  field.current?.focus()
+                }}
+              />
+            ))}
           </div>
         )}
 

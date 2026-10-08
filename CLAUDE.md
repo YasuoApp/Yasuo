@@ -564,8 +564,10 @@ own `ChatNotices` (`test/notify.ts`),
 user message (`test/chat-outline.ts`),
 `lib/worktree-chat/images.ts`'s `attachedIn` — a picture dropped or pasted into
 the composer is read as base64 at once and written as `[Image #n]`, because a
-macOS screenshot's temporary file is gone by the time a path to it is read
-(`test/chat-images.ts`),
+macOS screenshot's temporary file is gone by the time a path to it is read; at
+send each is also kept as a note file and the user line names it, so the
+composer and the transcript both draw thumbnails (`chat-images.tsx`,
+`docs/design.md` § Pictures in a message) (`test/chat-images.ts`),
 `lib/files/change-tree.ts` (`test/change-tree.ts`),
 `lib/files/conflicts.ts` — merge-conflict blocks and what Accept writes, drawn
 by `lib/editor-conflicts.ts` in the file editor (`test/conflicts.ts`),

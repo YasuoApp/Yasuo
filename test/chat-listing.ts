@@ -36,6 +36,7 @@ function source() {
         lines.set(id, messages)
       },
       deleteChat: async () => undefined,
+      writeImage: async () => undefined,
     },
     () => undefined
   )

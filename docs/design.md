@@ -3088,6 +3088,40 @@ at the end of a sentence still lights up while
 same marks are drawn on the message once it is sent, so a line still reads as
 pointing at a file rather than mentioning one in passing.
 
+### Pictures in a message
+
+A picture pasted or dropped into the composer is read as bytes at once and
+written into the text as `[Image #n]` — the CLI's own tag — because the
+temporary file a macOS screenshot leaves is gone before a path to it is read
+(`lib/worktree-chat/images.ts`). The tag is the one truth about what is
+attached: delete it and the picture does not go.
+
+**Both ends now show the picture, and this reverses a decision.** The transcript
+used to keep the tag and nothing else, on the argument that a line carrying
+base64 is megabytes re-read every time the chat is opened — so a sent message
+said `[Image #1]` and the picture was only in the CLI's session, where nobody
+could look at it again. That argument was about _inlining_, and it still holds:
+what changed is that a picture is now kept **beside** the line, the way a block
+document's are. At send, `storeImages` writes each one as a note file under
+`workspace/note-files/`, and the user line records only the names
+(`images` on the line, `fileName` on `ChatImage`). The transcript draws them
+through the same `note-file://` route the block editor uses, so the browser
+build needed nothing new. A write that fails costs that picture its preview,
+never the message. Lines from before this have no names and show the tag alone.
+
+The composer draws a thumbnail for each picture its text still names
+(`namedIn`), with an `×` that deletes the tag (`withoutTag`) rather than
+anything held — so the strip and the message cannot disagree. Nothing deletes a
+chat's pictures when the chat is deleted, the same bargain the note files make.
+
+**A tool's pictures are kept the same way.** A `Read` of a PNG and a browser
+MCP's screenshot come back as `image` blocks inside the `tool_result`, which
+`resultText` reads past. `resultImages` in `claude-agent.ts` takes them out,
+main writes each as a note file before recording the result (so the row never
+names a file not yet written), and the tool line carries the names as `images`.
+They are drawn under the row, **outside** its fold: a screenshot is the result,
+and one hidden behind a click is one nobody looks at.
+
 ## `/` in a chat's composer
 
 `/` at the head of a message opens the second of the composer's two menus: the

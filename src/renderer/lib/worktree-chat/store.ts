@@ -14,6 +14,7 @@ import {
   type WorktreeChatOptions,
 } from "@shared/api"
 import { localCommand } from "./command-text"
+import { storeImages } from "./images"
 import { marksUnread } from "./unread"
 import { useProjects } from "../projects"
 import { useShells } from "../shell/store"
@@ -625,6 +626,14 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
       return
     }
 
+    // Written before the line is drawn rather than after, so the line's
+    // thumbnails never ask for a file that is not there yet. A local write of a
+    // few megabytes is not a wait anybody sees.
+    const kept = images.length > 0 ? await storeImages(images) : images
+    const files = kept.flatMap((image) =>
+      image.fileName ? [image.fileName] : []
+    )
+
     // Shown as sent before the turn starts: a composer that empties and then
     // shows nothing for a second reads as a message that went nowhere. This is
     // the *only* copy on screen — main writes the line down but does not
@@ -643,7 +652,12 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
         ...get().messages,
         [id]: [
           ...(get().messages[id] ?? []),
-          { id: lineId, role: "user", text },
+          {
+            id: lineId,
+            role: "user",
+            text,
+            ...(files.length > 0 && { images: files }),
+          },
         ],
       },
       // Sent into a chat that was already working, so the CLI queues it behind
@@ -665,7 +679,7 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
        */
       if (!(await get().save(id))) throw new Error("Could not start that chat.")
 
-      await window.desktop.sendWorktreeChat(id, text, images)
+      await window.desktop.sendWorktreeChat(id, text, kept)
     } catch (error) {
       // This line only, not the chat's other marks: a message that could not be
       // sent is not waiting behind anything, and the ones queued before it still
@@ -948,6 +962,7 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
                     result: event.result,
                     failed: event.failed,
                     ...(event.output ? { output: event.output } : {}),
+                    ...(event.images ? { images: event.images } : {}),
                   }
                 : line
             ),

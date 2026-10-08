@@ -1,4 +1,5 @@
 import type { ChatImage } from "@shared/api"
+import { extensionForType } from "@shared/note-files"
 
 /**
  * Pictures in a chat's message: `[Image #n]` in the text, the bytes beside it.
@@ -48,6 +49,64 @@ export function attachedIn(
   })
 
   return { text: out, images }
+}
+
+/**
+ * The pictures a draft's text still names, with the number each is named by —
+ * what the composer draws a thumbnail for. In the order they were added, which
+ * is the order of the numbers, rather than the order of the text: a thumbnail
+ * that jumped when a tag was moved would be a strip nobody can keep their place
+ * in.
+ */
+export function namedIn(
+  text: string,
+  held: ChatImage[]
+): { n: number; image: ChatImage }[] {
+  const named = new Set<number>()
+  for (const match of text.matchAll(TAG)) named.add(Number(match[1]))
+  return held.flatMap((image, index) =>
+    named.has(index + 1) ? [{ n: index + 1, image }] : []
+  )
+}
+
+/** The draft without the `n`th picture's tag, and the space that led into it,
+ * so taking a picture out does not leave a gap where it was. */
+export function withoutTag(text: string, n: number): string {
+  return text
+    .split(` ${imageTag(n)}`)
+    .join("")
+    .split(imageTag(n))
+    .join("")
+}
+
+/** A held picture as something an `img` can show — it is already in memory. */
+export const dataUrlOf = (image: ChatImage): string =>
+  `data:${image.mediaType};base64,${image.data}`
+
+/**
+ * Writes each picture into the workspace as a note file, so the line the
+ * transcript keeps can name it — see `ChatImage.fileName`.
+ *
+ * Best effort, one by one: a write that fails costs that picture its preview
+ * and nothing else, since the bytes still go to the CLI. Written at send rather
+ * than at the drop, so a picture taken back out of a draft leaves no file.
+ */
+export function storeImages(images: ChatImage[]): Promise<ChatImage[]> {
+  return Promise.all(
+    images.map(async (image) => {
+      const fileName = `${crypto.randomUUID()}.${extensionForType(image.mediaType) ?? "png"}`
+      try {
+        const bytes = Uint8Array.from(atob(image.data), (char) =>
+          char.charCodeAt(0)
+        )
+        await window.desktop.writeNoteFile(fileName, bytes)
+        return { ...image, fileName }
+      } catch (error) {
+        console.error("Could not keep that picture for the transcript", error)
+        return image
+      }
+    })
+  )
 }
 
 /** What the API takes as it is; anything else is redrawn as a PNG. */

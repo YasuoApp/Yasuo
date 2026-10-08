@@ -245,7 +245,10 @@ export type AgentHandlers = {
     /** The whole of it, capped, and only where `result` is a count rather than
      * the output itself — see `output` on the tool line. */
     output: string | undefined,
-    failed: boolean
+    failed: boolean,
+    /** The pictures it came back with — a `Read` of a PNG, a browser tool's
+     * screenshot. Bytes here; main keeps them as files for the row. */
+    images: ChatImage[]
   ) => void
   /**
    * What the turn spent, from the result line that ends it.
@@ -1152,7 +1155,8 @@ function read(message: SDKMessage, handlers: AgentHandlers): void {
         // one-line result is already on the row, and a second copy of it under
         // a fold is a click that reveals what was read a second ago.
         whole && whole !== line ? detailOf(whole) : undefined,
-        block.is_error === true
+        block.is_error === true,
+        resultImages(block.content)
       )
     }
     return
@@ -1674,6 +1678,43 @@ export function resultLine(content: unknown): string {
   return lines.length === 1
     ? collapse(lines[0]!)
     : `${lines.length.toLocaleString()} lines`
+}
+
+const SHOWN_TYPES = new Set<string>([
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+])
+
+/**
+ * The pictures in a result: the `image` blocks `resultText` skips over.
+ *
+ * Read off the same block shape the API takes on the way in — `source` holding
+ * base64 — and nothing else: a URL source would be a fetch this app never
+ * makes, and a type outside the four the API accepts is not one the CLI sends.
+ */
+export function resultImages(content: unknown): ChatImage[] {
+  if (!Array.isArray(content)) return []
+  return content.flatMap((block): ChatImage[] => {
+    const record = block as Record<string, unknown> | null
+    if (record?.type !== "image") return []
+    const source = record.source as Record<string, unknown> | undefined
+    if (
+      source?.type !== "base64" ||
+      typeof source.data !== "string" ||
+      typeof source.media_type !== "string" ||
+      !SHOWN_TYPES.has(source.media_type)
+    ) {
+      return []
+    }
+    return [
+      {
+        mediaType: source.media_type as ChatImage["mediaType"],
+        data: source.data,
+      },
+    ]
+  })
 }
 
 /**
