@@ -193,6 +193,27 @@ learnings…`, its dialog, `main/learnings.ts`, `shared/learnings.ts` and the
   somebody still has to press Commit on. `docs/design.md` § Committing has the
   argument.
 
+- **Workflows** are two workspace files in `store.ts` — the listing
+  `workspace/workflows.json` and one graph per workflow under
+  `workspace/workflows/<id>.json`, read as text and checked by the renderer
+  (`parseGraph`) on the way in — and a **runner**: `workflow-runner.ts` walks
+  the graph (pure, `test/workflow-run.ts`), `workflow-steps.ts` does the work.
+  A workflow is **run from a chat**, not from its tab: `@<slug>` as a
+  message's first word (`lib/workflows/invoke.ts`), the rest of the message
+  being `Start`'s output. Its `claude` steps `send` into **that** chat with
+  their own permission and model applied through `setOptions` and put back
+  after — each turn's `done` read off the same event stream the windows get
+  (`ChatTap`, fed from the chat callback in `ipc.ts`); `shell` is the login
+  shell in the chat's project; `http` is Node's `fetch`. A busy chat refuses
+  the call. In the chat a run is **one card** (`worktree/chat-workflow.tsx`):
+  `blocksOf` groups everything from the calling line (`workflow` on the user
+  line) to main's closing `WorkflowEndLine`. The canvas shows no chat and no
+  minimap. One run per workflow at a time, held in main and pushed whole
+  (`workflows:run-event`), never written to disk. A turn that asks waits in
+  its chat — nothing answers for it. `docs/design.md`
+  § Workflows has the argument, including why the file is the app's own shape
+  and not React Flow's.
+
 - **`content-search.ts`** — the left column's Search (`Find in files`): a query
   with `Aa` / `ab` / `.*` over every file under the workspace's folders and what
   was said in every chat (`WorktreeChats.search`), one channel
@@ -367,8 +388,10 @@ dialog`), not by hand. Vite's root is `src/renderer`, so `index.html` and
 `public/` are there too.
 
 The shape, in one pass: the **left column** (`workspace-sidebar.tsx`) shows
-either its sections or **Search** (`SidebarView` in `lib/projects.ts`, switched
-by the `NavRail`'s two buttons and `⇧⌘F`; `search-section.tsx`). Its sections are
+either its sections, **Search** or **Workflows** (`SidebarView` in
+`lib/projects.ts`, switched by the `NavRail`'s buttons and `⇧⌘F`;
+`search-section.tsx`, `workflows/workflows-section.tsx` — a workflow opens as
+a workspace-level tab on a React Flow canvas, `docs/design.md` § Workflows). Its sections are
 `Projects` and nothing else — `SIDEBAR_SECTIONS` in `lib/projects.ts` is
 the one line saying which sections are drawn, and the next to arrive is an id
 added to it. It stacked three once: the **Database and API panels are deleted**,
@@ -405,7 +428,7 @@ The **right-hand panel** is Explorer, with `All files` and `Git` tabs, and it
 is the whole height of its column. The window is a **canvas with cards**: a
 full-width title bar (`WindowTitleBar` — crumb left, a centred `Run a command`
 field for the palette), then the `NavRail` (projects toggle with the activity
-dot, Search, Terminal, Settings), the projects column, the pane + dock and the
+dot, Search, Workflows, Costs, Terminal, Settings), the projects column, the pane + dock and the
 Explorer, each a card (`CARD`, an inward outline so collapsed sizes stay exact)
 with the gaps as resize handles (`Gap`). **Explorer collapses to a 36px rail**
 (`explorer-rail.tsx`, `RAIL_WIDTH`), the same bargain the dock's strip makes;
@@ -581,7 +604,11 @@ naming of a profile's directory (`test/claude-account.ts`),
 model and chat (`test/chat-spend.ts`), `lib/worktree-chat/export.ts` — a chat as
 Markdown (`test/chat-export.ts`; `export-html.ts` is the DOM half),
 `lib/appearance.ts` — palettes, fonts, font size and density as root attributes
-and CSS vars (`test/appearance.ts`). Put new logic on that side of the line.
+and CSS vars (`test/appearance.ts`),
+`lib/workflows/graph.ts` — a workflow's graph as the edits made to it and the
+file it is read back from (`test/workflows.ts`), with `main/workflow-runner.ts`'s
+own order, templates and branching (`test/workflow-run.ts`). Put new logic on
+that side of the line.
 
 A terminal selection is put into the chat's composer from outside the pane
 through `lib/worktree-chat/composer-bus.ts`:

@@ -76,7 +76,12 @@ function blockOf(line: AssistantMessage): string | null {
     case "user":
       // The `@path` mentions stay as typed: they were the words of the message
       // and a reader of the export is owed exactly what was asked.
-      return `${speaker("You", line.at)}\n\n${line.text}`
+      return `${speaker(line.step ? `Workflow · ${line.step}` : "You", line.at)}\n\n${line.text}`
+    case "step": {
+      const mark = line.status === "failed" ? "❌" : "⚙️"
+      const item = `- ${mark} **${line.label}** — \`${line.summary}\``
+      return line.output ? `${item}\n\n${fence("", line.output)}` : item
+    }
     case "assistant":
       return `${speaker("Claude", line.at)}\n\n${line.text}`
     case "thinking":
@@ -98,6 +103,10 @@ function blockOf(line: AssistantMessage): string | null {
     }
     case "compact":
       return `---\n\n_${compactLine(line)}_`
+    case "workflow":
+      return quote(
+        `⚙️ Workflow ${line.status}${line.error ? ` — ${line.error}` : ""}`
+      )
   }
 }
 

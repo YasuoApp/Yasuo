@@ -16,6 +16,7 @@ import type {
   WorkspaceFolder,
   WorkspaceRecord,
 } from "../shared/api"
+import type { Workflow } from "../shared/workflows"
 import { withConfigDirs } from "./claude-profiles"
 import { dataDir } from "./data-dir"
 
@@ -70,6 +71,14 @@ export const WORKTREE_CHATS_FILE = "worktree-chats.json"
 
 /** Where each of those chats' lines live, one `<id>.json` per chat. */
 export const WORKTREE_CHATS_DIR = "worktree-chats"
+
+/**
+ * The workflows' listing, and the directory of their graphs — the same split
+ * the chats make, and for the same reason: the column reads one file for every
+ * name, and a diagram is read when its tab opens. See `shared/workflows.ts`.
+ */
+export const WORKFLOWS_FILE = "workflows.json"
+export const WORKFLOWS_DIR = "workflows"
 
 /**
  * Where drawings are kept, one `<id>.excalidraw` per drawing.
@@ -428,6 +437,31 @@ export class Store {
 
   private worktreeChatPath(id: string): string {
     return path.join(this.workspaceDir, WORKTREE_CHATS_DIR, `${ownId(id)}.json`)
+  }
+
+  listWorkflows(): Promise<Workflow[]> {
+    return this.readList(WORKFLOWS_FILE)
+  }
+
+  saveWorkflows(workflows: Workflow[]): Promise<void> {
+    return this.writeList(WORKFLOWS_FILE, workflows)
+  }
+
+  /** A workflow's graph as text, or "" for one nothing has been drawn in. */
+  readWorkflow(id: string): Promise<string> {
+    return this.readOwnFile(this.workflowPath(id))
+  }
+
+  writeWorkflow(id: string, graph: string): Promise<void> {
+    return this.writeOwnFile(this.workflowPath(id), graph)
+  }
+
+  deleteWorkflow(id: string): Promise<void> {
+    return this.deleteOwnFiles([this.workflowPath(id)])
+  }
+
+  private workflowPath(id: string): string {
+    return path.join(this.workspaceDir, WORKFLOWS_DIR, `${ownId(id)}.json`)
   }
 
   /** A drawing's scene, or "" for one that has never been saved. */

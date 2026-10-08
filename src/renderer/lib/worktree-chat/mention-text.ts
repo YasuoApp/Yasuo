@@ -31,14 +31,16 @@
  * rather than "these letters happen to be one".
  */
 
-/** A folder or a file — the two things the index holds. */
-export type PlainMentionKind = "file" | "directory"
+/** A folder or a file — the two things the index holds — or a workflow, which
+ * is offered only at the head of a message (`lib/workflows/invoke.ts`). */
+export type PlainMentionKind = "file" | "directory" | "workflow"
 
 /** The row's right-hand word. "folder", not "directory": it is what the
  * Explorer's own menus call one. */
 export const PLAIN_LABELS: Record<PlainMentionKind, string> = {
   directory: "folder",
   file: "file",
+  workflow: "workflow",
 }
 
 /** A path a chat can be pointed at, as the menu shows it. */

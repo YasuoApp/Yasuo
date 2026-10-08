@@ -34,6 +34,7 @@ import { ChatOutline } from "./chat-outline"
 import { ChatComposer, type ChatComposerHandle } from "./chat-composer"
 import { ChatActivity, DayDivider } from "./chat-activity"
 import { ChatMessage } from "./chat-message"
+import { ChatWorkflow } from "./chat-workflow"
 import { ChatSkeleton, ChatTranscriptSkeleton } from "./chat-skeleton"
 import { WorktreeWelcome } from "./worktree-welcome"
 
@@ -854,16 +855,18 @@ function Conversation({
                        */
                       className={cn(
                         "rounded-lg",
-                        block.kind === "activity" &&
+                        block.kind !== "line" &&
                           foundBlocks.has(block.id) &&
                           "ring-1 ring-ring/25 ring-offset-4 ring-offset-background",
-                        block.kind === "activity" &&
+                        block.kind !== "line" &&
                           block.id === currentBlock &&
                           "ring-2 ring-ring/70"
                       )}
                     >
                       {block.kind === "activity" ? (
                         <ChatActivity of={block} />
+                      ) : block.kind === "workflow" ? (
+                        <ChatWorkflow of={block} chatId={chatId} />
                       ) : (
                         <ChatMessage
                           of={block.line}

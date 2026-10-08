@@ -10,9 +10,13 @@ import {
   Coins,
   Copy,
   FileText,
+  Globe,
   Hourglass,
   ShieldCheck,
+  Split,
+  SquareTerminal,
   TriangleAlert,
+  Workflow,
 } from "lucide-react"
 
 import type { AssistantMessage, ChatTodo } from "@shared/api"
@@ -56,6 +60,18 @@ export function ChatMessage({
    * a user line. */
   queued?: boolean
 }) {
+  if (of.role === "user" && of.step !== undefined) {
+    return <WorkflowPrompt of={of} step={of.step} />
+  }
+
+  if (of.role === "step") {
+    return <StepRow of={of} />
+  }
+
+  // The run's card says how it ended (`chat-workflow.tsx`); on its own — a
+  // transcript cut short by hand — there is nothing for it to close.
+  if (of.role === "workflow") return null
+
   if (of.role === "user") {
     return (
       /* `data-line` is how `⌘F` finds this message's rendered text to paint its
@@ -253,6 +269,118 @@ function ThinkingRow({
         <div className="mt-1 ml-2.5 max-h-64 overflow-auto border-l pl-2.5 leading-relaxed break-words whitespace-pre-wrap opacity-80">
           {of.text}
         </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * A prompt a workflow sent: the question bubble, exactly where a person's
+ * own would be, with the box it came from named above it.
+ *
+ * A bubble and not a fold, because a run's chat is read as a conversation —
+ * the question on one side and the answer on the other — and a prompt
+ * folded away left two answers in a row with nothing to say what either
+ * was for. The label is the one difference, and the reason for it: nobody
+ * typed this, a box did, with `{{input}}` already filled in.
+ */
+function WorkflowPrompt({
+  of,
+  step,
+}: {
+  of: Extract<AssistantMessage, { role: "user" }>
+  step: string
+}) {
+  return (
+    <div data-line={of.id} className="group relative ml-4">
+      <div className="flex items-center justify-end gap-1 pr-1 pb-0.5 text-[0.65rem] text-muted-foreground">
+        <Workflow aria-hidden className="size-2.5 shrink-0" />
+        <span className="truncate">Workflow · {step}</span>
+        {of.at && timeOf(of.at) && (
+          <time
+            dateTime={of.at}
+            title={dateTimeOf(of.at)}
+            className="tabular-nums"
+          >
+            · {timeOf(of.at)}
+          </time>
+        )}
+      </div>
+      <div className="relative rounded-lg rounded-br-sm bg-accent/60 py-1.5 pr-8 pl-2.5 text-xs">
+        <MentionText text={of.text} />
+      </div>
+      <CopyMessage text={of.text} />
+    </div>
+  )
+}
+
+const STEP_ICONS: Record<
+  Extract<AssistantMessage, { role: "step" }>["kind"],
+  typeof Workflow
+> = {
+  shell: SquareTerminal,
+  http: Globe,
+  condition: Split,
+}
+
+/**
+ * A workflow step that is not Claude — a shell command, a request, a
+ * condition — on the left with the answers, since it is the run's side of
+ * the conversation rather than the question. One row the shape of a tool
+ * call: what kind it is, the box's name, what it ran, and whether it worked;
+ * what came back opens under it, the way a tool row's output does.
+ */
+function StepRow({ of }: { of: Extract<AssistantMessage, { role: "step" }> }) {
+  const [open, setOpen] = useState(false)
+  const Icon = STEP_ICONS[of.kind]
+  const failed = of.status === "failed"
+
+  return (
+    <div className="px-1 text-[0.7rem] text-muted-foreground">
+      <button
+        type="button"
+        aria-expanded={open}
+        disabled={!of.output}
+        onClick={() => setOpen(!open)}
+        title={stampOf(of)}
+        className={cn(
+          "flex w-full items-baseline gap-1.5 rounded text-left outline-none",
+          "focus-visible:ring-3 focus-visible:ring-ring/50 enabled:hover:text-foreground"
+        )}
+      >
+        <ChevronRight
+          className={cn(
+            "size-3 shrink-0 translate-y-0.5 transition-transform",
+            open && "rotate-90",
+            !of.output && "invisible"
+          )}
+        />
+        <Icon className="size-3 shrink-0 translate-y-0.5" />
+        <span className="shrink-0 font-medium">{of.label}</span>
+        <span className="min-w-0 truncate rounded bg-muted/60 px-1.5 py-0.5 font-mono opacity-80">
+          {of.summary}
+        </span>
+        <span
+          className={cn(
+            "ml-auto shrink-0",
+            failed
+              ? "text-[#ad0707] dark:text-[#c74e39]"
+              : "text-[#007100] dark:text-[#73c991]"
+          )}
+        >
+          {failed ? (
+            <TriangleAlert aria-label="Failed" className="size-3" />
+          ) : of.kind === "condition" ? (
+            of.output
+          ) : (
+            <Check aria-label="Done" className="size-3" />
+          )}
+        </span>
+      </button>
+      {open && of.output && (
+        <pre className="mt-1 ml-2.5 max-h-64 overflow-auto border-l pl-2.5 font-mono leading-relaxed break-words whitespace-pre-wrap opacity-80">
+          {of.output}
+        </pre>
       )}
     </div>
   )

@@ -18,6 +18,8 @@ import {
   type ChatSeed,
   type ChatSpend,
   type ClaudeProfile,
+  type StepLine,
+  type WorkflowEndLine,
   type WorktreeChat,
   type WorktreeChatAnswer,
   type WorktreeChatAsk,
@@ -529,25 +531,58 @@ export class WorktreeChats {
    * and the second would overwrite the lines of the first.
    */
   async create(place: ChatPlace, seed?: ChatSeed): Promise<WorktreeChat> {
-    const chats = await this.source.chats()
-    const held = seed && chats.find((chat) => chat.id === seed.id)
-    if (held) return held
+    let made: WorktreeChat | undefined
+    let held: WorktreeChat | undefined
+    await this.editChats((chats) => {
+      held = seed && chats.find((chat) => chat.id === seed.id)
+      if (held) return null
 
-    const now = new Date().toISOString()
-    const chat: WorktreeChat = {
-      id: seed?.id ?? randomUUID(),
-      folderId: place.folderId,
-      // Named by its first message, once there is one — `titleOf`, and then the
-      // CLI's own name for it in `retitle`. Until then this is what the tab
-      // says; Conductor's own new tab says the same thing.
-      title: seed?.title?.trim() || "Untitled",
-      ...(seed?.options ? { options: seed.options } : {}),
-      createdAt: now,
-      updatedAt: now,
-    }
-    await this.source.saveChats([...chats, chat])
+      const now = new Date().toISOString()
+      made = {
+        id: seed?.id ?? randomUUID(),
+        folderId: place.folderId,
+        // Named by its first message, once there is one — `titleOf`, and then
+        // the CLI's own name for it in `retitle`. Until then this is what the
+        // tab says; Conductor's own new tab says the same thing.
+        title: seed?.title?.trim() || "Untitled",
+        ...(seed?.options ? { options: seed.options } : {}),
+        createdAt: now,
+        updatedAt: now,
+      }
+      return [...chats, made]
+    })
+    if (held) return held
+    const chat = made!
     this.messages.set(chat.id, [])
     return chat
+  }
+
+  /**
+   * The listing's read-modify-writes, one at a time.
+   *
+   * Every change to the listing is a read, a change and a write, with an
+   * `await` between the first and the last — and the store's queue serialises
+   * the file operations, not the pairs. Two of these interleaved lose one: a
+   * workflow's second Claude step `create`d its chat while the first step's
+   * last `append` was between its read and its write, the append wrote the
+   * list it had read, and the second chat was gone before `send` looked for
+   * it — "That chat no longer exists", for a chat made a moment ago. So they
+   * queue here, and each edit sees the list the one before it wrote. `null`
+   * from `edit` is "nothing to write".
+   */
+  private listing: Promise<unknown> = Promise.resolve()
+
+  private editChats(
+    edit: (chats: WorktreeChat[]) => WorktreeChat[] | null
+  ): Promise<void> {
+    const next = this.listing.then(async () => {
+      const chats = await this.source.chats()
+      const edited = edit(chats)
+      if (edited) await this.source.saveChats(edited)
+    })
+    // The chain outlives a failed edit: the next one must not inherit it.
+    this.listing = next.catch(() => undefined)
+    return next
   }
 
   /** What was said in a chat. Read from disk the first time and cached after. */
@@ -747,9 +782,7 @@ export class WorktreeChats {
     this.startedIn.delete(id)
     this.autoTitled.delete(id)
 
-    await this.source.saveChats(
-      (await this.source.chats()).filter((chat) => chat.id !== id)
-    )
+    await this.editChats((chats) => chats.filter((chat) => chat.id !== id))
     await this.source.deleteChat(id)
   }
 
@@ -770,7 +803,10 @@ export class WorktreeChats {
   async send(
     id: string,
     prompt: string,
-    images: ChatImage[] = []
+    images: ChatImage[] = [],
+    /** The workflow box this came from, when a workflow sent it rather than
+     * a person — written on the line, see `step` on the user line. */
+    step?: string
   ): Promise<void> {
     const chats = await this.source.chats()
     const chat = chats.find((entry) => entry.id === id)
@@ -807,7 +843,12 @@ export class WorktreeChats {
 
     // The line keeps the `[Image #n]` and not the picture: a transcript that
     // carried base64 would be megabytes re-read every time the chat is opened.
-    await this.append(id, { id: lineId(), role: "user", text: prompt })
+    await this.append(id, {
+      id: lineId(),
+      role: "user",
+      text: prompt,
+      ...(step ? { step } : {}),
+    })
     await this.deliver(id, cwd, options, prompt, images)
   }
 
@@ -1121,11 +1162,12 @@ export class WorktreeChats {
     // by a turn still running — see `retitle`.
     this.autoTitled.delete(id)
 
-    const chats = await this.source.chats()
-    if (!chats.some((chat) => chat.id === id)) return
-
-    await this.source.saveChats(
-      chats.map((chat) => (chat.id === id ? { ...chat, title: name } : chat))
+    await this.editChats((chats) =>
+      chats.some((chat) => chat.id === id)
+        ? chats.map((chat) =>
+            chat.id === id ? { ...chat, title: name } : chat
+          )
+        : null
     )
   }
 
@@ -1134,8 +1176,8 @@ export class WorktreeChats {
    *
    * Whole rather than a patch, so two controls changed in quick succession
    * cannot merge into a state neither of them asked for. A read-modify-write of
-   * the listing like every other change to it — the store's own queue serialises
-   * them, so this cannot interleave with the line a turn is appending.
+   * the listing like every other change to it — `editChats` serialises them,
+   * so this cannot interleave with the line a turn is appending.
    *
    * **A running session is moved too**, which it never used to be: the options
    * were the process's argument list, so a chat mid-turn kept whatever it had
@@ -1145,11 +1187,10 @@ export class WorktreeChats {
    * those are picked up by the next message, which opens a new one.
    */
   async setOptions(id: string, options: WorktreeChatOptions): Promise<void> {
-    const chats = await this.source.chats()
-    if (!chats.some((chat) => chat.id === id)) return
-
-    await this.source.saveChats(
-      chats.map((chat) => (chat.id === id ? { ...chat, options } : chat))
+    await this.editChats((chats) =>
+      chats.some((chat) => chat.id === id)
+        ? chats.map((chat) => (chat.id === id ? { ...chat, options } : chat))
+        : null
     )
 
     const live = this.live.get(id)
@@ -1518,6 +1559,30 @@ export class WorktreeChats {
    * behind the interrupted turn still runs — the CLI's own rule, and the same
    * one the terminal follows.
    */
+  /**
+   * Writes a workflow's line into a chat — the message that called it, a
+   * step (`StepLine`), or how the run ended (`WorkflowEndLine`). A line of the conversation's record,
+   * never of the CLI's context: nothing is sent.
+   */
+  async note(
+    id: string,
+    line:
+      | Omit<StepLine, "id">
+      | Omit<WorkflowEndLine, "id">
+      | {
+          role: "user"
+          text: string
+          workflow: { id: string; name: string }
+        }
+  ): Promise<void> {
+    await this.append(id, { id: lineId(), ...line })
+  }
+
+  /** Whether the chat's CLI is working on something — main's own `busy`. */
+  isBusy(id: string): boolean {
+    return this.live.get(id)?.busy ?? false
+  }
+
   stop(id: string): void {
     this.live.get(id)?.session?.interrupt()
   }
@@ -1554,14 +1619,14 @@ export class WorktreeChats {
     this.startedIn.set(id, dirs)
 
     try {
-      const chats = await this.source.chats()
-      if (!chats.some((chat) => chat.id === id)) return
-      await this.source.saveChats(
-        chats.map((chat) =>
-          chat.id === id
-            ? { ...chat, started: true, startedIn: startedDirs(chat, dirs) }
-            : chat
-        )
+      await this.editChats((chats) =>
+        chats.some((chat) => chat.id === id)
+          ? chats.map((chat) =>
+              chat.id === id
+                ? { ...chat, started: true, startedIn: startedDirs(chat, dirs) }
+                : chat
+            )
+          : null
       )
     } catch (error) {
       // Worth a line in the log and not worth failing the turn over: the cost
@@ -1658,11 +1723,14 @@ export class WorktreeChats {
       // rename that landed in the meantime is the user naming the chat.
       if (!title || !this.autoTitled.delete(id)) return
 
-      const chats = await this.source.chats()
-      if (!chats.some((chat) => chat.id === id)) return
-      await this.source.saveChats(
-        chats.map((chat) => (chat.id === id ? { ...chat, title } : chat))
-      )
+      let found = false
+      await this.editChats((chats) => {
+        found = chats.some((chat) => chat.id === id)
+        return found
+          ? chats.map((chat) => (chat.id === id ? { ...chat, title } : chat))
+          : null
+      })
+      if (!found) return
 
       this.emit({ chatId: id, type: "title", title })
     } catch (error) {
@@ -1747,7 +1815,41 @@ export class WorktreeChats {
     const messages = [...(await this.read(id)), message]
     this.messages.set(id, messages)
 
-    if (message.role !== "user") {
+    // A workflow's prompt is the one user line announced — see the `prompt`
+    // event. A person's own is already on their screen.
+    if (message.role === "user" && message.step) {
+      this.emit({
+        chatId: id,
+        type: "prompt",
+        text: message.text,
+        step: message.step,
+      })
+    }
+
+    if (message.role === "step") {
+      this.emit({
+        chatId: id,
+        type: "step",
+        line: {
+          role: "step",
+          kind: message.kind,
+          label: message.label,
+          summary: message.summary,
+          status: message.status,
+          ...(message.output ? { output: message.output } : {}),
+        },
+      })
+    } else if (message.role === "workflow") {
+      this.emit({
+        chatId: id,
+        type: "workflow",
+        line: {
+          role: "workflow",
+          status: message.status,
+          ...(message.error ? { error: message.error } : {}),
+        },
+      })
+    } else if (message.role !== "user") {
       this.emit(
         message.role === "tool"
           ? {
@@ -1786,20 +1888,19 @@ export class WorktreeChats {
     try {
       await this.source.writeChat(id, messages)
 
-      const chats = await this.source.chats()
-      const existing = chats.find((chat) => chat.id === id)
-      if (!existing) return
+      await this.editChats((chats) => {
+        const existing = chats.find((chat) => chat.id === id)
+        if (!existing) return null
 
-      const titled =
-        existing.title === "Untitled" && message.role === "user"
-          ? titleOf(message.text)
-          : existing.title
-      // This name is a sentence and stands in for the one the CLI is about to
-      // write — see `retitle`, which only touches a chat named here.
-      if (titled !== existing.title) this.autoTitled.add(id)
+        const titled =
+          existing.title === "Untitled" && message.role === "user"
+            ? titleOf(message.text)
+            : existing.title
+        // This name is a sentence and stands in for the one the CLI is about
+        // to write — see `retitle`, which only touches a chat named here.
+        if (titled !== existing.title) this.autoTitled.add(id)
 
-      await this.source.saveChats(
-        chats.map((chat) =>
+        return chats.map((chat) =>
           chat.id === id
             ? {
                 ...chat,
@@ -1812,7 +1913,7 @@ export class WorktreeChats {
               }
             : chat
         )
-      )
+      })
     } catch (error) {
       console.error("Could not write the chat", error)
     }

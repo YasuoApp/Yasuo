@@ -25,6 +25,8 @@ const LABELS: Record<Pane, string> = {
   // Never drawn: `Changes` has no `groupOf`, so its tabs never fold.
   changes: "Changed files",
   worktree: "Chats in this project",
+  // Never drawn either: a workflow is the workspace's and files under nothing.
+  workflows: "Workflows",
 }
 
 /** Where the `+` at the end of a chat group's strip would put a chat: the group

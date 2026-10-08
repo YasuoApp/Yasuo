@@ -5,6 +5,7 @@ import {
   Search,
   Settings,
   SquareTerminal,
+  Workflow,
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -46,6 +47,7 @@ export function NavRail({
   const toggleView = useProjects((state) => state.toggleView)
   const sidebar = column && view === "projects"
   const searching = column && view === "search"
+  const workflows = column && view === "workflows"
   const dockOpen = useDock((state) => state.open)
   const toggleDock = useDock((state) => state.toggle)
 
@@ -110,6 +112,15 @@ export function NavRail({
         }}
       >
         <Search />
+      </RailButton>
+      {/* The workspace's workflows, drawn on a canvas — the column lists them
+          and a row opens one in the pane. See `docs/design.md` § Workflows. */}
+      <RailButton
+        label={workflows ? "Hide workflows" : "Workflows"}
+        pressed={workflows}
+        onClick={() => toggleView("workflows")}
+      >
+        <Workflow />
       </RailButton>
       {/* What every chat has cost, as a dialog — see `CostDashboard`. */}
       <RailButton label="Costs" onClick={onOpenCosts}>

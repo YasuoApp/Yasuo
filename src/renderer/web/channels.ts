@@ -25,6 +25,7 @@ export const PUSHED = [
   "terminalData",
   "terminalExit",
   "updateProgress",
+  "workflowRunEvent",
 ] as const satisfies readonly (keyof typeof IPC)[]
 
 /** What the preload exposes that is not a channel at all — answered by the

@@ -3,6 +3,7 @@ import {
   Loader2,
   MessageSquare,
   ShieldQuestion,
+  Workflow,
 } from "lucide-react"
 
 import { useChanges } from "@/lib/files/changes"
@@ -14,6 +15,7 @@ import { useTabGroups } from "@/lib/panels"
 import { useStudio, type Pane } from "@/lib/store"
 import { groupTabId, PREFIX } from "@/lib/tabs"
 import { useWorktreeChats } from "@/lib/worktree-chat/store"
+import { useWorkflows } from "@/lib/workflows/store"
 import { FileIcon } from "./file-icon"
 import type { TabStripItem } from "./tab-strip"
 
@@ -57,6 +59,9 @@ export function useTabItems(): Map<string, TabStripItem> {
   const gitStatus = useGitStatus()
 
   const workspaceFolders = useStudio((state) => state.folders)
+
+  const workflows = useWorkflows((state) => state.workflows)
+  const workflowOpenIds = useWorkflows((state) => state.openIds)
 
   const groups = useTabGroups()
 
@@ -179,6 +184,23 @@ export function useTabItems(): Map<string, TabStripItem> {
   }
 
   /*
+   * The workspace's workflows, by name. No project on the hover line: a
+   * workflow is not in one, which is why its tab stays in the strip whichever
+   * project is being worked in.
+   */
+  for (const id of workflowOpenIds) {
+    const workflow = workflows.find((candidate) => candidate.id === id)
+    if (!workflow) continue
+
+    add({
+      id: PREFIX.workflows + id,
+      label: workflow.name,
+      icon: <Workflow className="size-3.5 shrink-0" />,
+      title: workflow.name,
+    })
+  }
+
+  /*
    * And the folders' own tabs, for whichever panels are grouping.
    *
    * Built from the members above rather than beside them: what a folder's tab
@@ -242,6 +264,8 @@ function groupName(
     // Every chat is in a project, so the name above is always the answer and
     // this is never reached for one.
     worktree: [],
+    // No `groupOf` at all: a workflow is the workspace's and never folds.
+    workflows: [],
   }[pane].find((folder) => folder.id === group)
 
   if (found) return found.name
@@ -254,5 +278,6 @@ function groupName(
     files: "Files",
     worktree: "Chats",
     changes: "",
+    workflows: "Workflows",
   }[pane]
 }

@@ -729,4 +729,67 @@ section("the divider between days")
   )
 }
 
+section("a workflow run is one card")
+{
+  const before = user("fix the tests")
+  const answered = said("fixed")
+  const called: AssistantMessage = {
+    id: id(),
+    role: "user",
+    text: "@create-pr the login",
+    workflow: { id: "w1", name: "Create PR" },
+  }
+  const prompt: AssistantMessage = {
+    id: id(),
+    role: "user",
+    text: "open a PR for the login",
+    step: "Draft",
+  }
+  const reply = said("opened #12")
+  const ended: AssistantMessage = { id: id(), role: "workflow", status: "done" }
+  const after = user("thanks")
+
+  const blocks = blocksOf([
+    before,
+    answered,
+    called,
+    prompt,
+    reply,
+    ended,
+    after,
+  ])
+  const card = blocks.find((block) => block.kind === "workflow")
+  check(
+    "the chat before and after stays as it was",
+    blocks[0]?.kind === "line" &&
+      blocks[0].line === before &&
+      blocks.at(-1)?.kind === "line",
+    blocks.map((block) => block.kind)
+  )
+  check(
+    "the run is one block between them",
+    blocks.filter((block) => block.kind === "workflow").length === 1 &&
+      card?.kind === "workflow" &&
+      card.start === called &&
+      card.end === ended
+  )
+  check(
+    "its inside is blocked like a chat",
+    card?.kind === "workflow" &&
+      card.blocks.some((block) => block.kind === "line" && block.line === reply)
+  )
+  check(
+    "a line inside it is found at the card",
+    blockOf(blocks, reply.id) === card?.id
+  )
+
+  const running = blocksOf([called, prompt])
+  check(
+    "a run with no end yet runs to the end of the chat",
+    running.length === 1 &&
+      running[0]?.kind === "workflow" &&
+      running[0].end === null
+  )
+}
+
 finish()

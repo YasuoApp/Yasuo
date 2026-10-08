@@ -33,8 +33,18 @@ export const SIDEBAR_SECTIONS: SidebarSection[] = ["projects"]
  * editors' activity bar: a search's results are a list as long as the projects'
  * and as worth the whole height, and two of them sharing it evenly would halve
  * both. The `NavRail` button for each is the switch.
+ *
+ * `workflows` is the third, and the same bargain: the workspace's workflows
+ * are a list as worth the height as the projects are, and the rail's button
+ * is the way between them.
  */
-export type SidebarView = "projects" | "search"
+export type SidebarView = "projects" | "search" | "workflows"
+
+const SIDEBAR_VIEWS: SidebarView[] = ["projects", "search", "workflows"]
+
+function isSidebarView(value: string | undefined): value is SidebarView {
+  return (SIDEBAR_VIEWS as (string | undefined)[]).includes(value)
+}
 
 type RememberedColumn = {
   sidebar: boolean
@@ -205,7 +215,7 @@ export const useProjects = create<ProjectsState>((set, get) => {
             // a tree that opens on another one rather than on an error.
             activeFolderId: stored.activeFolderId ?? null,
             shutSections: stored.shutSections ?? [],
-            view: stored.view === "search" ? "search" : "projects",
+            view: isSidebarView(stored.view) ? stored.view : "projects",
           })
         }
       })()

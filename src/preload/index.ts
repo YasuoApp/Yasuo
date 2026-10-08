@@ -16,6 +16,7 @@ import {
   type TerminalOutput,
   type UpdateProgress,
 } from "../shared/api"
+import type { WorkflowRun } from "../shared/workflows"
 
 /**
  * Subscribes to a main-process event, handing the listener only the payload.
@@ -173,6 +174,19 @@ const api: DesktopApi = {
   writeDrawing: (id, scene) => ipcRenderer.invoke(IPC.writeDrawing, id, scene),
   writeDrawingSvg: (id, svg) =>
     ipcRenderer.invoke(IPC.writeDrawingSvg, id, svg),
+  listWorkflows: () => ipcRenderer.invoke(IPC.listWorkflows),
+  saveWorkflows: (workflows) =>
+    ipcRenderer.invoke(IPC.saveWorkflows, workflows),
+  readWorkflow: (id) => ipcRenderer.invoke(IPC.readWorkflow, id),
+  writeWorkflow: (id, graph) =>
+    ipcRenderer.invoke(IPC.writeWorkflow, id, graph),
+  deleteWorkflow: (id) => ipcRenderer.invoke(IPC.deleteWorkflow, id),
+  runWorkflow: (id, graph, call) =>
+    ipcRenderer.invoke(IPC.runWorkflow, id, graph, call),
+  stopWorkflow: (id) => ipcRenderer.invoke(IPC.stopWorkflow, id),
+  workflowRun: (id) => ipcRenderer.invoke(IPC.workflowRun, id),
+  onWorkflowRunEvent: (listener) =>
+    subscribe<WorkflowRun>(IPC.workflowRunEvent, listener),
 
   writeNoteFile: (fileName, bytes) =>
     ipcRenderer.invoke(IPC.writeNoteFile, fileName, bytes),

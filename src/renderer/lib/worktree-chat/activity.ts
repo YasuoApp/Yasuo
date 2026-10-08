@@ -26,7 +26,8 @@ import { dayBreak, dayLabel } from "./since"
  * no working at all, and a chat read back from disk is several turns in a row.
  */
 
-/** One thing the pane draws: a line on its own, or a run of them folded. */
+/** One thing the pane draws: a line on its own, a run of them folded, or a
+ * workflow run's card holding blocks of its own. */
 export type ChatBlock =
   | { kind: "line"; id: string; line: AssistantMessage }
   | {
@@ -35,6 +36,26 @@ export type ChatBlock =
       lines: AssistantMessage[]
       counts: ActivityCounts
     }
+  | WorkflowBlock
+
+/**
+ * A workflow run, from the message that called it to the line that closed it
+ * — see `WorkflowEndLine`. `end` is null while the run is going, and for ever
+ * for one the app was quit in the middle of: the card asks the live run which
+ * of the two it is.
+ *
+ * Its inside is blocked the way a chat is — the box's prompt, the working
+ * folded, the answer — so a run reads as the same conversation it is, inside
+ * one card rather than spread through the chat it was called from.
+ */
+export type WorkflowBlock = {
+  kind: "workflow"
+  id: string
+  start: Extract<AssistantMessage, { role: "user" }>
+  workflow: { id: string; name: string }
+  blocks: ChatBlock[]
+  end: Extract<AssistantMessage, { role: "workflow" }> | null
+}
 
 /** What the folded line says there is. */
 export type ActivityCounts = {
@@ -89,6 +110,47 @@ export function isAgentTool(name: string): boolean {
 }
 
 export function blocksOf(messages: AssistantMessage[]): ChatBlock[] {
+  const blocks: ChatBlock[] = []
+  let plain: AssistantMessage[] = []
+  let open: WorkflowBlock | null = null
+  let inside: AssistantMessage[] = []
+
+  for (const line of messages) {
+    if (open) {
+      if (line.role === "workflow") {
+        blocks.push({ ...open, blocks: turnBlocksOf(inside), end: line })
+        open = null
+        inside = []
+      } else {
+        inside.push(line)
+      }
+      continue
+    }
+    if (line.role === "user" && line.workflow) {
+      blocks.push(...turnBlocksOf(plain))
+      plain = []
+      open = {
+        kind: "workflow",
+        id: `workflow-${line.id}`,
+        start: line,
+        workflow: line.workflow,
+        blocks: [],
+        end: null,
+      }
+      continue
+    }
+    // An end with no start ahead of it — a transcript cut short by hand —
+    // has no card to close, and draws nothing.
+    if (line.role === "workflow") continue
+    plain.push(line)
+  }
+  if (open) blocks.push({ ...open, blocks: turnBlocksOf(inside) })
+  else blocks.push(...turnBlocksOf(plain))
+
+  return blocks
+}
+
+function turnBlocksOf(messages: AssistantMessage[]): ChatBlock[] {
   const blocks: ChatBlock[] = []
 
   for (const turn of turnsOf(messages)) {
@@ -154,6 +216,16 @@ export function blocksOf(messages: AssistantMessage[]): ChatBlock[] {
  */
 export function blockOf(blocks: ChatBlock[], lineId: string): string | null {
   for (const block of blocks) {
+    // The card is what is on screen for anything inside it.
+    if (block.kind === "workflow") {
+      if (
+        block.start.id === lineId ||
+        block.end?.id === lineId ||
+        blockOf(block.blocks, lineId) !== null
+      )
+        return block.id
+      continue
+    }
     if (block.kind === "line") {
       if (block.line.id === lineId) return block.id
       continue
@@ -183,6 +255,7 @@ export function dayDividerBetween(
 }
 
 function firstStampOf(block: ChatBlock): string | undefined {
+  if (block.kind === "workflow") return block.start.at
   return block.kind === "line" ? block.line.at : block.lines[0]?.at
 }
 
@@ -352,7 +425,10 @@ function turnsOf(messages: AssistantMessage[]): {
     }
 
   for (const line of messages) {
-    if (line.role === "user") {
+    // A workflow step is a boundary too: it ran between two turns, and the
+    // answer before it is still an answer rather than working folded into
+    // whatever comes after — see `StepLine`.
+    if (line.role === "user" || line.role === "step") {
       if (current.prompt || current.lines.length > 0) turns.push(current)
       current = { prompt: line, lines: [] }
       continue
