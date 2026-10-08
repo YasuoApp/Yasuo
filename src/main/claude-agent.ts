@@ -131,15 +131,15 @@ export type AgentSessionOptions = {
    */
   asksRules?: () => boolean
   /**
-   * MCP tools the workspace has switched off, as wire names or server prefixes
-   * — `MCP_DISABLED_TOOLS_KEY`.
+   * MCP tools the chat has switched off, as wire names or server prefixes
+   * — `WorktreeChatOptions.disabledTools`.
    *
    * The one thing this app still says about the CLI's tool list, and it goes
    * over as `disallowedTools` rather than being refused in-process like a mode's
    * policy: refusing per call would leave the tool in the model's prompt, paid
    * for and offered, only to fail when used. This takes it out. It is part of
-   * the cached prefix, which is why it is a **workspace** setting that changes
-   * rarely rather than anything per mode or per message — see `permits` and
+   * the cached prefix, which is why it changes only when somebody flips a
+   * switch rather than per mode or per message — see `permits` and
    * `signatureOf` in `worktree-chat.ts`.
    */
   disallowedTools?: string[]
@@ -548,9 +548,9 @@ export async function startAgentSession(
       // No `allowedTools`: every call falls through to `canUseTool`, which is
       // both what lets one cached prefix serve all five modes and what makes the
       // callback reachable at all — see `permits`. `disallowedTools` is the one
-      // exception and is not a mode's business either; it is the workspace's
-      // switched-off MCP tools, the same on every turn until somebody changes
-      // the setting. There is no `--mcp-config`: this app configures no MCP
+      // exception and is not a mode's business either; it is the chat's
+      // switched-off MCP tools, the same on every turn until somebody flips a
+      // switch. There is no `--mcp-config`: this app configures no MCP
       // server of its own, so a turn gets what the CLI finds for itself here.
       ...(session.disallowedTools?.length
         ? { disallowedTools: session.disallowedTools }

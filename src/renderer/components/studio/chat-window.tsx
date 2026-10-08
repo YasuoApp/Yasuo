@@ -9,7 +9,7 @@ import { useStudio } from "@/lib/store"
 import { useClaudeProfiles } from "@/lib/worktree-chat/claude-profiles"
 import { useWorktreeChats } from "@/lib/worktree-chat/store"
 import { IconButton } from "./icon-button"
-import { IS_MAC } from "./title-bar"
+import { HAS_TRAFFIC_LIGHTS } from "./title-bar"
 import { WorktreeChatPane } from "./worktree/chat-pane"
 
 /**
@@ -82,28 +82,31 @@ export function ChatWindow({ chatId }: { chatId: string }) {
           "drag-region flex h-10 shrink-0 items-center gap-2 border-b pr-2",
           // Clears the traffic lights at `x: 14` (`openChatWindow` in
           // `main/main.ts`); elsewhere the frame is the OS's own.
-          IS_MAC ? "pl-[4.5rem]" : "pl-3"
+          HAS_TRAFFIC_LIGHTS ? "pl-[4.5rem]" : "pl-3"
         )}
       >
         <span className="min-w-0 flex-1 truncate text-xs font-medium text-muted-foreground">
           {chat?.title ?? "Chat"}
         </span>
-        <IconButton
-          label={pinned ? "Unpin from the top" : "Keep over other windows"}
-          side="bottom"
-          pressed={pinned}
-          onClick={togglePin}
-          className={cn(
-            "no-drag size-6",
-            pinned && "bg-accent text-accent-foreground"
-          )}
-        >
-          {pinned ? (
-            <Pin className="size-3.5" />
-          ) : (
-            <PinOff className="size-3.5" />
-          )}
-        </IconButton>
+        {/* A browser window cannot be pinned over others. */}
+        {window.desktop.runtime === "electron" && (
+          <IconButton
+            label={pinned ? "Unpin from the top" : "Keep over other windows"}
+            side="bottom"
+            pressed={pinned}
+            onClick={togglePin}
+            className={cn(
+              "no-drag size-6",
+              pinned && "bg-accent text-accent-foreground"
+            )}
+          >
+            {pinned ? (
+              <Pin className="size-3.5" />
+            ) : (
+              <PinOff className="size-3.5" />
+            )}
+          </IconButton>
+        )}
       </header>
 
       <div className="min-h-0 flex-1">

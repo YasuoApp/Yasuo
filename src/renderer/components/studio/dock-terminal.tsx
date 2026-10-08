@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef } from "react"
 
 import { cn } from "@/lib/utils"
 import { useDock } from "@/lib/dock"
-import { scanDevServer, usePreview } from "@/lib/preview"
 import { useShells, type Shell } from "@/lib/shell/store"
 import { useStudio } from "@/lib/store"
 import { TerminalView, type TerminalHandle } from "./terminal-view"
@@ -30,9 +29,7 @@ export function DockTerminal() {
   // on screen: a pty is a process, and clicking a project in the column must
   // not start one behind a dock nobody has opened. Following `target` is what
   // makes a project clicked *while* this is showing switch straight away.
-  // And only while the shells are the view: opening the dock on `Preview`
-  // must not start a pty behind the webview either.
-  const showing = useDock((state) => state.open && state.view === "shells")
+  const showing = useDock((state) => state.open)
   // Whether there are folders at all, rather than the list: with nothing
   // clicked yet `ensure` guesses from them, and a dock opened before the
   // workspace had been read would otherwise sit on its empty state — but the
@@ -125,20 +122,10 @@ function ShellView({ shell }: { shell: Shell }) {
 
           terminalId.current = created
 
-          // The dev-server URL this shell prints, offered to the `Preview`
-          // tab and nothing more — see `lib/preview.ts` for why it is not
-          // opened. The carry is what joins a URL the pty cut in two.
-          let carry = ""
-
           unsubscribeData = window.desktop.onTerminalData((event) => {
             if (event.terminalId !== created) return
             terminal.write(event.chunk)
             lookSoon(created)
-
-            const scanned = scanDevServer(carry, event.chunk)
-            carry = scanned.carry
-            if (scanned.url)
-              usePreview.getState().suggest(folderId, scanned.url)
           })
 
           unsubscribeExit = window.desktop.onTerminalExit((event) => {

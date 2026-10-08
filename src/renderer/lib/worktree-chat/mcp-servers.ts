@@ -1,7 +1,7 @@
 import type { McpServerInfo, McpServerState, McpToolInfo } from "@shared/api"
 
 /**
- * The listing in Settings › MCP, minus the drawing.
+ * The composer's MCP menu (`chat-mcp.tsx`), minus the drawing.
  *
  * Split out for the reason the other `lib/worktree-chat` halves are: what order
  * the rows go in and what each state is *called* are the two things worth being
@@ -127,8 +127,8 @@ export function withServerOff(
  * A floor on what one server's tools cost in every turn's prompt, in tokens.
  *
  * The real number is only measurable from inside a session — the window meter's
- * `System tools` slice is it — but the switch is in Settings, where no session
- * is running, so the listing's own material is counted instead: each tool's
+ * `System tools` slice is it — but the switch is drawn before a session has
+ * necessarily run, so the listing's own material is counted instead: each tool's
  * wire name and description at the usual ~4 characters per token. What the
  * listing does not carry is the parameter schema, which often doubles a
  * definition, so this is short of the truth and said as a floor. A floor still
@@ -138,28 +138,6 @@ export function withServerOff(
 export function serverPromptTokens(server: McpServerInfo): number {
   return Math.round(
     server.tools.reduce((sum, tool) => sum + toolChars(server, tool) / 4, 0)
-  )
-}
-
-/**
- * The same floor over everything still switched on, for the sentence above the
- * listing: what the current setting hands every turn of every chat.
- */
-export function promptTokensLeftOn(
-  servers: McpServerInfo[],
-  disabled: string[]
-): number {
-  return Math.round(
-    servers.reduce((sum, server) => {
-      if (isServerOff(disabled, server.name)) return sum
-      return server.tools.reduce(
-        (inner, tool) =>
-          isToolOff(disabled, server.name, tool.name)
-            ? inner
-            : inner + toolChars(server, tool) / 4,
-        sum
-      )
-    }, 0)
   )
 }
 

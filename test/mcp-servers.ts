@@ -6,7 +6,6 @@ import {
   isToolOff,
   needsAttention,
   orderedServers,
-  promptTokensLeftOn,
   serverCaption,
   serverPromptTokens,
   signIn,
@@ -297,7 +296,7 @@ section("switching tools off: what the setting becomes")
   )
 }
 
-section("what the tools cost a turn: a floor, and honest about the switches")
+section("what the tools cost a turn: a floor")
 {
   // Descriptions sized so name + description divides by four exactly, keeping
   // every expectation below free of rounding.
@@ -309,8 +308,6 @@ section("what the tools cost a turn: a floor, and honest about the switches")
   const heavy = readServer(
     row({ name: "claude.ai ClickUp", tools: [tool("a", 103), tool("b", 103)] })
   )
-  // `mcp__linear__c` is 14 characters; 14 + 102 = 29 tokens.
-  const light = readServer(row({ name: "linear", tools: [tool("c", 102)] }))
 
   const each = (wireName("claude.ai ClickUp", "a").length + 103) / 4
   check(
@@ -321,28 +318,6 @@ section("what the tools cost a turn: a floor, and honest about the switches")
   check(
     "nothing on it is nothing",
     serverPromptTokens(readServer(row({ tools: [] }))) === 0
-  )
-
-  const everything = promptTokensLeftOn([heavy, light], [])
-  check(
-    "the total is every server left on",
-    everything === serverPromptTokens(heavy) + serverPromptTokens(light),
-    everything
-  )
-  check(
-    "a server switched off costs nothing",
-    promptTokensLeftOn(
-      [heavy, light],
-      withServerOff([], "claude.ai ClickUp", true)
-    ) === serverPromptTokens(light)
-  )
-  check(
-    "and so does a single tool",
-    promptTokensLeftOn(
-      [heavy, light],
-      withToolOff([], "claude.ai ClickUp", "a", true)
-    ) ===
-      serverPromptTokens(light) + each
   )
 }
 

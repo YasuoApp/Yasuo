@@ -2,7 +2,7 @@ import path from "node:path"
 
 import { BrowserWindow, app, shell } from "electron"
 
-import { registerIpc } from "./ipc"
+import { registerIpc } from "./electron-ipc"
 import { installMenu } from "./menu"
 import {
   APP_ORIGIN,
@@ -222,10 +222,6 @@ function createWindow(): void {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
-      // The dock's `Preview` tab is a `<webview>` of the project's dev server
-      // (`dock-preview.tsx`): a separate renderer the studio can screenshot
-      // into a chat, which an `<iframe>` of another origin cannot be.
-      webviewTag: true,
     },
   })
 

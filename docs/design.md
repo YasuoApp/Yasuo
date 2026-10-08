@@ -672,8 +672,8 @@ It is **on by default**, which is the one switch in Settings that goes that way
 (`CHAT_NOTIFICATIONS_KEY`, and Settings › Chats is the switch). The reason is
 that a user who has to find the row first has already missed the turn they
 walked away from. It lives under its own settings key rather than in the
-renderer's preference bag, for the reason the switched-off MCP tools do: main
-reads it, and a bag only the renderer parses is not a thing both sides can name.
+renderer's preference bag, for the reason the switched-off MCP tools once did:
+main reads it, and a bag only the renderer parses is not a thing both sides can name.
 
 ### The menu bar
 
@@ -1840,6 +1840,23 @@ anybody opens.
 The commands a user saved stay on their disk: nothing reads the `run.commands`
 setting any more, and nothing deletes it.
 
+### Preview, removed
+
+There was a `Preview` tab past the `+`: the active project's dev server in a
+`<webview>`, its URL offered by whichever shell printed one (`lib/preview.ts`
+scanned the pty's output for a `localhost` address), with Back, Forward, Reload
+and a camera that put a screenshot of the page into the chat's composer. The
+browser build drew it as an `<iframe>` without the camera.
+
+It is deleted — `dock-preview.tsx`, `lib/preview.ts`, `test/preview.ts`,
+`webview.d.ts`, the dock's second face (`DockView`), the image half of
+`composer-bus.ts` and `webviewTag` on the studio window — because it was not
+used. A page somebody is building is read in their own browser, with its own
+devtools, at a size that is not a strip under the pane; a screenshot of it goes
+into the composer the way any other does, pasted or dropped. What the tab cost
+was a second renderer the studio window had to be allowed to host, and a scan
+of every byte every shell printed.
+
 ## The tab strip
 
 One strip for the whole workbench, above whichever panel is showing, rather
@@ -2685,7 +2702,9 @@ MCP server for it the way they would for any other tool — and it then works in
 the dock's Terminal and in a chat here alike, which the app's own servers never
 did.
 
-**What the section is now: a listing.** Settings › MCP shows the servers the
+**What the section is now: a listing.** (It is no longer a section: see _Per
+chat, in the composer_ below. What follows is still true of the listing in its
+new place.) Settings › MCP showed the servers the
 user's own `claude` has, the way `/mcp` in the CLI does — name, scope, transport,
 the URL or command behind it, whether it connected, the error if it did not, and
 its tools behind a disclosure. Read-only on purpose: the whole point of removing
@@ -2739,9 +2758,10 @@ headers are deliberately not drawn — that is where its token is.
 
 **The switches** — one per server, one per tool behind the fold — are _this
 app's_ refusal and not a change to anything of the user's. The list of what is
-off lives in this app's own settings (`MCP_DISABLED_TOOLS_KEY`, a JSON array
-under one key because a connector has fifty tools and the list is read whole
-anyway), and it reaches a turn as the CLI's `disallowedTools`. So a server
+off lived in this app's own settings (`mcp.disabledTools`, a JSON array under
+one key because a connector has fifty tools and the list is read whole anyway)
+and is now on each chat's options (`disabledTools`), and it reaches a turn as
+the CLI's `disallowedTools`. So a server
 switched off here is still installed, and their terminal still has every tool of
 it.
 
@@ -2755,12 +2775,14 @@ Three decisions inside that:
   Verified against the CLI's own `init` frame: two tools named on
   `--disallowed-tools` are two tools **absent** from the list the model is given,
   not two tools refused on use.
-- **So it is a _workspace_ setting, not per chat or per mode.** It is inside the
+- **So it changes rarely, and never per mode or per message.** It is inside the
   cached prefix, which is the one thing the five modes were carefully arranged
   not to touch. A list that varied per message would rebuild a 43k prefix per
-  message; one that changes when somebody opens Settings costs that once. It is
+  message; one that changes when somebody flips a switch costs that once. It is
   in `signatureOf` for the same reason the cwd is — a running session was started
   with it, so changing it closes that session and the next message opens another.
+  This bullet used to read "so it is a _workspace_ setting"; see below for why
+  that did not follow.
 - **The entries are _wire_ names.** The CLI normalises a server's configured name
   into the one a tool call carries — everything outside `[a-zA-Z0-9_-]` becomes
   `_` — so `claude.ai ClickUp` is `mcp__claude_ai_ClickUp__…` and
@@ -2799,6 +2821,33 @@ server needing auth is the CLI's own OAuth dance, with a callback listener and a
 browser round trip this app has no part in, so that row says `/mcp` in a `claude`
 session instead. The alternative was linking the server's own URL, which in a
 browser is a protocol error rather than a sign-in page.
+
+### Per chat, in the composer
+
+**The switches moved off Settings and onto each chat**, and the rest of the
+section came with them: the listing, Remove and the sign-in link are a `Plug`
+menu in the composer's toolbar (`worktree/chat-mcp.tsx`), and Settings › MCP is
+deleted. The list of what is off is `disabledTools` on `WorktreeChatOptions`,
+saved with the model and the budget, normalised (sorted, deduplicated) by
+`chatOptions` so main's signature cannot tell two orders of one set apart.
+
+The argument for one workspace list was the cached prefix, and it did not
+actually need the list to be the workspace's — only that it not move per
+message. A chat's own list moves exactly as rarely: when somebody flips a
+switch, which closes that chat's session and pays for one fresh prefix on the
+next message, the same price the Settings switch charged every chat at once.
+What per chat buys is that the decision is made where it matters. The chat
+reading a Figma frame wants Figma; the one refactoring a module wants forty
+connector tools out of its prompt; and a workspace switch could only serve one
+of them.
+
+A new chat has **everything on**, the way plain `claude` in that directory
+would. The old workspace list is not carried over: nothing reads
+`mcp.disabledTools` any more, and nothing deletes it. The listing is asked when
+the menu is opened rather than when the composer mounts — it is a `claude`
+process and several seconds, and a composer is mounted per chat switched to.
+The commit draft gets no list at all (its `permits` already refuses every MCP
+call); a distil gets the distilled chat's own.
 
 ### The fence that used to be here
 
@@ -3101,7 +3150,7 @@ prompt bar this app has none of, `/heapdump` writes to the Desktop of a process
 that is not this one), controls this composer already has and would then have
 twice (`/model`, `/effort` and `/fast` are the toolbar's model menu, and a
 session's model moves through `setModel` rather than through a message; `/mcp` is
-Settings › MCP), and the CLI's `__`-prefixed internals. Anything not named is
+the toolbar's MCP menu), and the CLI's `__`-prefixed internals. Anything not named is
 offered, so a plugin installed tomorrow is in the menu without a release — which
 is the whole point of asking.
 
@@ -3794,6 +3843,32 @@ has nothing left to guard against and is gone. Whitespace is now all or nothing
 (`highlightWhitespace`) where Monaco drew the marks inside a selection: there is
 no selection-scoped equivalent, and somebody who turned the toggle on to find a
 stray tab wanted all of them anyway.
+
+### Resolving a conflict in the file
+
+A file git stopped on — a `C` row in `Changes` — is resolved where it is, the
+way VS Code does it: every `<<<<<<<` block in the file editor gets a row of
+**Accept Current | Accept Incoming | Accept Both** over it, and its two sides
+are tinted, current green and incoming blue (`lib/editor-conflicts.ts`, the
+parsing in `lib/files/conflicts.ts` and `test/conflicts.ts`). `diff3`-style
+blocks are read too, and their `|||||||` base is never kept.
+
+Three decisions in it:
+
+- **An edit, not a git command.** A button rewrites the block in the buffer the
+  way typing would — undoable, unsaved until ⌘S, forwarded to any other view
+  of the path. Saying the file is resolved is still staging it, which is what
+  `git add` on a `UU` path has always meant and what the row's menu already
+  does. Nothing here runs `git checkout --ours`: that answers for the whole file
+  at once, and a conflict is resolved a block at a time.
+- **Read off the text, not off git.** The blocks are re-read on every edit, so
+  a block resolved by hand loses its buttons as its last marker goes, and a
+  button acts on the block as it stands when clicked. It also means any file
+  with markers in it gets them, whether git listed it or not.
+- **A conflicted row opens on the editor**, not the diff the rest of `Changes`
+  opens on: a diff against `HEAD` of a file full of markers shows them as added
+  lines, which is the one view of a conflict that cannot resolve it. `Diff |
+Edit` still switches.
 
 ### Comments, removed
 
@@ -4945,6 +5020,75 @@ Under `prefers-reduced-motion` the entrances become `none` and the screen
 assembles in one frame. The two loops are left running deliberately: they are
 the only thing saying the launch has not stalled, and a spinner that does not
 spin is not a calmer app, it is one that looks hung.
+
+## The browser build
+
+The same studio in a browser tab, still on this machine: `src/server/` answers
+the renderer's calls over HTTP on `127.0.0.1` instead of Electron answering them
+over IPC. It is **not a second app**. There is one table of handlers —
+`createIpc` in `src/main/ipc.ts` — and two things that carry it:
+`electron-ipc.ts` puts each entry on `ipcMain`, `src/server/http.ts` answers the
+same entries at `POST /__yasuo/invoke`. Push events go down one
+`text/event-stream` per tab. The renderer is the same bundle; with no preload
+to put `window.desktop` on the window, `src/renderer/web/install.ts` builds one
+from the `IPC` map (`channels.ts`), and `test/web-desktop.ts` holds it to every
+key the preload exposes.
+
+```sh
+bun run dev:web     # Vite + the server, Vite proxying /__yasuo to it
+bun run build:web   # dist-web/server.cjs + the renderer
+bun run web         # serve both on one port (4317, or YASUO_WEB_PORT)
+```
+
+What the two shells genuinely do differently is `main/host.ts` and nothing
+else: a dialog, a window, the menu bar, the trash. Anything that reads or writes
+the workspace is the same handler in both, because a call that answered
+differently depending on where the renderer was loaded is exactly the
+two-sides-disagree failure the contract is there to prevent.
+
+### Three locks
+
+Every call this server answers is one the app makes freely — a `claude` with
+full access, a shell, a write anywhere in the workspace — and every page the
+user has open in that browser can send a request to `127.0.0.1`. So:
+
+1. **Loopback only.** Nothing off the machine reaches it.
+2. **A token**, printed with the URL at startup and fresh per start (the tab
+   keeps it in `localStorage` and takes it out of the address bar). It rides in
+   a custom header, which also makes any cross-origin call preflight — and this
+   server answers no preflight, so another origin cannot fire one blind.
+   `EventSource` and `img` cannot set headers, so those carry it in the query.
+3. **`Host` must be loopback**, which is the one that stops DNS rebinding: a
+   name re-pointed at 127.0.0.1 is same-origin to the attacker's page and would
+   otherwise lack only the token. A call's `Origin`, when present, is held to
+   the same.
+
+`test/web-server.ts` drives each one with no socket and checks it refuses.
+
+### What a tab does instead
+
+- **Pickers** are AppleScript's `choose folder` / `choose file` on macOS, run
+  over the frontmost app so the sheet lands in front of the browser. Elsewhere
+  there is none, and the add-folder dialog's path field is the way in.
+- **The trash** is a rename into `~/.Trash` (or the freedesktop Trash), not
+  Finder's delete: Finder would ask for Automation permission on the first
+  discard. A rename cannot cross volumes, so a file on another disk is refused
+  rather than deleted — `unlink` is never the fallback.
+- **Saving** a chat's export is a download; **popping out** a chat is
+  `window.open(?chat=)`, which `App` reads the same way. A tab cannot be pinned
+  on top, so the pin is not drawn.
+- **A dropped file has no path** — a browser never tells a page where a file
+  lives — so `getPathForFile` answers `""`, which every caller already reads as
+  "a picture from a web page" and takes the bytes of instead. The clipboard's
+  picture is the page's own `navigator.clipboard.read()`, spilled to a file by
+  the server.
+- **Notifications** are the tab's: the server cannot see focus, so it pushes
+  `web:notice` and each tab decides, tagged by chat so two tabs raise one
+  banner.
+- **A `note-file://` picture** goes through BlockNote's `resolveFileUrl` to
+  `/__yasuo/note-file/<name>`, the route `protocol.ts`'s handler mirrors.
+- **No menu bar, no tray, no updater** — the install script updates an app in
+  `/Applications`, and this is a checkout.
 
 ## Development
 

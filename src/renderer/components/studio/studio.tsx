@@ -48,7 +48,7 @@ import {
   SPLASH_ASSEMBLE_MS,
   SPLASH_FADE_MS,
 } from "./splash"
-import { IS_MAC, TitleBarDragStrip } from "./title-bar"
+import { HAS_TRAFFIC_LIGHTS, IS_MAC, TitleBarDragStrip } from "./title-bar"
 import { GroupTabs } from "./group-tabs"
 import { WorkspaceTabs } from "./workspace-tabs"
 
@@ -705,7 +705,7 @@ function WindowTitleBar() {
   return (
     <header className="grid h-11 shrink-0 grid-cols-[1fr_auto_1fr] items-center">
       <div className="flex h-full min-w-0 items-center">
-        {IS_MAC ? (
+        {HAS_TRAFFIC_LIGHTS ? (
           <div className="drag-region h-full w-[5.25rem] shrink-0" />
         ) : (
           <div className="w-2 shrink-0" />

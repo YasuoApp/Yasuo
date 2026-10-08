@@ -1,23 +1,12 @@
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises"
-import { tmpdir } from "node:os"
+import { homedir, tmpdir } from "node:os"
 import path from "node:path"
-
-import {
-  app,
-  BrowserWindow,
-  clipboard,
-  dialog,
-  ipcMain,
-  Notification,
-  shell,
-  type OpenDialogOptions,
-} from "electron"
 
 import {
   CHAT_NOTIFICATIONS_KEY,
   CHAT_TRAY_KEY,
   IPC,
-  MCP_DISABLED_TOOLS_KEY,
+  chatOptions,
   type ChatImage,
   type ChatPlace,
   type ChatSeed,
@@ -55,11 +44,11 @@ import { installedMcpServers, removeMcpServer } from "./mcp-servers"
 import { transcriptOf, type LearningProposal } from "../shared/learnings"
 import { saveLearning } from "./learnings"
 import { distillLearnings, draftCommitMessage } from "./one-turn-agent"
+import type { Host } from "./host"
 import { expandHome, quote } from "./shell-env"
 import { systemUsage } from "./system-usage"
 import { Store } from "./store"
 import { TerminalManager } from "./terminal"
-import { ChatTray } from "./tray"
 import { TsServers } from "./tsserver"
 import { checkForUpdate, downloadUpdate, startInstaller } from "./updater"
 import { DirectoryWatchers, RootWatchers } from "./watch"
@@ -105,15 +94,6 @@ const MAX_LOG_PAGE = 1000
  */
 const APP_DIR = "/Applications/Yasuo.app"
 
-/** The installer, shipped in the bundle (`extraResources`) rather than fetched:
- * a button that runs a script downloaded at the moment it is pressed is a
- * different thing to agree to than one that runs the app's own. */
-function installerScript(): string {
-  return app.isPackaged
-    ? path.join(process.resourcesPath, "install.sh")
-    : path.join(app.getAppPath(), "install.sh")
-}
-
 /**
  * An image on disk as a data URL.
  *
@@ -147,45 +127,54 @@ async function imageDataUrl(filePath: string): Promise<string> {
  *
  * PNG whatever came in, because that is the one encoding `NativeImage` can be
  * asked for without knowing what the clipboard's own format was.
+ *
+ * The bytes come either from the host's own clipboard or, from a browser tab,
+ * from the caller: a page can read the clipboard it was pasted into, and a
+ * server on the same machine reading the system one behind its back would be
+ * reading something nobody pasted.
  */
-async function clipboardImagePath(): Promise<string | null> {
-  const image = clipboard.readImage()
-  if (image.isEmpty()) return null
+async function clipboardImagePath(
+  png: Uint8Array | null
+): Promise<string | null> {
+  if (!png || png.length === 0) return null
 
   const file = path.join(tmpdir(), `yasuo-paste-${Date.now()}.png`)
-  await writeFile(file, image.toPNG())
+  await writeFile(file, png)
   return file
 }
 
+/** One handler: the transport's own idea of the caller first (an Electron
+ * `IpcMainInvokeEvent`, or nothing from the server), then the call's
+ * arguments as the renderer passed them. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type Handler = (caller: unknown, ...args: any[]) => unknown
+
 /**
- * Wires every renderer-callable method onto `ipcMain`.
+ * Every renderer-callable method, as one table keyed by `IPC` channel.
  *
- * Handlers are registered once for the whole app rather than per window, and
- * every push event goes to the **studio** window — the one `getWindow` answers
- * with, and now the only one there is. It was not always: the Database and API
- * panels each had a window of their own, which was affordable precisely because
- * neither was ever *pushed* anything. Both panels are gone; see
- * `docs/design.md` § Database and API, removed.
+ * Built once for the whole app rather than per window, and handed to whichever
+ * transport is carrying it: `electron-ipc.ts` puts each entry on `ipcMain`, and
+ * `src/server/` answers the same entries over HTTP for the web build. What the
+ * two hosts genuinely do differently — a dialog, a window, the menu bar — comes
+ * in through `host` and is nowhere else in this file.
  */
-export function registerIpc(
-  getWindow: () => BrowserWindow | null,
-  /** Opens or focuses the window one chat is popped out into — `main.ts`
-   * owns window creation, so this is handed in rather than done here. */
-  openChatWindow: (chatId: string) => void
-): {
+export function createIpc(host: Host): {
+  handlers: Map<string, Handler>
   /** Exposed so a turn in flight can be killed on quit. */
   worktreeChats: WorktreeChats
   terminals: TerminalManager
   tsServers: TsServers
   /** Both kinds of `fs.watch` — the tree's and the `Changes` list's. */
   watchers: { closeAll: () => void }
-  /** Exposed so the icon leaves the menu bar with the app rather than after
-   * it. */
-  tray: ChatTray
   startTray: () => Promise<void>
   noteFilePath: (fileName: string) => string
 } {
   const store = new Store()
+
+  const handlers = new Map<string, Handler>()
+  const handle = (channel: string, handler: Handler): void => {
+    handlers.set(channel, handler)
+  }
 
   /*
    * Every window, not only the studio's: a chat popped out into a window of
@@ -193,44 +182,12 @@ export function registerIpc(
    * that holds no terminal ignores a `terminal:data` it is sent, which is
    * cheaper than a table of who wants what.
    */
-  const send = (channel: string, payload: unknown): void => {
-    for (const window of BrowserWindow.getAllWindows()) {
-      // Gone during shutdown; its last output has nowhere to go.
-      if (window.isDestroyed()) continue
-      window.webContents.send(channel, payload)
-    }
-  }
+  const send = host.send
 
   const terminals = new TerminalManager({
     data: (event) => send(IPC.terminalData, event),
     exit: (event) => send(IPC.terminalExit, event),
   })
-
-  /**
-   * Settings › MCP's switched-off tools.
-   *
-   * A malformed or absent setting reads as "nothing switched off" rather than
-   * throwing: this decides what a turn may call, and a parse error is not a
-   * reason to refuse every MCP tool the user has — nor to refuse none silently,
-   * which is why it is logged.
-   *
-   * Hoisted out of the source object below because the one-turn agent needs the
-   * same list (`one-turn-agent.ts`): a tool the workspace turned off has no
-   * business being in that model's list either.
-   */
-  const disabledTools = async (): Promise<string[]> => {
-    const raw = await store.getSetting(MCP_DISABLED_TOOLS_KEY)
-    if (!raw) return []
-    try {
-      const parsed: unknown = JSON.parse(raw)
-      return Array.isArray(parsed)
-        ? parsed.filter((entry): entry is string => typeof entry === "string")
-        : []
-    } catch (error) {
-      console.error(`Could not read ${MCP_DISABLED_TOOLS_KEY}`, error)
-      return []
-    }
-  }
 
   /**
    * A picked `profileId` as a `CLAUDE_CONFIG_DIR`, for a one-turn agent.
@@ -271,10 +228,8 @@ export function registerIpc(
       folderDir: (folderId) =>
         store.resolveFolderDir(folderId).catch(() => null),
       // Asked per turn rather than held — Settings can add, rename or delete a
-      // profile between two messages in the same chat. The same is true of
-      // `disabledTools`, which is why both are functions rather than lists.
+      // profile between two messages in the same chat.
       claudeProfiles: () => store.listClaudeProfiles(),
-      disabledTools,
       chats: () => store.listWorktreeChats(),
       saveChats: (chats) => store.saveWorktreeChats(chats),
       readChat: (id) => store.readWorktreeChat(id),
@@ -297,32 +252,13 @@ export function registerIpc(
   /**
    * The count in the menu bar, off the same watcher the notifications are.
    *
-   * See `tray.ts` for what it is for. It is created here rather than in
-   * `main.ts` because this is where the events are, but it cannot be *shown*
-   * until the app is ready — a `Tray` before then throws — which is what
-   * `startTray` below is for.
+   * See `tray.ts` for what it is for. The host builds it — it is Electron's, and
+   * the web build has no menu bar to put it in — but it is fed from here,
+   * because this is where the events are. It cannot be *shown* until the app is
+   * ready — a `Tray` before then throws — which is what `startTray` below is
+   * for.
    */
-  const tray = new ChatTray({
-    reveal: (chatId) => revealChat(chatId),
-    show: () => showWindow(),
-  })
-
-  /** Brings the studio up: from the dock, from behind another app, or from
-   * minimised, which are three different states and only the last has a name. */
-  const showWindow = (): BrowserWindow | null => {
-    const window = getWindow()
-    if (!window || window.isDestroyed()) return null
-    if (window.isMinimized()) window.restore()
-    window.show()
-    window.focus()
-    return window
-  }
-
-  /** The studio, scrolled to one chat. Shared by the notification's click and
-   * the tray's menu, which are the same errand arriving two ways. */
-  const revealChat = (chatId: string): void => {
-    showWindow()?.webContents.send(IPC.revealWorktreeChat, chatId)
-  }
+  const tray = host.tray
 
   /**
    * Which draw of the tray is the current one.
@@ -336,7 +272,7 @@ export function registerIpc(
 
   /** Redraws the tray, if it is in the strip at all. */
   const refreshTray = async (): Promise<void> => {
-    if (!tray.shown) return
+    if (!tray?.shown) return
     const draw = ++trayDraw
     const pending = notices.pending()
     // Only for the names in the menu, so an idle machine reads no files.
@@ -354,6 +290,7 @@ export function registerIpc(
    * notifications — see `CHAT_TRAY_KEY` — so an unset key reads as on.
    */
   const applyTraySetting = async (): Promise<void> => {
+    if (!tray) return
     tray.setShown((await store.getSetting(CHAT_TRAY_KEY)) !== "off")
     await refreshTray()
   }
@@ -375,14 +312,13 @@ export function registerIpc(
    */
   const announce = async (notice: ChatNotice | null): Promise<void> => {
     if (!notice) return
-    if (!Notification.isSupported()) return
     // Off by default is the wrong default for the one feature that says "your
     // agent finished"; an unset key reads as on.
     if ((await store.getSetting(CHAT_NOTIFICATIONS_KEY)) === "off") return
 
     // Any window of this app's, not only the studio's: a chat popped out into
     // its own window and being read there is one nobody needs calling back to.
-    if (BrowserWindow.getFocusedWindow()) return
+    if (host.focused()) return
 
     const chats = await worktreeChats.list()
     const chat = chats.find((entry) => entry.id === notice.chatId)
@@ -390,18 +326,15 @@ export function registerIpc(
     // there is nothing to call it and nothing to call somebody back to.
     if (!chat) return
 
-    const text = noticeText(notice, chat.title)
-    const banner = new Notification({ title: text.title, body: text.body })
     // Clicking it is the way back to the chat it is about — a notification that
     // only tells you something happened leaves you hunting for the row.
-    banner.on("click", () => revealChat(notice.chatId))
-    banner.show()
+    host.notify({ ...noticeText(notice, chat.title), chatId: notice.chatId })
   }
 
   // Asked of the user's own `claude` and held for the run — see
   // `agent-models.ts`. Not a handler that touches any of the managers above,
   // which is why it takes no argument and keeps no state here.
-  ipcMain.handle(IPC.agentModels, () => agentModels())
+  handle(IPC.agentModels, () => agentModels())
 
   /*
    * The slash commands that `claude` has, asked in a project's directory — see
@@ -409,7 +342,7 @@ export function registerIpc(
    * other `folderId` call resolves it here: a project is an id in the manifest,
    * and the path behind it is the store's to say.
    */
-  ipcMain.handle(IPC.agentCommands, async (_event, folderId: unknown) =>
+  handle(IPC.agentCommands, async (_event, folderId: unknown) =>
     agentCommands(await folderDirOf(folderId))
   )
 
@@ -424,7 +357,7 @@ export function registerIpc(
    * servers and nothing repository-specific, which is the honest answer for a
    * project that is no longer there.
    */
-  ipcMain.handle(IPC.installedMcpServers, async (_event, folderId: unknown) =>
+  handle(IPC.installedMcpServers, async (_event, folderId: unknown) =>
     installedMcpServers(await folderDirOf(folderId))
   )
 
@@ -432,7 +365,7 @@ export function registerIpc(
   // a `project`-scope server is in that repository's file and nowhere else. The
   // renderer confirms first and re-asks for the listing afterwards; this only
   // does it, and lets the CLI's own error through.
-  ipcMain.handle(
+  handle(
     IPC.removeMcpServer,
     async (
       _event,
@@ -453,9 +386,9 @@ export function registerIpc(
       : null
   }
 
-  ipcMain.handle(IPC.listClaudeProfiles, () => store.listClaudeProfiles())
+  handle(IPC.listClaudeProfiles, () => store.listClaudeProfiles())
 
-  ipcMain.handle(IPC.saveClaudeProfiles, (_event, profiles: ClaudeProfile[]) =>
+  handle(IPC.saveClaudeProfiles, (_event, profiles: ClaudeProfile[]) =>
     // `~` expanded here, like `addFolder`'s path field: the SDK spawns
     // `claude` directly rather than through a shell, so nothing else would
     // ever turn a `~/.claude-group/hung` into an absolute path before it
@@ -471,7 +404,7 @@ export function registerIpc(
     )
   )
 
-  ipcMain.handle(IPC.claudeAccount, (_event, configDir: string) =>
+  handle(IPC.claudeAccount, (_event, configDir: string) =>
     claudeAccount(configDir)
   )
 
@@ -483,7 +416,7 @@ export function registerIpc(
    * shell every other pty is started in, so a CLI installed by an alias or a
    * shell function is found the way `locate` finds one.
    */
-  ipcMain.handle(
+  handle(
     IPC.claudeLogin,
     async (_event, configDir: string, cols: number, rows: number) => {
       const dir = configDir.trim() ? expandHome(configDir.trim()) : ""
@@ -506,7 +439,7 @@ export function registerIpc(
           // The user's home rather than a project, for `claudeAccount`'s
           // reason: a login is about the config directory, and a repository's
           // own settings have no say in whose account it holds.
-          cwd: app.getPath("home"),
+          cwd: homedir(),
           // On the command line as well as in the environment, because the pty
           // is a *login* shell: somebody already running several identities is
           // exactly the person whose own `.zshrc` exports `CLAUDE_CONFIG_DIR`,
@@ -521,67 +454,46 @@ export function registerIpc(
     }
   )
 
-  ipcMain.handle(IPC.listWorktreeChats, () => worktreeChats.list())
+  handle(IPC.listWorktreeChats, () => worktreeChats.list())
 
-  ipcMain.handle(
-    IPC.createWorktreeChat,
-    (_event, place: ChatPlace, seed?: ChatSeed) =>
-      worktreeChats.create(place, seed)
+  handle(IPC.createWorktreeChat, (_event, place: ChatPlace, seed?: ChatSeed) =>
+    worktreeChats.create(place, seed)
   )
 
-  ipcMain.handle(IPC.readWorktreeChat, (_event, id: string) =>
-    worktreeChats.read(id)
-  )
+  handle(IPC.readWorktreeChat, (_event, id: string) => worktreeChats.read(id))
 
-  ipcMain.handle(IPC.chatDigests, () => worktreeChats.digests())
+  handle(IPC.chatDigests, () => worktreeChats.digests())
 
-  ipcMain.handle(IPC.chatSpend, () => worktreeChats.spend())
+  handle(IPC.chatSpend, () => worktreeChats.spend())
 
   /*
    * A file the user names, which is the one write allowed outside the
    * workspace's roots: the save dialog is the gate, the way the open dialog is
    * for `addFolder`. Nothing is written when it is cancelled.
    */
-  ipcMain.handle(
+  handle(
     IPC.saveTextFile,
-    async (
-      event,
+    (
+      caller,
       input: {
         defaultName: string
         text: string
         filters?: { name: string; extensions: string[] }[]
       }
-    ): Promise<string | null> => {
-      const owner = BrowserWindow.fromWebContents(event.sender)
-      const options = {
-        defaultPath: path.join(app.getPath("documents"), input.defaultName),
-        filters: input.filters,
-      }
-      const result = await (owner
-        ? dialog.showSaveDialog(owner, options)
-        : dialog.showSaveDialog(options))
-      if (result.canceled || !result.filePath) return null
-      await writeFile(result.filePath, input.text, "utf8")
-      return result.filePath
-    }
+    ): Promise<string | null> => host.saveTextFile(caller, input)
   )
 
-  ipcMain.handle(IPC.openChatWindow, (_event, chatId: string) => {
-    openChatWindow(chatId)
+  handle(IPC.openChatWindow, (_event, chatId: string) => {
+    host.openChatWindow(chatId)
   })
 
   // On the *calling* window: the studio has no reason to pin itself, and a
   // popped-out chat is the one that wants to stay over another editor.
-  ipcMain.handle(IPC.setAlwaysOnTop, (event, on: boolean) => {
-    const owner = BrowserWindow.fromWebContents(event.sender)
-    if (!owner || owner.isDestroyed()) return
-    owner.setAlwaysOnTop(on, "floating")
+  handle(IPC.setAlwaysOnTop, (caller, on: boolean) => {
+    host.setAlwaysOnTop(caller, on)
   })
 
-  ipcMain.handle(IPC.isAlwaysOnTop, (event) => {
-    const owner = BrowserWindow.fromWebContents(event.sender)
-    return owner && !owner.isDestroyed() ? owner.isAlwaysOnTop() : false
-  })
+  handle(IPC.isAlwaysOnTop, (caller) => host.isAlwaysOnTop(caller))
 
   /*
    * The left column's Search. `searching` is the generation: each call takes
@@ -592,7 +504,7 @@ export function registerIpc(
    * this app alone can answer — an editor's search already finds the files.
    */
   let searching = 0
-  ipcMain.handle(
+  handle(
     IPC.searchWorkspace,
     async (
       _event,
@@ -630,7 +542,7 @@ export function registerIpc(
     }
   )
 
-  ipcMain.handle(IPC.deleteWorktreeChat, (_event, id: string) => {
+  handle(IPC.deleteWorktreeChat, (_event, id: string) => {
     // Before the delete rather than after: a chat killed mid-turn emits no
     // `busy: false`, so the watcher would keep it as working for the rest of
     // the run and swallow the first quiet of whatever reused the id.
@@ -640,113 +552,71 @@ export function registerIpc(
     return worktreeChats.delete(id)
   })
 
-  ipcMain.handle(IPC.clearWorktreeChat, (_event, id: string) =>
-    worktreeChats.clear(id)
-  )
+  handle(IPC.clearWorktreeChat, (_event, id: string) => worktreeChats.clear(id))
 
-  ipcMain.handle(IPC.renameWorktreeChat, (_event, id: string, title: string) =>
+  handle(IPC.renameWorktreeChat, (_event, id: string, title: string) =>
     worktreeChats.rename(id, title)
   )
 
-  ipcMain.handle(
+  handle(
     IPC.setWorktreeChatOptions,
     (_event, id: string, options: WorktreeChatOptions) =>
       worktreeChats.setOptions(id, options)
   )
 
-  ipcMain.handle(
+  handle(
     IPC.answerWorktreeChatAsk,
     (_event, askId: string, answer: WorktreeChatAnswer) => {
       worktreeChats.answer(askId, answer)
     }
   )
 
-  ipcMain.handle(
+  handle(
     IPC.sendWorktreeChat,
     (_event, id: string, prompt: string, images?: ChatImage[]) =>
       worktreeChats.send(id, prompt, images ?? [])
   )
 
-  ipcMain.handle(IPC.stopWorktreeChat, (_event, id: string) => {
+  handle(IPC.stopWorktreeChat, (_event, id: string) => {
     worktreeChats.stop(id)
   })
 
-  ipcMain.handle(IPC.getWorkspace, () => store.getWorkspace())
+  handle(IPC.getWorkspace, () => store.getWorkspace())
 
-  ipcMain.handle(IPC.pickDirectory, async () => {
-    const options: OpenDialogOptions = {
-      title: "Add a folder",
-      properties: ["openDirectory", "createDirectory"],
-      buttonLabel: "Add",
-    }
+  handle(IPC.pickDirectory, () => host.pickDirectory())
 
-    // Parented to the window when there is one, so the picker is modal to the
-    // studio rather than a sheet the user can lose behind it.
-    const window = getWindow()
-    const result = await (window
-      ? dialog.showOpenDialog(window, options)
-      : dialog.showOpenDialog(options))
+  handle(IPC.pickImages, () =>
+    host.pickFiles({ title: "Attach images", images: true })
+  )
 
-    return result.canceled ? null : (result.filePaths[0] ?? null)
-  })
-
-  ipcMain.handle(IPC.pickImages, async () => {
-    const options: OpenDialogOptions = {
-      title: "Attach images",
-      properties: ["openFile", "multiSelections"],
-      filters: [
-        {
-          name: "Images",
-          extensions: ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp"],
-        },
-      ],
-    }
-
-    const window = getWindow()
-    const result = await (window
-      ? dialog.showOpenDialog(window, options)
-      : dialog.showOpenDialog(options))
-
-    return result.canceled ? [] : result.filePaths
-  })
-
-  ipcMain.handle(IPC.pickFiles, async (_event, directory?: string) => {
-    const options: OpenDialogOptions = {
+  handle(IPC.pickFiles, (_event, directory?: string) =>
+    host.pickFiles({
       title: "Attach files",
-      properties: ["openFile", "multiSelections"],
+      images: false,
       // Where it opens, not what it may return: the paths come back from the
       // user's own click, and reading one is still an ordinary `files:*` call
       // through `insideAny`.
-      ...(directory ? { defaultPath: expandHome(directory) } : {}),
-    }
+      ...(directory ? { directory: expandHome(directory) } : {}),
+    })
+  )
 
-    const window = getWindow()
-    const result = await (window
-      ? dialog.showOpenDialog(window, options)
-      : dialog.showOpenDialog(options))
-
-    return result.canceled ? [] : result.filePaths
-  })
-
-  ipcMain.handle(IPC.readImageDataUrl, (_event, filePath: string) =>
+  handle(IPC.readImageDataUrl, (_event, filePath: string) =>
     imageDataUrl(filePath)
   )
 
-  ipcMain.handle(IPC.clipboardImagePath, () => clipboardImagePath())
-
-  ipcMain.handle(
-    IPC.addFolder,
-    (_event, input: { path: string; name: string }) =>
-      store.addFolder({ ...input, path: expandHome(input.path) })
+  handle(IPC.clipboardImagePath, async (_event, png?: Uint8Array | null) =>
+    clipboardImagePath(png ?? (await host.clipboardImage()))
   )
 
-  ipcMain.handle(IPC.renameFolder, (_event, id: string, name: string) =>
+  handle(IPC.addFolder, (_event, input: { path: string; name: string }) =>
+    store.addFolder({ ...input, path: expandHome(input.path) })
+  )
+
+  handle(IPC.renameFolder, (_event, id: string, name: string) =>
     store.renameFolder(id, name)
   )
 
-  ipcMain.handle(IPC.removeFolder, (_event, id: string) =>
-    store.removeFolder(id)
-  )
+  handle(IPC.removeFolder, (_event, id: string) => store.removeFolder(id))
 
   /*
    * A second checkout of a project, which becomes a project.
@@ -758,7 +628,7 @@ export function registerIpc(
    * `addFolder` the dialog uses — which is also the check that this checkout is
    * not already open as a project.
    */
-  ipcMain.handle(
+  handle(
     IPC.addWorktree,
     async (
       _event,
@@ -795,26 +665,23 @@ export function registerIpc(
    * that checkout plus the folder's own name, which is the **title** rather
    * than the slug: the branch is for git and the row is for reading.
    */
-  ipcMain.handle(
-    IPC.nameWorktree,
-    async (_event, folderId: string, title: string) => {
-      const named = title.trim()
-      const wanted = named ? branchFromTitle(named) : null
-      if (!wanted) return null
+  handle(IPC.nameWorktree, async (_event, folderId: string, title: string) => {
+    const named = title.trim()
+    const wanted = named ? branchFromTitle(named) : null
+    if (!wanted) return null
 
-      const dir = await store.resolveFolderDir(folderId)
-      const branch = await currentBranch(dir)
-      if (!isUntitledBranch(branch) || !branch) return null
-      // Last, because it is the one that shells out twice.
-      if (!(await worktreeRepo(dir))) return null
+    const dir = await store.resolveFolderDir(folderId)
+    const branch = await currentBranch(dir)
+    if (!isUntitledBranch(branch) || !branch) return null
+    // Last, because it is the one that shells out twice.
+    if (!(await worktreeRepo(dir))) return null
 
-      // A rename git refused leaves the placeholder, and the project keeps the
-      // name it had: half of this landing would be worse than none of it.
-      if (!(await renameBranch(dir, branch, wanted))) return null
+    // A rename git refused leaves the placeholder, and the project keeps the
+    // name it had: half of this landing would be worse than none of it.
+    if (!(await renameBranch(dir, branch, wanted))) return null
 
-      return store.renameFolder(folderId, named)
-    }
-  )
+    return store.renameFolder(folderId, named)
+  })
 
   /*
    * And back out: the checkout removed, then the project dropped.
@@ -823,7 +690,7 @@ export function registerIpc(
    * where it is rather than hiding a directory somebody now has to find. The
    * repository is asked for rather than remembered — see `worktreeRepo`.
    */
-  ipcMain.handle(IPC.removeWorktree, async (_event, folderId: string) => {
+  handle(IPC.removeWorktree, async (_event, folderId: string) => {
     const dir = await store.resolveFolderDir(folderId)
     const repo = await worktreeRepo(dir)
     if (!repo) throw new Error(`${dir} is not a git worktree checkout.`)
@@ -834,26 +701,26 @@ export function registerIpc(
     return store.removeFolder(folderId)
   })
 
-  ipcMain.handle(IPC.gitBranch, async (_event, folderId: string) =>
+  handle(IPC.gitBranch, async (_event, folderId: string) =>
     currentBranch(await store.resolveFolderDir(folderId))
   )
 
-  ipcMain.handle(IPC.gitWorktreeRepo, async (_event, folderId: string) =>
+  handle(IPC.gitWorktreeRepo, async (_event, folderId: string) =>
     worktreeRepo(await store.resolveFolderDir(folderId))
   )
 
-  ipcMain.handle(IPC.gitStatus, async (_event, folderId: string) =>
+  handle(IPC.gitStatus, async (_event, folderId: string) =>
     workingTree(await store.resolveFolderDir(folderId))
   )
 
-  ipcMain.handle(IPC.gitChanges, async (_event, folderId: string) =>
+  handle(IPC.gitChanges, async (_event, folderId: string) =>
     changes(await store.resolveFolderDir(folderId))
   )
 
   // A page of history rather than all of it: a repository's whole log is tens
   // of thousands of rows. Clamped here, since the numbers are the renderer's
   // and a page of `Infinity` is the whole log by another name.
-  ipcMain.handle(
+  handle(
     IPC.gitLog,
     async (_event, folderId: string, limit: number, skip = 0) =>
       log(
@@ -877,36 +744,29 @@ export function registerIpc(
    * new files — and those are trashed here rather than in `git.ts`, which stays
    * free of `electron` so the tests can import it.
    */
-  ipcMain.handle(
-    IPC.gitStage,
-    async (_event, folderId: string, paths: string[]) =>
-      stage(
-        await store.resolveFolderDir(folderId),
-        await Promise.all(paths.map(inWorkspace))
-      )
+  handle(IPC.gitStage, async (_event, folderId: string, paths: string[]) =>
+    stage(
+      await store.resolveFolderDir(folderId),
+      await Promise.all(paths.map(inWorkspace))
+    )
   )
 
-  ipcMain.handle(
-    IPC.gitUnstage,
-    async (_event, folderId: string, paths: string[]) =>
-      unstage(
-        await store.resolveFolderDir(folderId),
-        await Promise.all(paths.map(inWorkspace))
-      )
+  handle(IPC.gitUnstage, async (_event, folderId: string, paths: string[]) =>
+    unstage(
+      await store.resolveFolderDir(folderId),
+      await Promise.all(paths.map(inWorkspace))
+    )
   )
 
-  ipcMain.handle(
-    IPC.gitDiscard,
-    async (_event, folderId: string, paths: string[]) => {
-      const trash = await discard(
-        await store.resolveFolderDir(folderId),
-        await Promise.all(paths.map(inWorkspace))
-      )
-      await trashAll(trash)
-    }
-  )
+  handle(IPC.gitDiscard, async (_event, folderId: string, paths: string[]) => {
+    const trash = await discard(
+      await store.resolveFolderDir(folderId),
+      await Promise.all(paths.map(inWorkspace))
+    )
+    await trashAll(trash)
+  })
 
-  ipcMain.handle(IPC.gitDiscardAll, async (_event, folderId: string) => {
+  handle(IPC.gitDiscardAll, async (_event, folderId: string) => {
     await trashAll(await discardAll(await store.resolveFolderDir(folderId)))
   })
 
@@ -920,10 +780,8 @@ export function registerIpc(
    * worth reading, and a sentence of this app's own in front of it would hide
    * it.
    */
-  ipcMain.handle(
-    IPC.gitCommit,
-    async (_event, folderId: string, message: string) =>
-      commit(await store.resolveFolderDir(folderId), message)
+  handle(IPC.gitCommit, async (_event, folderId: string, message: string) =>
+    commit(await store.resolveFolderDir(folderId), message)
   )
 
   /*
@@ -935,7 +793,7 @@ export function registerIpc(
    * not arrive leaves the box exactly as it was, which is a message somebody
    * types themselves.
    */
-  ipcMain.handle(
+  handle(
     IPC.draftCommitMessage,
     async (
       _event,
@@ -949,21 +807,20 @@ export function registerIpc(
         model,
         effort,
         configDir: await configDirOf(profileId),
-        disabledTools: await disabledTools(),
       })
   )
 
   /**
    * The new files a discard could not restore, moved to the trash.
    *
-   * One at a time and each failure swallowed: `shell.trashItem` refuses on a
+   * One at a time and each failure swallowed: the trash refuses on a
    * volume with no trash, and a discard that restored eleven files and then
    * threw on the twelfth would leave the list saying nothing about the ten it
    * did. The row that is still there afterwards is the report.
    */
   async function trashAll(paths: string[]): Promise<void> {
     for (const target of paths) {
-      await shell.trashItem(target).catch((error: unknown) => {
+      await host.trash(target).catch((error: unknown) => {
         console.error(`Could not trash ${target}`, error)
       })
     }
@@ -981,26 +838,23 @@ export function registerIpc(
    * anything, so serialising them would be a second round trip's wait for the
    * same paint.
    */
-  ipcMain.handle(
-    IPC.fileDiff,
-    async (_event, filePath: string): Promise<FileDiff> => {
-      const target = await inWorkspace(filePath)
-      const roots = await fileRoots()
+  handle(IPC.fileDiff, async (_event, filePath: string): Promise<FileDiff> => {
+    const target = await inWorkspace(filePath)
+    const roots = await fileRoots()
 
-      // The narrowest root that holds it, since one folder can be added inside
-      // another — the same rule `rootOf` follows in the renderer.
-      const root = roots
-        .filter((candidate) => files.insideAny([candidate.path], target))
-        .sort((a, b) => b.path.length - a.path.length)[0]
-      if (!root) return { head: null, patch: null }
+    // The narrowest root that holds it, since one folder can be added inside
+    // another — the same rule `rootOf` follows in the renderer.
+    const root = roots
+      .filter((candidate) => files.insideAny([candidate.path], target))
+      .sort((a, b) => b.path.length - a.path.length)[0]
+    if (!root) return { head: null, patch: null }
 
-      const [head, patch] = await Promise.all([
-        fileAtHead(root.path, target),
-        fileDiff(root.path, target),
-      ])
-      return { head, patch }
-    }
-  )
+    const [head, patch] = await Promise.all([
+      fileAtHead(root.path, target),
+      fileDiff(root.path, target),
+    ])
+    return { head, patch }
+  })
 
   /**
    * Every directory the Explorer may read: the workspace's folders.
@@ -1045,62 +899,56 @@ export function registerIpc(
     return target
   }
 
-  ipcMain.handle(IPC.listDirectory, async (_event, dirPath: string) =>
+  handle(IPC.listDirectory, async (_event, dirPath: string) =>
     files.listDirectory(await inWorkspace(dirPath))
   )
 
-  ipcMain.handle(IPC.readTextFile, async (_event, filePath: string) =>
+  handle(IPC.readTextFile, async (_event, filePath: string) =>
     files.readTextFile(await inWorkspace(filePath))
   )
 
-  ipcMain.handle(
-    IPC.writeTextFile,
-    async (_event, filePath: string, text: string) =>
-      files.writeTextFile(await inWorkspace(filePath), text)
+  handle(IPC.writeTextFile, async (_event, filePath: string, text: string) =>
+    files.writeTextFile(await inWorkspace(filePath), text)
   )
 
-  ipcMain.handle(IPC.createFile, async (_event, dir: string, name: string) =>
+  handle(IPC.createFile, async (_event, dir: string, name: string) =>
     files.createFile(await inWorkspace(dir), name)
   )
 
-  ipcMain.handle(
-    IPC.createDirectory,
-    async (_event, dir: string, name: string) =>
-      files.createDirectory(await inWorkspace(dir), name)
+  handle(IPC.createDirectory, async (_event, dir: string, name: string) =>
+    files.createDirectory(await inWorkspace(dir), name)
   )
 
-  ipcMain.handle(IPC.renamePath, async (_event, target: string, name: string) =>
+  handle(IPC.renamePath, async (_event, target: string, name: string) =>
     files.renamePath(await inWorkspace(target), name)
   )
 
-  ipcMain.handle(IPC.trashPath, async (_event, target: string) => {
+  handle(IPC.trashPath, async (_event, target: string) => {
     // The OS trash rather than `unlink`: this is somebody's source file, the
     // studio has no undo of its own, and every desktop already has one.
-    await shell.trashItem(await inWorkspace(target))
+    await host.trash(await inWorkspace(target))
   })
 
-  ipcMain.handle(IPC.revealPath, async (_event, target: string) => {
-    shell.showItemInFolder(await inWorkspace(target))
+  handle(IPC.revealPath, async (_event, target: string) => {
+    await host.reveal(await inWorkspace(target))
   })
 
-  ipcMain.handle(IPC.readImageFile, async (_event, filePath: string) =>
+  handle(IPC.readImageFile, async (_event, filePath: string) =>
     // The same reader the composer's attachments use — including its size
     // ceiling, which is what keeps a 40MP photograph from being turned into a
     // base64 string and posted across the bridge.
     imageDataUrl(await inWorkspace(filePath))
   )
 
-  ipcMain.handle(
-    IPC.readImageRelative,
-    async (_event, dir: string, relative: string) =>
-      // The markdown preview's local pictures: `./logo.png` resolved against
-      // the document's own directory — the renderer never joins paths — and
-      // read under the same ceiling and the same folders' gate as any other
-      // file the studio shows.
-      imageDataUrl(await inWorkspace(path.resolve(dir, relative)))
+  handle(IPC.readImageRelative, async (_event, dir: string, relative: string) =>
+    // The markdown preview's local pictures: `./logo.png` resolved against
+    // the document's own directory — the renderer never joins paths — and
+    // read under the same ceiling and the same folders' gate as any other
+    // file the studio shows.
+    imageDataUrl(await inWorkspace(path.resolve(dir, relative)))
   )
 
-  ipcMain.handle(
+  handle(
     IPC.resolveRelativePath,
     async (_event, dir: string, relative: string) => {
       // The markdown preview's links. A miss is an answer rather than a throw:
@@ -1132,25 +980,25 @@ export function registerIpc(
     (await fileRoots()).map((root) => root.path)
   )
 
-  ipcMain.handle(IPC.tsOpen, async (_event, filePath: string, text: string) =>
+  handle(IPC.tsOpen, async (_event, filePath: string, text: string) =>
     tsServers.open(await inWorkspace(filePath), text)
   )
 
-  ipcMain.handle(IPC.tsChange, async (_event, filePath: string, text: string) =>
+  handle(IPC.tsChange, async (_event, filePath: string, text: string) =>
     tsServers.change(await inWorkspace(filePath), text)
   )
 
-  ipcMain.handle(IPC.tsClose, async (_event, filePath: string) =>
+  handle(IPC.tsClose, async (_event, filePath: string) =>
     tsServers.close(await inWorkspace(filePath))
   )
 
-  ipcMain.handle(
+  handle(
     IPC.tsHover,
     async (_event, filePath: string, line: number, column: number) =>
       tsServers.hover(await inWorkspace(filePath), line, column)
   )
 
-  ipcMain.handle(
+  handle(
     IPC.tsDefinition,
     async (_event, filePath: string, line: number, column: number) =>
       // Definitions are deliberately *not* filtered to the workspace on the way
@@ -1182,7 +1030,7 @@ export function registerIpc(
     },
   }
 
-  ipcMain.handle(IPC.watchDirectories, async (_event, dirs: string[]) => {
+  handle(IPC.watchDirectories, async (_event, dirs: string[]) => {
     const roots = (await fileRoots()).map((root) => root.path)
     // Re-set on every call, and the renderer sends one when the folders
     // change as well as when the tree does.
@@ -1201,7 +1049,7 @@ export function registerIpc(
     ])
   })
 
-  ipcMain.handle(IPC.listWorkspaceFiles, async () => {
+  handle(IPC.listWorkspaceFiles, async () => {
     // Sequential rather than `Promise.all`, so the budget is shared: two roots
     // walked at once would each take the whole cap and hand back twice what
     // the renderer agreed to hold.
@@ -1219,9 +1067,9 @@ export function registerIpc(
     return found
   })
 
-  ipcMain.handle(IPC.getSetting, (_event, key: string) => store.getSetting(key))
+  handle(IPC.getSetting, (_event, key: string) => store.getSetting(key))
 
-  ipcMain.handle(IPC.setSetting, async (_event, key: string, value: string) => {
+  handle(IPC.setSetting, async (_event, key: string, value: string) => {
     await store.setSetting(key, value)
     // The one setting with something of this process' own hanging off it: the
     // switch has to put the icon in the menu bar or take it out there and then,
@@ -1236,7 +1084,7 @@ export function registerIpc(
    * directory — has no business reaching into. `model`, `effort` and
    * `profileId` are the draft's three, resolved the same way.
    */
-  ipcMain.handle(
+  handle(
     IPC.distillLearnings,
     async (
       _event,
@@ -1252,30 +1100,35 @@ export function registerIpc(
         model,
         effort,
         configDir: await configDirOf(profileId),
-        disabledTools: await disabledTools(),
+        // The distilled chat's own switched-off tools: they are out of its
+        // turns' prompts, and have no business in this one's either.
+        disabledTools: chatOptions(
+          (await store.listWorktreeChats()).find((chat) => chat.id === chatId)
+            ?.options
+        ).disabledTools,
       })
   )
 
   /** One approved proposal written into the project — see `main/learnings.ts`.
    * The folder id is resolved here for the reason every write is: a path
    * built in main is a path gated in main. */
-  ipcMain.handle(
+  handle(
     IPC.saveLearning,
     async (_event, folderId: string, proposal: LearningProposal) =>
       saveLearning(await store.resolveFolderDir(folderId), proposal)
   )
 
-  ipcMain.handle(IPC.readDrawing, (_event, id: string) => store.readDrawing(id))
+  handle(IPC.readDrawing, (_event, id: string) => store.readDrawing(id))
 
-  ipcMain.handle(IPC.writeDrawing, (_event, id: string, scene: string) =>
+  handle(IPC.writeDrawing, (_event, id: string, scene: string) =>
     store.writeDrawing(id, scene)
   )
 
-  ipcMain.handle(IPC.writeDrawingSvg, (_event, id: string, svg: string) =>
+  handle(IPC.writeDrawingSvg, (_event, id: string, svg: string) =>
     store.writeDrawingSvg(id, svg)
   )
 
-  ipcMain.handle(
+  handle(
     IPC.writeNoteFile,
     // A `Uint8Array` on the way in whatever the renderer built it from: an
     // `ArrayBuffer` survives structured clone as one, and writing it as-is
@@ -1287,7 +1140,7 @@ export function registerIpc(
       )
   )
 
-  ipcMain.handle(
+  handle(
     IPC.terminalCreate,
     async (_event, folderId: string, cols: number, rows: number) => {
       const cwd = await store.resolveFolderDir(folderId)
@@ -1299,36 +1152,40 @@ export function registerIpc(
     }
   )
 
-  ipcMain.handle(
-    IPC.terminalWrite,
-    (_event, terminalId: string, data: string) =>
-      terminals.write(terminalId, data)
+  handle(IPC.terminalWrite, (_event, terminalId: string, data: string) =>
+    terminals.write(terminalId, data)
   )
 
-  ipcMain.handle(
+  handle(
     IPC.terminalResize,
     (_event, terminalId: string, cols: number, rows: number) =>
       terminals.resize(terminalId, cols, rows)
   )
 
-  ipcMain.handle(IPC.terminalKill, (_event, terminalId: string) =>
+  handle(IPC.terminalKill, (_event, terminalId: string) =>
     terminals.kill(terminalId)
   )
 
-  ipcMain.handle(IPC.terminalCwd, (_event, terminalId: string) =>
+  handle(IPC.terminalCwd, (_event, terminalId: string) =>
     terminals.cwd(terminalId)
   )
 
-  ipcMain.handle(IPC.systemUsage, () => systemUsage())
+  handle(IPC.systemUsage, () => systemUsage(host.appShare))
 
-  ipcMain.handle(IPC.checkForUpdate, () =>
-    checkForUpdate(app.getVersion(), process.platform)
+  handle(IPC.checkForUpdate, () =>
+    checkForUpdate(host.version, process.platform)
   )
 
-  ipcMain.handle(IPC.installUpdate, async (_event, version: string) => {
+  handle(IPC.installUpdate, async (_event, version: string) => {
     if (process.platform !== "darwin") {
       throw new Error(
         "install.sh is a macOS script — open the release page instead."
+      )
+    }
+    const script = host.installerScript
+    if (!script) {
+      throw new Error(
+        "This build updates from its checkout — pull and restart instead."
       )
     }
     // A version reaching a command line, from the renderer, off the network:
@@ -1353,7 +1210,7 @@ export function registerIpc(
     })
     send(IPC.updateProgress, { stage: "installing", version })
     await startInstaller({
-      script: installerScript(),
+      script,
       version,
       appPath: APP_DIR,
       dmg,
@@ -1361,11 +1218,11 @@ export function registerIpc(
   })
 
   return {
+    handlers,
     worktreeChats,
     terminals,
     tsServers,
     watchers,
-    tray,
     /** Shows the menu bar's icon if the setting has not switched it off.
      * Separate from building it because `registerIpc` runs at module scope and
      * a `Tray` constructed before `whenReady` throws. */

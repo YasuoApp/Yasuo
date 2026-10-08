@@ -832,24 +832,6 @@ export type McpServerState =
   "connected" | "failed" | "needs-auth" | "pending" | "disabled" | "unknown"
 
 /**
- * Which MCP tools a chat here may not call, as wire names.
- *
- * A workspace setting of this app's rather than anything written into the user's
- * own `claude` config: turning a tool off here must not change what their
- * terminal can do. The entries are the names a turn's tool call actually carries
- * (`mcp__figma__get_metadata`), or a server prefix (`mcp__figma`) standing for
- * everything on it, which is the form the CLI's own `disallowedTools` already
- * understands — so this setting is handed straight over rather than expanded
- * here. A **wire** name, note, not the configured one: the CLI normalises a
- * server's name into it (`claude.ai ClickUp` → `claude_ai_ClickUp`), which is
- * `wireServer` in `lib/worktree-chat/mcp-servers.ts`.
- *
- * Stored as a JSON array under one key rather than a key per tool: a connector
- * has fifty of them, and the list is read whole on every turn anyway.
- */
-export const MCP_DISABLED_TOOLS_KEY = "mcp.disabledTools"
-
-/**
  * Whether a chat that finishes, fails or stops to ask rings an OS notification
  * while the window is unfocused. `"off"` switches it off; **anything else,
  * including unset, is on**.
@@ -1347,6 +1329,28 @@ export type WorktreeChatOptions = {
    */
   budgetUsd?: number | null
   /**
+   * The MCP tools this chat's turns may not call, as wire names.
+   *
+   * This app's refusal rather than anything written into the user's own
+   * `claude` config: turning a tool off here must not change what their
+   * terminal can do. The entries are the names a turn's tool call actually
+   * carries (`mcp__figma__get_metadata`), or a server prefix (`mcp__figma`)
+   * standing for everything on it, which is the form the CLI's own
+   * `disallowedTools` already understands — so the list is handed straight over
+   * rather than expanded. A **wire** name, note, not the configured one: the CLI
+   * normalises a server's name into it (`claude.ai ClickUp` →
+   * `claude_ai_ClickUp`), which is `wireServer` in
+   * `lib/worktree-chat/mcp-servers.ts`.
+   *
+   * **Per chat**, switched from the composer's toolbar. It was a workspace
+   * setting (`mcp.disabledTools`, still on disk and read by nothing), on the
+   * argument that it sits in the cached prefix; per chat keeps that bargain,
+   * since it still changes only when somebody flips a switch, never per
+   * message. Changing it closes the chat's session (`signatureOf`), so the next
+   * message pays for one fresh prefix.
+   */
+  disabledTools?: string[]
+  /**
    * The plan toggle this replaced, on records written before the picker.
    *
    * Kept only to be read: `chatOptions` turns a `true` here into
@@ -1376,6 +1380,7 @@ export const DEFAULT_CHAT_OPTIONS: WorktreeChatOptions = {
   permission: "edits",
   profileId: null,
   budgetUsd: null,
+  disabledTools: [],
 }
 
 /**
@@ -1409,6 +1414,17 @@ export function chatOptions(
       typeof options.budgetUsd === "number" && options.budgetUsd > 0
         ? options.budgetUsd
         : null,
+    // Sorted and deduplicated, so two lists naming the same tools are the same
+    // signature in main and do not close a session for nothing.
+    disabledTools: Array.isArray(options.disabledTools)
+      ? [
+          ...new Set(
+            options.disabledTools.filter(
+              (entry): entry is string => typeof entry === "string"
+            )
+          ),
+        ].sort()
+      : [],
   }
 }
 
@@ -1840,6 +1856,19 @@ export type DesktopApi = {
   /** The host platform, for the few places the shell has to differ — the
    * window's title bar being one. */
   platform: "darwin" | "win32" | "linux"
+  /**
+   * Which shell this renderer is loaded in: the Electron app, or a browser tab
+   * on the localhost server (`src/server/`). For the handful of things a tab
+   * cannot do at all — a window pinned on top — and nothing else: every call
+   * below answers the same in both.
+   */
+  runtime: "electron" | "web"
+  /**
+   * What an `img` should load for a `note-file://` URL. The URL itself under
+   * Electron, which serves that scheme (`main/protocol.ts`); an HTTP route on
+   * the server for a tab, where an unknown scheme is a broken image.
+   */
+  resolveNoteFileUrl: (url: string) => Promise<string>
 
   /** The workspace and the folders in it. Always resolves: a first run gets
    * an empty default workspace rather than nothing. */
@@ -2216,7 +2245,7 @@ export type DesktopApi = {
   installedMcpServers: (folderId: string | null) => Promise<McpListing>
   /**
    * Removes one of those servers from the user's own `claude` config — the
-   * **Remove** button on a row in Settings › MCP.
+   * **Remove** button on a row in the composer's MCP menu.
    *
    * Run as `claude mcp remove`, the CLI's own command, rather than by editing
    * `~/.claude.json` or a repository's `.mcp.json` from here: the config is the

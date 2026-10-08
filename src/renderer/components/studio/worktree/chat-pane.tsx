@@ -7,7 +7,7 @@ import {
   useState,
   type DragEvent,
 } from "react"
-import { Archive, PictureInPicture2, Search } from "lucide-react"
+import { Archive, ListTree, PictureInPicture2, Search } from "lucide-react"
 
 import {
   chatOptions,
@@ -22,6 +22,7 @@ import { blockOf, blocksOf } from "@/lib/worktree-chat/activity"
 import { useComposerBus } from "@/lib/worktree-chat/composer-bus"
 import { clearFind, paintFind, rectOfHit } from "@/lib/worktree-chat/find-marks"
 import { readImage } from "@/lib/worktree-chat/images"
+import { currentEntry, outlineOf } from "@/lib/worktree-chat/outline"
 import { hitAt, hitsIn } from "@/lib/worktree-chat/search"
 import { useWorkspaceSearch } from "@/lib/workspace-search"
 import { placeOf, useWorktreeChats } from "@/lib/worktree-chat/store"
@@ -29,6 +30,7 @@ import { chatLine, totalOf, usageDetail } from "@/lib/worktree-chat/usage"
 import { IconButton } from "../icon-button"
 import { ChatAsk } from "./chat-ask"
 import { ChatFind } from "./chat-find"
+import { ChatOutline } from "./chat-outline"
 import { ChatComposer, type ChatComposerHandle } from "./chat-composer"
 import { ChatActivity, DayDivider } from "./chat-activity"
 import { ChatMessage } from "./chat-message"
@@ -168,6 +170,14 @@ const RESTORE_MS = 400
  * start of the conversation. */
 const FOUND_MARGIN = 48
 
+/**
+ * Whether the table of contents is open. One answer for every chat rather than
+ * one per chat: it is a way of reading, and somebody who opened it in one
+ * conversation wants it in the next. Module level because the pane remounts
+ * per chat (see `key` above); in memory and per run, like `places`.
+ */
+let outlineShown = false
+
 /** When a position written down now stops being re-applied. Its own function
  * because both writers of `restore` want the same window, and because reading
  * the clock is not something a component body may do. */
@@ -246,7 +256,7 @@ function Conversation({
 
   /*
    * Something left for this chat's composer by the dock — a run of terminal
-   * output, a screenshot of the preview. Typed in here rather than where it was
+   * output. Typed in here rather than where it was
    * picked up, because this is the only component holding the field's handle.
    * See `composer-bus.ts`.
    */
@@ -255,10 +265,7 @@ function Conversation({
     if (!delivery || delivery.chatId !== chatId) return
     const taken = useComposerBus.getState().take(chatId)
     if (!taken) return
-    if (taken.images && taken.images.length > 0) {
-      composer.current?.insertImages(taken.images)
-    }
-    if (taken.text) composer.current?.insertText(taken.text)
+    composer.current?.insertText(taken.text)
     composer.current?.focus()
   }, [delivery, chatId])
 
@@ -498,6 +505,54 @@ function Conversation({
   const blocks = useMemo(() => blocksOf(lines), [lines])
 
   /*
+   * The table of contents — see `ChatOutline`. Which entry is current is read
+   * off where the entries are drawn, on scroll and whenever the transcript
+   * changes, and only while the column is open: nobody is looking otherwise.
+   */
+  const [outlineOpen, setOutlineOpen] = useState(outlineShown)
+  const toggleOutline = () => {
+    outlineShown = !outlineOpen
+    setOutlineOpen(outlineShown)
+  }
+  const outline = useMemo(() => outlineOf(lines), [lines])
+  const [outlineAt, setOutlineAt] = useState(-1)
+  const measureOutline = useCallback(() => {
+    const element = box.current
+    if (!element || !outlineShown) return
+    const view = element.getBoundingClientRect().top
+    const tops = outline.map((entry) => {
+      const node = element.querySelector(
+        `[data-block="${CSS.escape(entry.id)}"]`
+      )
+      return node ? node.getBoundingClientRect().top - view : null
+    })
+    setOutlineAt(currentEntry(tops, FOUND_MARGIN))
+  }, [outline])
+  useEffect(() => {
+    if (outlineOpen) measureOutline()
+  }, [outlineOpen, measureOutline])
+
+  /** An entry picked: the same landing the find bar makes, through `restore`
+   * so a transcript still settling cannot move it off the line. */
+  const goToEntry = (id: string) => {
+    const element = box.current
+    const node = element?.querySelector(`[data-block="${CSS.escape(id)}"]`)
+    if (!element || !node) return
+    pinned.current = false
+    const top = Math.max(
+      0,
+      element.scrollTop +
+        node.getBoundingClientRect().top -
+        element.getBoundingClientRect().top -
+        FOUND_MARGIN
+    )
+    restore.current = { top, until: heldUntil() }
+    element.scrollTop = top
+    lastTop.current = top
+    places.set(chatId, { top, pinned: false })
+  }
+
+  /*
    * `⌘F` — see `ChatFind`, and `find` for why it carries the chat it is about.
    *
    * A match is an **occurrence**, so `hits` is longer than the number of
@@ -658,6 +713,14 @@ function Conversation({
           {title}
         </h2>
         <IconButton
+          label={outlineOpen ? "Hide contents" : "Show contents"}
+          side="bottom"
+          onClick={toggleOutline}
+          className={cn("size-6", outlineOpen && "bg-accent")}
+        >
+          <ListTree className="size-3.5" />
+        </IconButton>
+        <IconButton
           label="Find in chat"
           side="bottom"
           onClick={openFind}
@@ -680,139 +743,145 @@ function Conversation({
         )}
       </header>
 
-      {/* The transcript and what hangs over it, in a box of their own so the
+      {/* The transcript beside its table of contents, when that is open. */}
+      <div className="flex min-h-0 flex-1">
+        {/* The transcript and what hangs over it, in a box of their own so the
           find bar's `top` is measured from under the header. */}
-      <div className="relative flex min-h-0 flex-1 flex-col">
-        {/* `⌘F`, hanging over the top-right corner of the transcript the way an
+        <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+          {/* `⌘F`, hanging over the top-right corner of the transcript the way an
           editor's does — see `ChatFind` for why it is a bar and not a dialog.
           Keyed by the chat so a bar carried across a switch cannot keep the
           previous conversation's field. */}
-        {finding && (
-          <ChatFind
-            key={chatId}
-            query={finding.query}
-            opened={finding.opened}
-            at={at}
-            total={hits.length}
-            // A new query starts at its first match rather than wherever the last
-            // one had walked to: `at` is an index into a list that has just been
-            // replaced.
-            onQuery={(query) => setFind({ ...finding, query, at: 0 })}
-            onStep={(by) => {
-              if (hits.length === 0) return
-              // Wrapped here rather than counted up, so `at` is always an index
-              // into the list as it stands: `at + by` can go negative, which is
-              // what the `+ hits.length` is for.
-              setFind({ ...finding, at: (at + by + hits.length) % hits.length })
-            }}
-            onClose={() => setFind(null)}
-          />
-        )}
-
-        <div
-          ref={box}
-          onScroll={(event) => {
-            const { scrollTop, scrollHeight, clientHeight } =
-              event.currentTarget
-            if (restoring()) {
-              lastTop.current = scrollTop
-              return
-            }
-            // Reaching the bottom pins; only scrolling *up* unpins. Content
-            // growing under a still view fires a scroll event too, and treating
-            // that as leaving the bottom is what stopped the pane following a
-            // turn that was still rendering.
-            if (scrollHeight - scrollTop - clientHeight < 8)
-              pinned.current = true
-            else if (scrollTop < lastTop.current - 1) pinned.current = false
-            lastTop.current = scrollTop
-            places.set(chatId, { top: scrollTop, pinned: pinned.current })
-          }}
-          className={cn(
-            "min-h-0 flex-1 overflow-y-auto",
-            empty ? "grid place-items-center px-6" : "px-4 py-4"
+          {finding && (
+            <ChatFind
+              key={chatId}
+              query={finding.query}
+              opened={finding.opened}
+              at={at}
+              total={hits.length}
+              // A new query starts at its first match rather than wherever the last
+              // one had walked to: `at` is an index into a list that has just been
+              // replaced.
+              onQuery={(query) => setFind({ ...finding, query, at: 0 })}
+              onStep={(by) => {
+                if (hits.length === 0) return
+                // Wrapped here rather than counted up, so `at` is always an index
+                // into the list as it stands: `at + by` can go negative, which is
+                // what the `+ hits.length` is for.
+                setFind({
+                  ...finding,
+                  at: (at + by + hits.length) % hits.length,
+                })
+              }}
+              onClose={() => setFind(null)}
+            />
           )}
-        >
-          {reading ? (
-            <div
-              ref={content}
-              className="transcript-gap mx-auto flex w-full max-w-2xl flex-col"
-            >
-              <ChatTranscriptSkeleton />
-            </div>
-          ) : empty ? (
-            // Where this chat is, which is what somebody with three checkouts of
-            // one project open needs before they ask for anything.
-            <div className="w-full max-w-md">
-              <WorktreeWelcome place={place} />
-            </div>
-          ) : (
-            <div
-              ref={content}
-              className="transcript-gap mx-auto flex w-full max-w-2xl flex-col"
-            >
-              {blocks.map((block, index) => (
-                /*
-                 * A wrapper per block, for the one thing a block cannot carry
-                 * itself: where it is. The palette's search opens a chat *at* a
-                 * line, and both halves of landing on it — the scroll above and
-                 * the ring below — need a node to find and mark. Drawn for every
-                 * block rather than only the found one, so the transcript's
-                 * layout does not change under a reader when one is.
-                 *
-                 * The day divider sits between two blocks rather than inside
-                 * either, so neither block's position moves when one appears.
-                 */
-                <Fragment key={block.id}>
-                  {index > 0 && (
-                    <DayDivider before={blocks[index - 1]!} after={block} />
-                  )}
-                  <div
-                    data-block={block.id}
-                    /*
-                     * A match is marked on the **words**, not on the block — see
-                     * `paintFind`, which paints them into the highlight registry.
-                     *
-                     * The ring is what is left of that for the one case the words
-                     * cannot answer: a **fold**. A turn's working is collapsed, so a
-                     * message the model wrote mid-turn has no text on screen to
-                     * paint — and a match that is counted, scrolled to and then
-                     * invisible is worse than one that was never counted. So a fold
-                     * holding a match says so, and says harder when it is the one
-                     * the arrows are on. An open fold gets both, which is the honest
-                     * answer for a container: the ring is where, the highlight is
-                     * what.
-                     */
-                    className={cn(
-                      "rounded-lg",
-                      block.kind === "activity" &&
-                        foundBlocks.has(block.id) &&
-                        "ring-1 ring-ring/25 ring-offset-4 ring-offset-background",
-                      block.kind === "activity" &&
-                        block.id === currentBlock &&
-                        "ring-2 ring-ring/70"
+
+          <div
+            ref={box}
+            onScroll={(event) => {
+              const { scrollTop, scrollHeight, clientHeight } =
+                event.currentTarget
+              if (restoring()) {
+                lastTop.current = scrollTop
+                return
+              }
+              // Reaching the bottom pins; only scrolling *up* unpins. Content
+              // growing under a still view fires a scroll event too, and treating
+              // that as leaving the bottom is what stopped the pane following a
+              // turn that was still rendering.
+              if (scrollHeight - scrollTop - clientHeight < 8)
+                pinned.current = true
+              else if (scrollTop < lastTop.current - 1) pinned.current = false
+              lastTop.current = scrollTop
+              places.set(chatId, { top: scrollTop, pinned: pinned.current })
+              measureOutline()
+            }}
+            className={cn(
+              "min-h-0 flex-1 overflow-y-auto",
+              empty ? "grid place-items-center px-6" : "px-4 py-4"
+            )}
+          >
+            {reading ? (
+              <div
+                ref={content}
+                className="transcript-gap mx-auto flex w-full max-w-2xl flex-col"
+              >
+                <ChatTranscriptSkeleton />
+              </div>
+            ) : empty ? (
+              // Where this chat is, which is what somebody with three checkouts of
+              // one project open needs before they ask for anything.
+              <div className="w-full max-w-md">
+                <WorktreeWelcome place={place} />
+              </div>
+            ) : (
+              <div
+                ref={content}
+                className="transcript-gap mx-auto flex w-full max-w-2xl flex-col"
+              >
+                {blocks.map((block, index) => (
+                  /*
+                   * A wrapper per block, for the one thing a block cannot carry
+                   * itself: where it is. The palette's search opens a chat *at* a
+                   * line, and both halves of landing on it — the scroll above and
+                   * the ring below — need a node to find and mark. Drawn for every
+                   * block rather than only the found one, so the transcript's
+                   * layout does not change under a reader when one is.
+                   *
+                   * The day divider sits between two blocks rather than inside
+                   * either, so neither block's position moves when one appears.
+                   */
+                  <Fragment key={block.id}>
+                    {index > 0 && (
+                      <DayDivider before={blocks[index - 1]!} after={block} />
                     )}
-                  >
-                    {block.kind === "activity" ? (
-                      <ChatActivity of={block} />
-                    ) : (
-                      <ChatMessage
-                        of={block.line}
-                        queued={queued?.includes(block.line.id) === true}
-                      />
-                    )}
-                  </div>
-                </Fragment>
-              ))}
-              {/* At the end of the transcript rather than over it: it is the turn
+                    <div
+                      data-block={block.id}
+                      /*
+                       * A match is marked on the **words**, not on the block — see
+                       * `paintFind`, which paints them into the highlight registry.
+                       *
+                       * The ring is what is left of that for the one case the words
+                       * cannot answer: a **fold**. A turn's working is collapsed, so a
+                       * message the model wrote mid-turn has no text on screen to
+                       * paint — and a match that is counted, scrolled to and then
+                       * invisible is worse than one that was never counted. So a fold
+                       * holding a match says so, and says harder when it is the one
+                       * the arrows are on. An open fold gets both, which is the honest
+                       * answer for a container: the ring is where, the highlight is
+                       * what.
+                       */
+                      className={cn(
+                        "rounded-lg",
+                        block.kind === "activity" &&
+                          foundBlocks.has(block.id) &&
+                          "ring-1 ring-ring/25 ring-offset-4 ring-offset-background",
+                        block.kind === "activity" &&
+                          block.id === currentBlock &&
+                          "ring-2 ring-ring/70"
+                      )}
+                    >
+                      {block.kind === "activity" ? (
+                        <ChatActivity of={block} />
+                      ) : (
+                        <ChatMessage
+                          of={block.line}
+                          queued={queued?.includes(block.line.id) === true}
+                        />
+                      )}
+                    </div>
+                  </Fragment>
+                ))}
+                {/* At the end of the transcript rather than over it: it is the turn
                 asking, so it belongs where the turn had got to. */}
-              {ask && (
-                <ChatAsk
-                  ask={ask}
-                  onAnswer={(given) => answer(chatId, given)}
-                />
-              )}
-              {/*
+                {ask && (
+                  <ChatAsk
+                    ask={ask}
+                    onAnswer={(given) => answer(chatId, given)}
+                  />
+                )}
+                {/*
               Compaction, which is a state and never a percentage.
 
               An indeterminate row on purpose: the CLI reports `compacting` and
@@ -825,24 +894,24 @@ function Conversation({
               Above the turn's own spinner, since compaction happens to the
               conversation rather than as part of the answer.
             */}
-              {compacting && (
-                <div className="flex items-center gap-2 px-1 text-[0.7rem] text-muted-foreground">
-                  <Archive className="size-3 shrink-0 animate-pulse" />
-                  <span>Compacting the conversation…</span>
-                </div>
-              )}
-              {/* Kept until the next compaction starts: a failure that vanished
+                {compacting && (
+                  <div className="flex items-center gap-2 px-1 text-[0.7rem] text-muted-foreground">
+                    <Archive className="size-3 shrink-0 animate-pulse" />
+                    <span>Compacting the conversation…</span>
+                  </div>
+                )}
+                {/* Kept until the next compaction starts: a failure that vanished
                 with the spinner would leave a window that never shrank and no
                 reason on screen for it. */}
-              {!compacting && compactError && (
-                <div className="flex items-center gap-2 px-1 text-[0.7rem] text-destructive">
-                  <Archive className="size-3 shrink-0" />
-                  <span className="truncate">
-                    Could not compact: {compactError}
-                  </span>
-                </div>
-              )}
-              {/* Not while a question is up — the turn is held, not working, and
+                {!compacting && compactError && (
+                  <div className="flex items-center gap-2 px-1 text-[0.7rem] text-destructive">
+                    <Archive className="size-3 shrink-0" />
+                    <span className="truncate">
+                      Could not compact: {compactError}
+                    </span>
+                  </div>
+                )}
+                {/* Not while a question is up — the turn is held, not working, and
                 a spinner under the card would say otherwise.
 
                 A running subagent counts as working even when the chat does
@@ -851,12 +920,21 @@ function Conversation({
                 to report its state that is all `sending` has to go on. The
                 agents are what is still out there, so they draw their own
                 spinner. */}
-              {(sending || (agents ?? []).length > 0) && !ask && (
-                <ChatSkeleton startedAt={startedAt} agents={agents} />
-              )}
-            </div>
-          )}
+                {(sending || (agents ?? []).length > 0) && !ask && (
+                  <ChatSkeleton startedAt={startedAt} agents={agents} />
+                )}
+              </div>
+            )}
+          </div>
         </div>
+        {outlineOpen && !empty && !reading && (
+          <ChatOutline
+            entries={outline}
+            current={outlineAt}
+            onPick={goToEntry}
+            onClose={toggleOutline}
+          />
+        )}
       </div>
 
       <div className="shrink-0 border-t p-3">

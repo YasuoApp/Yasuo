@@ -91,8 +91,8 @@ import { expandHome } from "./shell-env"
  * repository's own `.mcp.json`, enabled plugins, claude.ai connectors, all
  * merged the way running plain `claude` in this directory would. So a server
  * that works from the dock's Terminal works from a chat here, with nothing to
- * switch on for it — and Settings › MCP is a listing of what that came to
- * rather than a set of switches.
+ * switch on for it — and the composer's MCP menu is a listing of what that
+ * came to, with switches that only take things away.
  *
  * **What the chat's own toolbar decides** is on the record rather than here:
  * `WorktreeChatOptions` is a model, an effort and a permission per chat, and a
@@ -160,11 +160,6 @@ type Live = {
 const IDLE_MS = 5 * 60 * 1000
 
 export type WorktreeChatSource = {
-  /** The MCP tools Settings › MCP has switched off, as wire names or server
-   * prefixes — see `MCP_DISABLED_TOOLS_KEY`. Asked per message, like the
-   * profiles: it is an argument the CLI is started with, so a change to it opens
-   * a new session (`signatureOf`). */
-  disabledTools: () => Promise<string[]>
   /** The directory a project names, or null when it has left the workspace —
    * what a chat runs in. */
   folderDir: (folderId: string) => Promise<string | null>
@@ -884,12 +879,11 @@ export class WorktreeChats {
     prompt: string,
     images: ChatImage[]
   ): Promise<void> {
-    // Asked per message rather than held, because Settings can be changed
-    // between two messages in the same chat — and unlike the model, this is an
-    // argument the CLI was started with, so a change to it needs a new process.
-    // Sorted so that two lists with the same tools in a different order are the
-    // same signature and do not close a session for nothing.
-    const disabledTools = [...(await this.source.disabledTools())].sort()
+    // The chat's own switched-off MCP tools, off the options read at send time
+    // — and unlike the model, an argument the CLI was started with, so a change
+    // to it needs a new process (`signatureOf`). Already sorted by
+    // `chatOptions`, so the same tools in another order are the same signature.
+    const disabledTools = options.disabledTools ?? []
 
     // Looked up by id rather than trusted whole: a profile named on the record
     // can have been renamed or deleted since — see `WorktreeChatOptions.
@@ -1194,7 +1188,7 @@ export class WorktreeChats {
     cwd: string,
     options: WorktreeChatOptions,
     configDir: string | null,
-    /** The workspace's switched-off MCP tools — see `AgentSessionOptions.
+    /** The chat's switched-off MCP tools — see `AgentSessionOptions.
      * disallowedTools`. */
     disabledTools: string[],
     resume: boolean,
@@ -2034,7 +2028,7 @@ export function said(ask: WorktreeChatAsk, answer: WorktreeChatAnswer): string {
  * The things the CLI took as arguments and has no control request for: the
  * directory it runs in, the account it runs as, and the tool list it was started
  * with. A chat whose project moved, whose profile was switched, or whose
- * switched-off MCP tools changed in Settings is a chat the running process is
+ * switched-off MCP tools changed in its menu is a chat the running process is
  * answering *wrongly*, so the next message closes it and opens another rather
  * than being queued into it. (There was a fourth — the MCP config file this app
  * wrote — and it went with the servers it named.) Model, effort and permission

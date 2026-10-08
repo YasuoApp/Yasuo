@@ -1,8 +1,6 @@
-import type { ReactNode } from "react"
 import {
   ChevronDown,
   ChevronUp,
-  Globe,
   Plus,
   RotateCw,
   SquareTerminal,
@@ -11,11 +9,9 @@ import {
 
 import { cn } from "@/lib/utils"
 import { useDock, DOCK_STRIP_HEIGHT } from "@/lib/dock"
-import { usePreview } from "@/lib/preview"
 import { shellLabels, useShells } from "@/lib/shell/store"
 import { useStudio } from "@/lib/store"
 import { IconButton } from "./icon-button"
-import { DockPreview } from "./dock-preview"
 import { DockTerminal } from "./dock-terminal"
 
 /**
@@ -36,18 +32,13 @@ import { DockTerminal } from "./dock-terminal"
  * pointing the other way, and tabs that each open the dock on themselves. The
  * row that closed it is the obvious place to reopen it.
  *
- * The last tab is `Preview`, past the `+` so the `+` reads as what it is —
- * another shell — and not as another preview. Its body and the shells' are
- * both kept in the tree and swapped by visibility: the shells because a pty
- * taken out of the tree ends (`dock-terminal.tsx`), the preview because a
- * `<webview>` taken out of it loses its page.
+ * There was a `Preview` tab past the `+` — the project's dev server in a
+ * `<webview>` — and it is gone (`docs/design.md` § Preview, removed).
  */
 export function Dock() {
   const open = useDock((state) => state.open)
-  const view = useDock((state) => state.view)
   const toggle = useDock((state) => state.toggle)
   const show = useDock((state) => state.show)
-  const showPreview = usePreview((state) => state.show)
 
   const shells = useShells((state) => state.shells)
   const activeId = useShells((state) => state.activeId)
@@ -98,7 +89,7 @@ export function Dock() {
             <TabFace
               label="Terminal"
               selected={false}
-              onSelect={() => show("shells")}
+              onSelect={() => show()}
             />
           )}
           {shells.map((shell) => (
@@ -109,7 +100,7 @@ export function Dock() {
               // Nothing is "selected" while the dock is shut: the strip is all
               // there is, and a lit tab would be pointing at a panel that is
               // not on screen.
-              selected={open && view === "shells" && shell.id === activeId}
+              selected={open && shell.id === activeId}
               exited={shell.exited}
               onSelect={() => select(shell.id)}
               onClose={() => close(shell.id)}
@@ -125,14 +116,7 @@ export function Dock() {
           <Plus className="size-3.5" />
         </IconButton>
 
-        <TabFace
-          label="Preview"
-          icon={<Globe className="size-3.5 shrink-0" />}
-          selected={open && view === "preview"}
-          onSelect={showPreview}
-        />
-
-        {open && view === "shells" && active && (
+        {open && active && (
           <IconButton
             label="Restart shell"
             onClick={() => restart(active.id)}
@@ -144,16 +128,7 @@ export function Dock() {
       </div>
 
       <div className="relative min-h-0 flex-1">
-        <div
-          className={cn("absolute inset-0", view !== "shells" && "invisible")}
-        >
-          <DockTerminal />
-        </div>
-        <div
-          className={cn("absolute inset-0", view !== "preview" && "invisible")}
-        >
-          <DockPreview />
-        </div>
+        <DockTerminal />
       </div>
     </div>
   )
@@ -162,7 +137,6 @@ export function Dock() {
 function TabFace({
   label,
   title,
-  icon = <SquareTerminal className="size-3.5 shrink-0" />,
   selected,
   exited = false,
   onSelect,
@@ -171,7 +145,6 @@ function TabFace({
   label: string
   /** The whole path, on hover — the label is only its last segment. */
   title?: string
-  icon?: ReactNode
   selected: boolean
   exited?: boolean
   onSelect: () => void
@@ -201,7 +174,7 @@ function TabFace({
           onClose ? "pr-1" : "pr-2"
         )}
       >
-        {icon}
+        <SquareTerminal className="size-3.5 shrink-0" />
         <span className={cn("truncate", exited && "line-through opacity-60")}>
           {label}
         </span>

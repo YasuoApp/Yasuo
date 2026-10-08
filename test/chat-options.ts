@@ -114,4 +114,31 @@ check(
       .effort === "low"
 )
 
+section("the chat's switched-off MCP tools")
+
+check(
+  "a record from before the field has none off",
+  chatOptions({ model: null, effort: null, permission: "edits" }).disabledTools
+    ?.length === 0
+)
+check("a new chat has none off", chatOptions(null).disabledTools?.length === 0)
+check(
+  "sorted and deduplicated, so the same set is the same session signature",
+  chatOptions({
+    model: null,
+    effort: null,
+    permission: "edits",
+    disabledTools: ["mcp__b", "mcp__a__x", "mcp__b"],
+  }).disabledTools?.join() === "mcp__a__x,mcp__b"
+)
+check(
+  "anything that is not a list of names reads as none",
+  chatOptions({
+    model: null,
+    effort: null,
+    permission: "edits",
+    disabledTools: "mcp__a" as unknown as string[],
+  }).disabledTools?.length === 0
+)
+
 finish()

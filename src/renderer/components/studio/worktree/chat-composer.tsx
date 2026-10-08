@@ -112,6 +112,7 @@ import {
   type PlainMentionKind,
 } from "@/lib/worktree-chat/mention-text"
 import { IconButton } from "../icon-button"
+import { McpMenu } from "./chat-mcp"
 
 /**
  * A chat's composer, with two menus: `@` over the checkout's folders and files,
@@ -825,6 +826,13 @@ export function ChatComposer({
                 budgetUsd={options.budgetUsd ?? null}
                 spentUsd={spentUsd}
                 onPick={(budgetUsd) => onOptions({ ...options, budgetUsd })}
+              />
+              <McpMenu
+                folderId={folderId}
+                disabled={options.disabledTools ?? []}
+                onPick={(disabledTools) =>
+                  onOptions({ ...options, disabledTools })
+                }
               />
             </>
           )}

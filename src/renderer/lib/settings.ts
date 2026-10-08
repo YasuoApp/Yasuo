@@ -3,7 +3,6 @@ import { create } from "zustand"
 import {
   CHAT_NOTIFICATIONS_KEY,
   CHAT_TRAY_KEY,
-  MCP_DISABLED_TOOLS_KEY,
   type ChatEffort,
 } from "@shared/api"
 import {
@@ -107,28 +106,12 @@ type SettingsState = Stored & {
   loaded: boolean
 
   /**
-   * MCP tools a chat here may not call, as the wire names a turn's tool call
-   * carries — see `MCP_DISABLED_TOOLS_KEY`.
-   *
-   * Not in `Stored` with the rest, and not in `workbench.settings`: the main
-   * process reads this one too, on every message, to hand the CLI its
-   * `disallowedTools`. So it lives under its own settings key, which is a thing
-   * both sides can name, rather than inside a bag only the renderer parses.
-   *
-   * Empty by default, and empty is a decision the other way from the switches
-   * that used to be here: what the user's own `claude` offers is theirs, and
-   * this app hiding some of it until somebody found a dialog would be this app
-   * deciding.
-   */
-  mcpDisabledTools: string[]
-
-  /**
    * Whether a chat that finishes, fails or stops to ask rings an OS
    * notification while the window is unfocused.
    *
-   * Outside `Stored` for the reason `mcpDisabledTools` is: the main process
-   * reads it — it is what rings the bell — and a bag only the renderer parses
-   * is not a thing both sides can name. **On by default**, which is the one
+   * Outside `Stored` because the main process reads it — it is what rings the
+   * bell — and a bag only the renderer parses is not a thing both sides can
+   * name. **On by default**, which is the one
    * default in this file that goes the other way from the switches around it;
    * `CHAT_NOTIFICATIONS_KEY` says why.
    */
@@ -161,31 +144,8 @@ type SettingsState = Stored & {
   setFontSize: (size: Appearance["fontSize"]) => void
   setDensity: (density: Appearance["density"]) => void
   setOnboarded: (onboarded: boolean) => void
-  /** Replaces the whole list — the pure `with*` helpers in
-   * `lib/worktree-chat/mcp-servers.ts` work out what it should be. */
-  setMcpDisabledTools: (tools: string[]) => void
   /** Reads the stored preferences. Called once, at launch. */
   restore: () => Promise<void>
-}
-
-/**
- * The switched-off tools as stored, or none.
- *
- * Anything that is not an array of strings reads as none rather than throwing —
- * the same call main makes on every message, and for the same reason: a setting
- * this app cannot parse must not take the user's MCP tools away, nor leave the
- * dialog unable to open.
- */
-function storedTools(raw: string | null): string[] {
-  if (!raw) return []
-  try {
-    const parsed: unknown = JSON.parse(raw)
-    return Array.isArray(parsed)
-      ? parsed.filter((entry): entry is string => typeof entry === "string")
-      : []
-  } catch {
-    return []
-  }
 }
 
 /**
@@ -253,7 +213,6 @@ export const useSettings = create<SettingsState>((set, get) => {
     // the tour existed, which is read as "show it once" rather than as a
     // preference somebody already made.
     onboarded: false,
-    mcpDisabledTools: [],
     chatNotifications: true,
     chatTray: true,
     loaded: false,
@@ -329,19 +288,10 @@ export const useSettings = create<SettingsState>((set, get) => {
       save()
     },
 
-    setMcpDisabledTools(mcpDisabledTools) {
-      set({ mcpDisabledTools })
-      // Its own key rather than `save()`'s bag, because main reads it — and
-      // written as it stands rather than merged, since the caller was handed the
-      // whole list to work from.
-      void setSetting(MCP_DISABLED_TOOLS_KEY, JSON.stringify(mcpDisabledTools))
-    },
-
     restore() {
       restorePromise ??= (async () => {
-        const [stored, disabled, notifications, tray] = await Promise.all([
+        const [stored, notifications, tray] = await Promise.all([
           recall(SETTINGS_KEY, isStored),
-          getSetting(MCP_DISABLED_TOOLS_KEY).catch(() => null),
           getSetting(CHAT_NOTIFICATIONS_KEY).catch(() => null),
           getSetting(CHAT_TRAY_KEY).catch(() => null),
         ])
@@ -349,7 +299,6 @@ export const useSettings = create<SettingsState>((set, get) => {
           // Nothing stored is the default, not a failure: the spread of a null
           // leaves the initial state as it stands.
           ...stored,
-          mcpDisabledTools: storedTools(disabled),
           // Only `"off"` switches it off, so an unreadable or absent key is on
           // — the same reading main does, and the two must agree or the switch
           // would show one thing while the bell did another.

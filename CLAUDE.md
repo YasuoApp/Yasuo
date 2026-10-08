@@ -25,7 +25,9 @@ cwd, a branch name. Sign-in will bring a second workspace; until then
 
 One package, no monorepo workspaces. `src/main/` is the Electron main process,
 `src/preload/` the one bridge script, `src/renderer/` the React app, and
-`src/shared/` the contract between the two.
+`src/shared/` the contract between the two. `src/server/` is the **browser
+build**: the same handlers over HTTP on `127.0.0.1`, for the same renderer in a
+tab — `docs/design.md` § The browser build.
 
 ## Commands
 
@@ -37,6 +39,8 @@ bun run lint
 bun run typecheck
 bun run build    # bundle main/preload/daemon + vite build the renderer
 bun run format   # prettier over the whole repo; format:check is what CI runs
+bun run dev:web  # the browser build: Vite + src/server on 127.0.0.1 (prints a URL with a token)
+bun run build:web && bun run web   # the same, built, on one port
 ```
 
 `typecheck` runs three TypeScript projects, because the three environments do
@@ -76,11 +80,23 @@ Adding or changing a call means touching all four. That is deliberate — the
 alternative is two sides that disagree about what a call returns. The renderer
 reaches the contract through the `@shared/*` alias; `@/*` is `src/renderer`.
 
+The browser build reads the same four: `src/renderer/web/channels.ts` generates
+its `window.desktop` from the `IPC` map by the preload's naming rule (a method
+is its channel's key, a subscription is `on` + the key — keep to it),
+`test/web-desktop.ts` checks it against the preload, and the handler is the same
+entry in `createIpc`.
+
 ## Main process (`src/main/`)
 
-`main.ts` creates the window and calls `registerIpc()`; `ipc.ts` owns every
-handler and the long-lived managers (`Store`, `SqlConnections`, `DockerRuntime`,
-`TerminalManager`, `WorktreeChats`).
+`main.ts` creates the window and calls `registerIpc()` (`electron-ipc.ts`);
+`ipc.ts` owns every handler and the long-lived managers (`Store`,
+`TerminalManager`, `WorktreeChats`) as **`createIpc(host)`**, a table keyed by
+channel that **does not import `electron`**. What Electron and the server
+genuinely do differently — dialogs, windows, the tray, the trash,
+notifications — is `main/host.ts`, implemented by `electron-ipc.ts` and
+`server/web-host.ts`. A handler that needs one of those asks `host`; nothing
+under `src/main/` that `ipc.ts` imports may reach `electron`, and
+`scripts/build-web.mjs` leaves it unresolvable so a slip is a build error.
 
 - **`store.ts`** — all state on disk under `~/.yasuo`: `manifest.json` for the
   workspace and its settings, `workspace/` for the panels' own files. A
@@ -145,11 +161,13 @@ handler and the long-lived managers (`Store`, `SqlConnections`, `DockerRuntime`,
   `typescript`, and nothing if it has none.
 - **`mcp-servers.ts`** — which MCP servers the user's own `claude` has, asked of
   it over the SDK's control channel (`mcpServerStatus()`) in a project's own
-  directory, for the listing in Settings › MCP, plus `removeMcpServer`, which
+  directory, for the composer's MCP menu (`worktree/chat-mcp.tsx` — there is
+  no Settings › MCP any more), plus `removeMcpServer`, which
   runs the CLI's own `claude mcp remove`. **This app serves no MCP server of its
   own**: the three that served the Database, API and Notes panels are deleted —
   see `docs/design.md`. What it does still say about MCP is which _tools_ a chat
-  may call, from `MCP_DISABLED_TOOLS_KEY`, handed over as `disallowedTools`.
+  may call — **per chat**, `WorktreeChatOptions.disabledTools`, handed over as
+  `disallowedTools`.
 
 - **`one-turn-agent.ts`** — the **second** `claude`, and the only one that is not
   a conversation: one read-only turn, opened for a question and closed on the
@@ -202,10 +220,10 @@ handler and the long-lived managers (`Store`, `SqlConnections`, `DockerRuntime`,
   push event to every window**, and the notification check asks whether _any_
   window is focused. `setAlwaysOnTop` acts on the calling window.
 
-- **`webviewTag` is on** for the studio window, for the dock's `Preview` tab
-  (`dock-preview.tsx`, a `<webview>` of the project's dev server whose
-  screenshot goes into the composer). `saveTextFile` is the one write outside
-  the roots — a save dialog names the destination — for a chat's export.
+- **There is no `Preview` tab** in the dock any more, and so no `webviewTag`
+  (`docs/design.md` § Preview, removed). `saveTextFile` is the one write
+  outside the roots — a save dialog names the destination — for a chat's
+  export.
 
 ### `worktree-chat.ts` + `claude-agent.ts` — the `claude` a conversation runs on
 
@@ -243,8 +261,8 @@ meant changing mode mid-chat threw the prefix away. Measured here against a 43k
 prompt: **42,345 tokens re-written and none read**, against 103 for a turn that
 changed nothing. So no `allowedTools` at all, one `permissionMode` (`manual`),
 one system prompt, and a `disallowedTools` that is **not** a mode's business —
-the workspace's switched-off MCP tools, identical on every turn until somebody
-changes the setting; the mode is applied in-process by `permits`,
+the chat's switched-off MCP tools, identical on every turn until somebody
+flips a switch in the composer's MCP menu; the mode is applied in-process by `permits`,
 which `deciding` in `claude-agent.ts` consults, and the mode's own sentence goes
 at the head of the **message**. A switch now costs 100–170 tokens.
 
@@ -321,7 +339,7 @@ board's `startChat` — and no longer does.
 No MCP config is passed, so whatever the user's own `claude` is configured with —
 `~/.claude.json`, a repository's `.mcp.json`, enabled plugins, claude.ai
 connectors — reaches a turn the way it would running plain `claude` in that
-directory, minus whatever Settings › MCP has switched off. The cost is that
+directory, minus whatever that chat's MCP menu has switched off. The cost is that
 `Plan` and `Read only` cannot refuse a server _by name_, since this app
 configures none and so has no name for one; an unlisted tool is still refused by
 `deciding`.
@@ -534,11 +552,15 @@ own `ChatNotices` (`test/notify.ts`),
 `lib/worktree-chat/digests.ts`'s `spentIn` with `main/chat-digest.ts`
 (`test/chat-digest.ts`),
 `lib/worktree-chat/search.ts` (`test/chat-search.ts`),
+`lib/worktree-chat/outline.ts` — the chat's table of contents, one entry per
+user message (`test/chat-outline.ts`),
 `lib/worktree-chat/images.ts`'s `attachedIn` — a picture dropped or pasted into
 the composer is read as base64 at once and written as `[Image #n]`, because a
 macOS screenshot's temporary file is gone by the time a path to it is read
 (`test/chat-images.ts`),
 `lib/files/change-tree.ts` (`test/change-tree.ts`),
+`lib/files/conflicts.ts` — merge-conflict blocks and what Accept writes, drawn
+by `lib/editor-conflicts.ts` in the file editor (`test/conflicts.ts`),
 `lib/project-tree.ts` (`test/project-tree.ts`),
 `lib/files/git-diff.ts` with `main/git.ts`'s own `fileDiff` (`test/git-diff.ts`),
 `lib/files/diff-copy.ts` (`test/diff-copy.ts`),
@@ -553,11 +575,10 @@ naming of a profile's directory (`test/claude-account.ts`),
 model and chat (`test/chat-spend.ts`), `lib/worktree-chat/export.ts` — a chat as
 Markdown (`test/chat-export.ts`; `export-html.ts` is the DOM half),
 `lib/appearance.ts` — palettes, fonts, font size and density as root attributes
-and CSS vars (`test/appearance.ts`), `lib/preview.ts`'s `devServerUrlIn`
-(`test/preview.ts`). Put new logic on that side of the line.
+and CSS vars (`test/appearance.ts`). Put new logic on that side of the line.
 
-Three things outside the chat pane put words into its composer — a terminal
-selection, a preview screenshot — through `lib/worktree-chat/composer-bus.ts`:
+A terminal selection is put into the chat's composer from outside the pane
+through `lib/worktree-chat/composer-bus.ts`:
 a delivery addressed to a chat, which the pane drawing that chat types in.
 Code blocks in a reply are coloured by `lib/markdown/highlight.ts`, the editor's
 grammar walked once into `.tok-*` spans rather than a CodeMirror per fence.

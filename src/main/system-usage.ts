@@ -1,8 +1,14 @@
 import os from "node:os"
 
-import { app } from "electron"
-
 import type { SystemUsage } from "../shared/api"
+
+/** The part of `SystemUsage` that is this app's own rather than the machine's —
+ * asked of the host, since what "this app" is differs between Electron's
+ * family of processes and the server's one. */
+export type AppShare = Pick<
+  SystemUsage,
+  "appCpuPercent" | "appCoreCpuPercent" | "appMemory" | "appProcesses"
+>
 
 /**
  * What the machine has left, and what this app is taking of it.
@@ -19,7 +25,9 @@ import type { SystemUsage } from "../shared/api"
  * process spawn to learn what `os.cpus()` and Chromium's own accounting
  * already have, and the app polls this every couple of seconds.
  */
-export function systemUsage(): SystemUsage {
+export function systemUsage(
+  appShare: (cores: number) => AppShare
+): SystemUsage {
   const cores = os.cpus().length
   return {
     cpuPercent: machineCpuPercent(),
@@ -34,7 +42,7 @@ export function systemUsage(): SystemUsage {
 type CpuSample = { busy: number; total: number }
 
 /**
- * Primed at import — which happens inside `registerIpc()`, at startup — so the
+ * Primed at import — which happens with `createIpc()`, at startup — so the
  * first reading the renderer asks for is measured against app launch rather
  * than against boot, where it would be an average over however many days the
  * machine has been up.
@@ -91,10 +99,11 @@ function machineCpuPercent(): number {
  */
 function memory(): { memoryTotal: number; memoryAvailable: number } {
   try {
-    const info = process.getSystemMemoryInfo() as unknown as Record<
-      string,
-      unknown
-    >
+    // Electron's addition to `process`, absent under plain Node — the server
+    // build lands in the `catch` and reports free pages.
+    const info = (
+      process as unknown as { getSystemMemoryInfo: () => unknown }
+    ).getSystemMemoryInfo() as Record<string, unknown>
     const total = kilobytes(info["total"])
     const free = kilobytes(info["free"])
     if (total > 0) {
@@ -113,54 +122,37 @@ function memory(): { memoryTotal: number; memoryAvailable: number } {
   return { memoryTotal: os.totalmem(), memoryAvailable: os.freemem() }
 }
 
-function kilobytes(value: unknown): number {
+export function kilobytes(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) && value > 0
     ? value * 1024
     : 0
 }
 
 /**
- * This app's own share: every process Electron runs, added up.
- *
- * `getAppMetrics()` reports one row per process — the main process, each
- * renderer, the GPU and utility processes — and none of them alone is "the
- * app". The ptys are not in here: a `claude` or a shell is a child of the
- * daemon, not of this app, and counting it would make the studio look
- * responsible for work the user started deliberately.
- *
- * `percentCPUUsage` is Chromium's own since-the-last-call delta, on the same
- * clock as the machine figure above, and — measured, not assumed — it is
- * already a share of *all* cores rather than of one: a process burning 1.09
- * CPU-seconds over two seconds on a ten-core machine reports 5%, not 54%.
- * So it goes straight into `appCpuPercent`, and it is the *Activity Monitor*
- * figure that has to be derived, by multiplying back up by the core count.
- * Both are carried because a bar disagreeing with Activity Monitor by a
- * factor of ten, with no way to see why, would just look broken.
+ * This process alone, for a host with no family of processes to add up — the
+ * localhost server. `cpuUsage` is microseconds of CPU since the last call, so
+ * it is divided by the wall-clock span the same way the machine figure is.
  */
-function appShare(cores: number): {
-  appCpuPercent: number
-  appCoreCpuPercent: number
-  appMemory: number
-  appProcesses: number
-} {
-  const metrics = app.getAppMetrics()
+let lastProcess = { at: Date.now(), cpu: process.cpuUsage() }
 
-  let machine = 0
-  let memory = 0
-  for (const entry of metrics) {
-    machine += entry.cpu.percentCPUUsage
-    memory += kilobytes(entry.memory.workingSetSize)
-  }
+export function processShare(cores: number): AppShare {
+  const at = Date.now()
+  const cpu = process.cpuUsage()
+  const spent =
+    cpu.user - lastProcess.cpu.user + cpu.system - lastProcess.cpu.system
+  const elapsed = (at - lastProcess.at) * 1000
+  lastProcess = { at, cpu }
 
+  const core = elapsed > 0 ? (spent / elapsed) * 100 : 0
   return {
-    appCpuPercent: clampPercent(machine),
-    appCoreCpuPercent: Math.max(0, machine * Math.max(1, cores)),
-    appMemory: memory,
-    appProcesses: metrics.length,
+    appCpuPercent: clampPercent(core / Math.max(1, cores)),
+    appCoreCpuPercent: Math.max(0, core),
+    appMemory: process.memoryUsage().rss,
+    appProcesses: 1,
   }
 }
 
-function clampPercent(value: number): number {
+export function clampPercent(value: number): number {
   if (!Number.isFinite(value)) return 0
   return Math.max(0, Math.min(100, value))
 }

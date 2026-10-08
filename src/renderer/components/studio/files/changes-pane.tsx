@@ -53,6 +53,20 @@ export function ChangesPane() {
   const count = useChanges((state) =>
     rootId ? state.byRoot[rootId]?.length : undefined
   )
+  /*
+   * A file git stopped on opens in the editor rather than as a diff. A diff
+   * against `HEAD` of a file full of markers shows the markers as added lines,
+   * which is the one view of a conflict that cannot resolve it; the editor
+   * draws each block with its Accept buttons (`lib/editor-conflicts.ts`).
+   * `Diff | Edit` still switches, and still wins once used.
+   */
+  const conflicted = useChanges((state) =>
+    rootId && path
+      ? (state.byRoot[rootId] ?? []).some(
+          (change) => change.path === path && change.state === "conflicted"
+        )
+      : false
+  )
 
   // Whether this pane is the one on screen — what `FilePane` needs to know
   // before it builds an editor. See `FileWorkspace` for why the tab being active
@@ -99,7 +113,11 @@ export function ChangesPane() {
   }
 
   return path ? (
-    <FilePane path={path} visible={shown} preferred="diff" />
+    <FilePane
+      path={path}
+      visible={shown}
+      preferred={conflicted ? "text" : "diff"}
+    />
   ) : (
     <Notice
       title="Nothing selected"

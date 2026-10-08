@@ -9,6 +9,12 @@ import { cn } from "@/lib/utils"
  */
 export const IS_MAC = window.desktop.platform === "darwin"
 
+/** Whether there are traffic lights inset into the top-left to leave room for —
+ * the Electron window on macOS. A browser tab on a Mac has keyboard shortcuts
+ * on ⌘ (`IS_MAC`) and the browser's own frame around it. */
+export const HAS_TRAFFIC_LIGHTS =
+  IS_MAC && window.desktop.runtime === "electron"
+
 /**
  * An invisible strip standing in for the title bar the window does not have.
  *

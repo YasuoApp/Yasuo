@@ -157,6 +157,9 @@ export function BlockEditor({
     // can do, so with no `uploadFile` it offers only a URL to embed. See
     // `lib/note/uploads.ts`.
     uploadFile: workspaceFiles ? uploadNoteFile : undefined,
+    // What the block's `img` loads for the URL the document holds — the same
+    // URL under Electron, an HTTP route in a browser tab (`resolveNoteFileUrl`).
+    resolveFileUrl: (url) => window.desktop.resolveNoteFileUrl(url),
   })
 
   return (

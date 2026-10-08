@@ -33,6 +33,8 @@ function subscribe<T>(channel: string, listener: (payload: T) => void) {
 const api: DesktopApi = {
   // `process.platform` is one of the few things a sandboxed preload still has.
   platform: process.platform as DesktopApi["platform"],
+  runtime: "electron",
+  resolveNoteFileUrl: (url) => Promise.resolve(url),
 
   getWorkspace: () => ipcRenderer.invoke(IPC.getWorkspace),
   addFolder: (input) => ipcRenderer.invoke(IPC.addFolder, input),

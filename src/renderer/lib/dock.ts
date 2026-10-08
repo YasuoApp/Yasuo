@@ -9,24 +9,13 @@ import { create } from "zustand"
  * sits under the pane rather than under the Explorer, which is where Conductor
  * puts it — see The dock in `docs/design.md`.
  *
- * What it holds is shells, and one `Preview` tab: an ad-hoc terminal is most
- * of it, because the work an agent does happens in a project's chat, so a
- * shell is somewhere to run `git log` beside it. Its tabs are the shells
- * themselves (`lib/shell/store.ts`), and after them the page the dev server
- * in one of those shells is serving (`lib/preview.ts`). There was a `Run` tab
- * beside them — one command per folder, its output as a log — and it is gone
- * (`docs/design.md` § Run, removed); before that an `Assistant` tab, with the
- * workspace chat it opened.
+ * What it holds is shells: the work an agent does happens in a project's
+ * chat, so a shell is somewhere to run `git log` beside it. Its tabs are the
+ * shells themselves (`lib/shell/store.ts`). There was a `Preview` tab after
+ * them — the page a shell's dev server was serving — and it is gone
+ * (`docs/design.md` § Preview, removed); before it a `Run` tab (§ Run,
+ * removed) and an `Assistant` tab, with the workspace chat it opened.
  */
-
-/**
- * Which of the dock's two faces is showing: the shells (one of them, by
- * `useShells.activeId`) or the preview. Held here rather than as a sentinel
- * in `activeId`, so the shell store's own invariants — the active id names a
- * shell or nothing — stay as they are, and `keep` moving onto a neighbour
- * cannot land on a tab that is not a shell.
- */
-export type DockView = "shells" | "preview"
 
 /**
  * The height of the dock's tab strip, in px — `studio.tsx` gives it to the
@@ -46,9 +35,7 @@ export const DOCK_STRIP_HEIGHT = 36
 
 type DockState = {
   open: boolean
-  view: DockView
-  /** Opens the dock, on the face named — or on whichever it was showing. */
-  show: (view?: DockView) => void
+  show: () => void
   close: () => void
   /** The chevron, the rail's Terminal button and `⌃\``. */
   toggle: () => void
@@ -56,10 +43,9 @@ type DockState = {
 
 export const useDock = create<DockState>((set, get) => ({
   open: false,
-  view: "shells",
 
-  show(view) {
-    set(view ? { open: true, view } : { open: true })
+  show() {
+    set({ open: true })
   },
 
   close() {

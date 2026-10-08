@@ -191,14 +191,12 @@ export const useShells = create<ShellState>((set, get) => {
       const folderId = place()
       if (!folderId) return
       start(folderId)
-      useDock.getState().show("shells")
+      useDock.getState().show()
     },
 
     select(id) {
       set({ activeId: id })
-      // A shell's tab clicked while the preview is up means the shell: the
-      // dock has two faces, and the id alone only says which shell.
-      useDock.getState().show("shells")
+      useDock.getState().show()
     },
 
     close(id) {

@@ -9,6 +9,7 @@ import {
   saveKeymap,
   themeConf,
 } from "@/lib/editor"
+import { conflictResolution } from "@/lib/editor-conflicts"
 import { languageExtension, languageForFile } from "@/lib/editor-languages"
 import {
   acquireDoc,
@@ -91,6 +92,8 @@ export default function CodeMirrorFileEditor({
       languageConf.of([]),
       docSharing(initial.path, { editable: true }),
       saveKeymap(() => handlers.current.onSave()),
+      // Inert in a file with no `<<<<<<<` in it — see `conflictsIn`.
+      conflictResolution(),
       EditorView.updateListener.of((update) => {
         if (!update.docChanged) return
         const text = update.state.doc.toString()

@@ -90,6 +90,13 @@ export default defineConfig({
   // they do against the dev server — which is what the runtime's
   // `/almostnode/...` and `/__sw__.js` URLs rely on.
   base: "/",
+  // The browser build in development (`scripts/web.mjs`): the page is Vite's
+  // and the calls are the localhost server's, proxied so both share an origin —
+  // the server's token check and its `Host` check see the same request either
+  // way. Off for the Electron dev run, which has no server to point at.
+  server: process.env.YASUO_WEB_API
+    ? { proxy: { "/__yasuo": process.env.YASUO_WEB_API } }
+    : undefined,
   build: {
     // Out of `src/`, and named to match `dist-electron/` beside it. Vite would
     // otherwise write into `src/renderer/dist`.
