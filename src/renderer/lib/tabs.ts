@@ -14,7 +14,6 @@ export const PREFIX: Record<Pane, string> = {
   // there is one `Changes` tab per project, and that is what it is about.
   changes: "changes:",
   worktree: "chat:",
-  workflows: "workflow:",
 }
 
 /**

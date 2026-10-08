@@ -52,20 +52,3 @@
 .no-drag {
   -webkit-app-region: no-drag;
 }
-
-/*
- * A hidden pane's workflow canvas stays hidden.
- *
- * The panes are stacked and hidden with `invisible`, which every child
- * inherits — except where a child sets `visibility` itself, and React Flow
- * does: a node gets an inline `visibility: visible` the moment it has been
- * measured, and an edge's label likewise. So a workflow's boxes were drawn
- * straight through whichever chat or file was on screen. The same trap the
- * diff fell into, which is unmounted for it; the canvas keeps its viewport
- * and selection by staying mounted, so this is the override instead. The
- * `!important` is what it takes to beat an inline style.
- */
-.invisible .react-flow__node,
-.invisible .react-flow__edge-textwrapper {
-  visibility: hidden !important;
-}

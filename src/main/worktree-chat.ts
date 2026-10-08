@@ -18,8 +18,6 @@ import {
   type ChatSeed,
   type ChatSpend,
   type ClaudeProfile,
-  type StepLine,
-  type WorkflowEndLine,
   type WorktreeChat,
   type WorktreeChatAnswer,
   type WorktreeChatAsk,
@@ -563,10 +561,12 @@ export class WorktreeChats {
    * Every change to the listing is a read, a change and a write, with an
    * `await` between the first and the last — and the store's queue serialises
    * the file operations, not the pairs. Two of these interleaved lose one: a
-   * workflow's second Claude step `create`d its chat while the first step's
-   * last `append` was between its read and its write, the append wrote the
-   * list it had read, and the second chat was gone before `send` looked for
-   * it — "That chat no longer exists", for a chat made a moment ago. So they
+   * chat `create`d while another chat's `append` was between its read and its
+   * write was gone again once the append wrote the list it had read, and
+   * `send` answered "That chat no longer exists" for a chat made a moment ago
+   * (seen first under the deleted workflows, whose steps did exactly that
+   * back to back; a first message sent while another chat answers is the
+   * same race). So they
    * queue here, and each edit sees the list the one before it wrote. `null`
    * from `edit` is "nothing to write".
    */
@@ -803,10 +803,7 @@ export class WorktreeChats {
   async send(
     id: string,
     prompt: string,
-    images: ChatImage[] = [],
-    /** The workflow box this came from, when a workflow sent it rather than
-     * a person — written on the line, see `step` on the user line. */
-    step?: string
+    images: ChatImage[] = []
   ): Promise<void> {
     const chats = await this.source.chats()
     const chat = chats.find((entry) => entry.id === id)
@@ -843,12 +840,7 @@ export class WorktreeChats {
 
     // The line keeps the `[Image #n]` and not the picture: a transcript that
     // carried base64 would be megabytes re-read every time the chat is opened.
-    await this.append(id, {
-      id: lineId(),
-      role: "user",
-      text: prompt,
-      ...(step ? { step } : {}),
-    })
+    await this.append(id, { id: lineId(), role: "user", text: prompt })
     await this.deliver(id, cwd, options, prompt, images)
   }
 
@@ -1559,30 +1551,6 @@ export class WorktreeChats {
    * behind the interrupted turn still runs — the CLI's own rule, and the same
    * one the terminal follows.
    */
-  /**
-   * Writes a workflow's line into a chat — the message that called it, a
-   * step (`StepLine`), or how the run ended (`WorkflowEndLine`). A line of the conversation's record,
-   * never of the CLI's context: nothing is sent.
-   */
-  async note(
-    id: string,
-    line:
-      | Omit<StepLine, "id">
-      | Omit<WorkflowEndLine, "id">
-      | {
-          role: "user"
-          text: string
-          workflow: { id: string; name: string }
-        }
-  ): Promise<void> {
-    await this.append(id, { id: lineId(), ...line })
-  }
-
-  /** Whether the chat's CLI is working on something — main's own `busy`. */
-  isBusy(id: string): boolean {
-    return this.live.get(id)?.busy ?? false
-  }
-
   stop(id: string): void {
     this.live.get(id)?.session?.interrupt()
   }
@@ -1815,41 +1783,7 @@ export class WorktreeChats {
     const messages = [...(await this.read(id)), message]
     this.messages.set(id, messages)
 
-    // A workflow's prompt is the one user line announced — see the `prompt`
-    // event. A person's own is already on their screen.
-    if (message.role === "user" && message.step) {
-      this.emit({
-        chatId: id,
-        type: "prompt",
-        text: message.text,
-        step: message.step,
-      })
-    }
-
-    if (message.role === "step") {
-      this.emit({
-        chatId: id,
-        type: "step",
-        line: {
-          role: "step",
-          kind: message.kind,
-          label: message.label,
-          summary: message.summary,
-          status: message.status,
-          ...(message.output ? { output: message.output } : {}),
-        },
-      })
-    } else if (message.role === "workflow") {
-      this.emit({
-        chatId: id,
-        type: "workflow",
-        line: {
-          role: "workflow",
-          status: message.status,
-          ...(message.error ? { error: message.error } : {}),
-        },
-      })
-    } else if (message.role !== "user") {
+    if (message.role !== "user") {
       this.emit(
         message.role === "tool"
           ? {

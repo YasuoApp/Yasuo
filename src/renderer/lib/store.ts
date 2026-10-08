@@ -37,7 +37,7 @@ export const RAIL_WIDTH = 36
  * a pane drawable at all, and a pane left out of it is one that can be selected
  * and never shown.
  */
-export const PANES: Pane[] = ["files", "changes", "worktree", "workflows"]
+export const PANES: Pane[] = ["files", "changes", "worktree"]
 
 /**
  * `section` is held as a plain string rather than a `Section` on the way in: a
@@ -95,13 +95,8 @@ function isRememberedStrip(value: unknown): value is RememberedStrip {
  * and a transcript — and it is gone: a shell is a tab of the dock now
  * (`lib/shell/store.ts`), and the agent half of what it was is a project's
  * chat.
- *
- * `workflows` is the one pane whose tabs are the **workspace's** rather than a
- * project's — a workflow is a drawing of how work goes, not of one checkout —
- * so it is the first panel to leave `rootOf` off in `lib/panels.ts`, and its
- * tabs stay in the strip whichever project is being worked in.
  */
-export type Pane = Section | "worktree" | "changes" | "workflows"
+export type Pane = Section | "worktree" | "changes"
 
 /**
  * Which of the Explorer's two lists is showing: the project's files, or the

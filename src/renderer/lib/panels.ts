@@ -25,7 +25,6 @@ import {
   PREFIX,
 } from "./tabs"
 import { useWorktreeChats } from "./worktree-chat/store"
-import { useWorkflows } from "./workflows/store"
 
 /**
  * The five panels' tabs, addressed alike.
@@ -140,13 +139,6 @@ const changesActive = (
     ? state.selectedId
     : null
 
-const workflowActive = (
-  state: ReturnType<typeof useWorkflows.getState>
-): string | null =>
-  state.selectedId && state.openIds.includes(state.selectedId)
-    ? state.selectedId
-    : null
-
 /**
  * The root a file is in, for scoping — `fileGroupOf`'s answer, with the missing
  * case spelled as null rather than as the group tabs under nothing.
@@ -218,19 +210,6 @@ const PANELS: Record<Pane, PanelTabs> = {
     groupOf: worktreeChatGroupOf,
     rootOf: worktreeChatRootOf,
   },
-  /* The workspace's workflows: no `rootOf`, so a tab stays in the strip
-   * whichever project is being worked in — see `rootOf` on `PanelTabs`, which
-   * was written for exactly this and had no panel to apply to until now. No
-   * `groupOf` either, since there is no folder for one to gather into. */
-  workflows: {
-    open: () => useWorkflows.getState().openIds,
-    active: () => workflowActive(useWorkflows.getState()),
-    select: (id) => useWorkflows.getState().select(id),
-    close: (id) => useWorkflows.getState().close(id),
-    closeOthers: (id) => useWorkflows.getState().closeOthers(id),
-    closeAll: () => useWorkflows.getState().closeAll(),
-    reorder: (ids) => useWorkflows.getState().reorder(ids),
-  },
 }
 
 /**
@@ -240,7 +219,6 @@ const STORES = {
   files: useFiles,
   changes: useChanges,
   worktree: useWorktreeChats,
-  workflows: useWorkflows,
 } as const
 
 /**
@@ -700,7 +678,6 @@ function usePanelActive(pane: Pane): string | null {
     files: useFiles(fileActive),
     changes: useChanges(changesActive),
     worktree: useWorktreeChats(worktreeChatActive),
-    workflows: useWorkflows(workflowActive),
   }[pane]
 }
 
@@ -743,7 +720,6 @@ function useGrouping() {
   useFiles((state) => state.openIds)
   useWorktreeChats((state) => state.chats)
   useWorktreeChats((state) => state.openIds)
-  useWorkflows((state) => state.openIds)
 }
 
 /**
@@ -805,7 +781,6 @@ export function useHasOpenTabs(): boolean {
   useFiles((state) => state.openIds)
   useWorktreeChats((state) => state.openIds)
   useWorktreeChats((state) => state.chats)
-  useWorkflows((state) => state.openIds)
 
   // Every pane in `PANES`, and the reason this is worth saying: a panel left out
   // of that list can never be drawn. The workbench only shows a pane once the
@@ -836,28 +811,7 @@ export function reconcileScope() {
   const { pane } = useStudio.getState()
 
   const own = PANELS[pane].active()
-  if (own !== null && inScope(pane, own)) {
-    /*
-     * A workspace tab — a workflow — is in every project's scope, so by the
-     * rule above it would stay on screen through a project switch. But a
-     * project row was clicked to *go somewhere*, and a pane that did not move
-     * reads as the click doing nothing. So the project's own tabs win when it
-     * has any: its chats first, since a project's rows are its chats, then
-     * whatever else of its the strip holds. With none, the workflow stays —
-     * there is nothing of the project's to show instead.
-     */
-    if (!PANELS[pane].rootOf) {
-      const ids = tabIds()
-      const theirs =
-        ids.find((id) => kindOf(id) === "worktree") ??
-        ids.find((id) => {
-          const kind = kindOf(id)
-          return kind !== null && PANELS[kind].rootOf !== undefined
-        })
-      if (theirs !== undefined) selectTab(theirs)
-    }
-    return
-  }
+  if (own !== null && inScope(pane, own)) return
 
   const mine = openInScope(pane)[0]
   if (mine !== undefined) {

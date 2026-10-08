@@ -6,11 +6,10 @@ import { check, finish, section } from "./harness"
  * The chat listing under concurrent edits.
  *
  * Every change to `worktree-chats.json` is a read, a change and a write, and
- * the store only serialises the file operations, not the pairs. A workflow
- * made this visible: its second Claude step created a chat while the first
- * step's last append was between its read and its write, the append wrote
- * back the list it had read, and the new chat was gone before `send` looked
- * for it. `editChats` is the queue that stops it; this is the race, run
+ * the store only serialises the file operations, not the pairs. A chat
+ * created while another chat's append was between its read and its write was
+ * gone again once the append wrote back the list it had read, and `send`
+ * could not find it. `editChats` is the queue that stops it; this is the race, run
  * against a source that yields between the read and the write the way a file
  * does.
  */

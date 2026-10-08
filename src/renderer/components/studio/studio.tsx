@@ -26,13 +26,11 @@ import { useProjects } from "@/lib/projects"
 import { useWorkspaceSearch } from "@/lib/workspace-search"
 import { useClaudeProfiles } from "@/lib/worktree-chat/claude-profiles"
 import { useWorktreeChats } from "@/lib/worktree-chat/store"
-import { useWorkflows } from "@/lib/workflows/store"
 import { Dock } from "./dock"
 import { ProjectCrumbs } from "./project/project-crumbs"
 import { NavRail } from "./nav-rail"
 import { WorkspaceSidebar } from "./workspace-sidebar"
 import { WorktreeChatPane } from "./worktree/chat-pane"
-import { WorkflowPane } from "./workflows/workflow-pane"
 import { FileTree } from "./files/file-tree"
 import { ExplorerRail } from "./files/explorer-rail"
 import { ChangesPane } from "./files/changes-pane"
@@ -64,8 +62,6 @@ function paneView(pane: Pane) {
       return <ChangesPane />
     case "worktree":
       return <WorktreeChatPane />
-    case "workflows":
-      return <WorkflowPane />
   }
 }
 
@@ -97,17 +93,11 @@ export function Studio() {
     void useProjects.getState().restore()
     void useWorktreeChats.getState().refresh()
     void useClaudeProfiles.getState().refresh()
-    // Read here for the reason the files are: a workflow's tab is restored
-    // onto the strip, and the strip cannot draw a tab for a name it has not
-    // read.
-    void useWorkflows.getState().load()
   }, [])
 
   // A chat's turn runs in the main process and outlives the
   // pane being switched away from, so its lines are subscribed to here.
   useEffect(() => useWorktreeChats.getState().listen(), [])
-  // A workflow's run is main's too, for the same reason.
-  useEffect(() => useWorkflows.getState().listen(), [])
 
   // The appearance settings, written onto `<html>` as they change — here
   // rather than in the dialog that edits them, so a restored setting is

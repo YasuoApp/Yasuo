@@ -5,7 +5,6 @@ import path from "node:path"
 import {
   CHAT_NOTIFICATIONS_KEY,
   CHAT_TRAY_KEY,
-  chatOptions,
   IPC,
   type ChatImage,
   type ChatPlace,
@@ -18,10 +17,7 @@ import {
   type WorktreeChatAnswer,
   type WorktreeChatOptions,
 } from "../shared/api"
-import type { Workflow, WorkflowGraph, WorkflowRun } from "../shared/workflows"
 import { agentCommands } from "./agent-commands"
-import { runWorkflow } from "./workflow-runner"
-import { ChatTap, stepsIn } from "./workflow-steps"
 import { agentModels } from "./agent-models"
 import { claudeAccount } from "./claude-auth"
 import { claudeBinary } from "./claude-bin"
@@ -240,8 +236,6 @@ export function createIpc(host: Host): {
     },
     (event) => {
       send(IPC.worktreeChatEvent, event)
-      // And to whichever workflow step is waiting on this chat's turn.
-      chatTap.emit(event)
       const notice = notices.read(event)
       void announce(notice)
       // Every event, not just the ones worth a banner: the count in the menu
@@ -252,20 +246,6 @@ export function createIpc(host: Host): {
   )
 
   const notices = new ChatNotices()
-
-  /** The chat events forked to running workflows — see `ChatTap`. Built
-   * before `worktreeChats`' callback first fires, which is the first turn. */
-  const chatTap = new ChatTap()
-
-  /**
-   * The workflows running right now, by workflow id, each with the handle
-   * that stops it. The last run of each is kept after it ends, for a pane
-   * opened later (`IPC.workflowRun`); a new run replaces it.
-   */
-  const workflowRuns = new Map<
-    string,
-    { run: WorkflowRun; stop: AbortController | null }
-  >()
 
   /**
    * The count in the menu bar, off the same watcher the notifications are.
@@ -1109,115 +1089,6 @@ export function createIpc(host: Host): {
 
   handle(IPC.writeDrawingSvg, (_event, id: string, svg: string) =>
     store.writeDrawingSvg(id, svg)
-  )
-
-  handle(IPC.listWorkflows, () => store.listWorkflows())
-
-  handle(IPC.saveWorkflows, (_event, workflows: Workflow[]) =>
-    store.saveWorkflows(workflows)
-  )
-
-  handle(IPC.readWorkflow, (_event, id: string) => store.readWorkflow(id))
-
-  handle(IPC.writeWorkflow, (_event, id: string, graph: string) =>
-    store.writeWorkflow(id, graph)
-  )
-
-  handle(IPC.deleteWorkflow, (_event, id: string) => store.deleteWorkflow(id))
-
-  handle(
-    IPC.runWorkflow,
-    async (
-      _event,
-      id: string,
-      graph: WorkflowGraph,
-      call: { chatId: string; message: string; input: string }
-    ) => {
-      if (workflowRuns.get(id)?.stop) {
-        throw new Error("This workflow is already running.")
-      }
-      const workflow = (await store.listWorkflows()).find(
-        (entry) => entry.id === id
-      )
-      if (!workflow) throw new Error("That workflow no longer exists.")
-
-      // The chat's own project, as a turn in it would run — a workflow
-      // called from a chat is that chat's work, in that chat's checkout.
-      const chat = (await worktreeChats.list()).find(
-        (entry) => entry.id === call.chatId
-      )
-      if (!chat) throw new Error("That chat no longer exists.")
-      const cwd = chat.folderId
-        ? await store.resolveFolderDir(chat.folderId).catch(() => null)
-        : null
-      if (!cwd) throw new Error("That project is no longer in the workspace.")
-      // A Claude step waits for its turn's `done`, and in a chat already
-      // working the first `done` to arrive would be somebody else's turn.
-      if (
-        worktreeChats.isBusy(call.chatId) ||
-        [...workflowRuns.values()].some(
-          (entry) => entry.stop && entry.run.chatId === call.chatId
-        )
-      ) {
-        throw new Error(
-          "This chat is working — run the workflow once it has finished."
-        )
-      }
-
-      await worktreeChats.note(call.chatId, {
-        role: "user",
-        text: call.message,
-        workflow: { id, name: workflow.name },
-      })
-
-      const stop = new AbortController()
-      const steps = stepsIn(
-        worktreeChats,
-        chatTap,
-        call.chatId,
-        cwd,
-        chatOptions(chat.options)
-      )
-      const started = new Promise<void>((resolve) => {
-        void runWorkflow(
-          id,
-          graph,
-          steps,
-          stop.signal,
-          (run) => {
-            workflowRuns.set(id, {
-              run,
-              stop: run.status === "running" ? stop : null,
-            })
-            send(IPC.workflowRunEvent, run)
-            resolve()
-          },
-          { chatId: call.chatId, input: call.input }
-        ).then(async (run) => {
-          await steps.restore().catch(() => {})
-          // Closes the run's card in the chat, and says how it went there as
-          // well as on the canvas: a run refused before its first step — a
-          // loop, no Start — would otherwise leave nothing where it was called.
-          await worktreeChats
-            .note(call.chatId, {
-              role: "workflow",
-              status: run.status === "running" ? "done" : run.status,
-              ...(run.error ? { error: run.error } : {}),
-            })
-            .catch(() => {})
-        })
-      })
-      await started
-    }
-  )
-
-  handle(IPC.stopWorkflow, (_event, id: string) => {
-    workflowRuns.get(id)?.stop?.abort()
-  })
-
-  handle(
-    IPC.workflowRun,
-    (_event, id: string) => workflowRuns.get(id)?.run ?? null
   )
 
   handle(

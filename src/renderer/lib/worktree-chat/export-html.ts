@@ -85,14 +85,7 @@ function blockOf(
 ): string {
   switch (line.role) {
     case "user":
-      return `<section class="msg user">${who(line.step ? `Workflow · ${escape(line.step)}` : "You", line.at)}<div class="bubble">${escape(line.text)}</div></section>`
-    case "step": {
-      const mark = line.status === "failed" ? "❌" : "⚙️"
-      const summary = `${mark} <b>${escape(line.label)}</b> — <code>${escape(line.summary)}</code>`
-      return line.output
-        ? `<details class="tool"><summary>${summary}</summary><pre class="input">${escape(line.output)}</pre></details>`
-        : `<div class="tool">${summary}</div>`
-    }
+      return `<section class="msg user">${who("You", line.at)}<div class="bubble">${escape(line.text)}</div></section>`
     case "assistant":
       return `<section class="msg claude">${who("Claude", line.at)}<div class="prose">${toHtml(line.text)}</div></section>`
     case "thinking":
@@ -111,8 +104,6 @@ function blockOf(
       }</div>`
     case "compact":
       return `<div class="compact"><span>${escape(compactLine(line))}</span></div>`
-    case "workflow":
-      return `<div class="note${line.status === "done" ? "" : " error"}">⚙️ Workflow ${line.status}${line.error ? ` — ${escape(line.error)}` : ""}</div>`
   }
 }
 

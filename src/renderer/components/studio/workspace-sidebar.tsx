@@ -9,7 +9,6 @@ import { IconButton } from "./icon-button"
 import { PanelHeader, type Fold } from "./panel-header"
 import { ProjectsSection } from "./project/projects-section"
 import { SearchSection } from "./search-section"
-import { WorkflowsSection } from "./workflows/workflows-section"
 
 /**
  * The window's left column: whatever `SIDEBAR_SECTIONS` lists.
@@ -53,19 +52,6 @@ export function WorkspaceSidebar({
         className="flex h-full min-h-0 flex-col overflow-hidden"
       >
         <SearchSection />
-      </nav>
-    )
-  }
-
-  // The workspace's workflows, in the sections' place for the reason Search
-  // is: a list worth the whole height. What it holds is its store's.
-  if (view === "workflows") {
-    return (
-      <nav
-        aria-label="Workflows"
-        className="flex h-full min-h-0 flex-col overflow-hidden"
-      >
-        <WorkflowsSection />
       </nav>
     )
   }

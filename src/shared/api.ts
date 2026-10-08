@@ -6,8 +6,6 @@
  * frontend reaches it through the `@shared` alias.
  */
 
-import type { Workflow, WorkflowGraph, WorkflowRun } from "./workflows"
-
 /**
  * One folder the workspace has been pointed at — a repository on this machine,
  * edited and run where it already is.
@@ -298,65 +296,9 @@ export type ChatTodo = {
  */
 export type AssistantMessage = AssistantLine & { at?: string }
 
-/**
- * A workflow step that is not Claude — a shell command, an HTTP call, a
- * condition — written into the run's chat where it ran, between the turns.
- *
- * In the chat so the run reads as one story: Claude fixed the tests, the
- * tests were run, the branch was pushed. It is a record and **not context**:
- * the CLI never sees this line, so Claude knows what a step produced only
- * when a prompt passes it on through `{{input}}` or `{{Label}}`. Its own role
- * rather than a `tool` line, because a tool line is something the model did
- * and is folded into its turn's working — this is the workflow speaking
- * between turns, and is a boundary between them (`turnsOf`).
- */
-export type StepLine = {
-  id: string
-  role: "step"
-  kind: "shell" | "http" | "condition"
-  /** The box's label. */
-  label: string
-  /** What it ran, filled in: the command, `METHOD url`, or the pattern. */
-  summary: string
-  status: "done" | "failed"
-  /** What came back — the output, the body, `yes` / `no` — or the error. */
-  output?: string
-}
-
-/**
- * The end of a workflow run in its chat — how it went, and why when it did
- * not. Everything between the message that called the run (the user line
- * carrying `workflow`) and this line is the run's, and the pane draws it as
- * one card (`blocksOf`). Lines rather than ids on every line, because most of
- * a run's lines are the CLI's own turn and never pass through the workflow.
- */
-export type WorkflowEndLine = {
-  id: string
-  role: "workflow"
-  status: "done" | "failed" | "stopped"
-  error?: string
-}
-
 type AssistantLine =
-  /**
-   * `step` is set on a line a **workflow** sent rather than a person: the
-   * label of the Claude box it came from. The pane draws such a line folded,
-   * named for the step, since what somebody reading the chat wants is the
-   * answer — the prompt is the box's own field, already on the canvas.
-   *
-   * `workflow` is set on the message that **called** one (`@<slug> …`): the
-   * run's card starts here and ends at its `WorkflowEndLine`.
-   */
-  | {
-      id: string
-      role: "user"
-      text: string
-      step?: string
-      workflow?: { id: string; name: string }
-    }
+  | { id: string; role: "user"; text: string }
   | { id: string; role: "assistant"; text: string }
-  | StepLine
-  | WorkflowEndLine
   /**
    * The model's own reasoning, drawn as one folded line.
    *
@@ -652,21 +594,6 @@ export type AssistantEvent =
    * queued, and the turn after it starts without anybody sending anything. What
    * says whether a chat is working is `busy`. */
   | { type: "done"; error: string | null }
-  /**
-   * A prompt a **workflow** sent, as a line of the conversation.
-   *
-   * A person's own prompt is never announced: the composer that sent it drew
-   * it the moment it was sent, and main only writes it down. A workflow's
-   * has no composer behind it — nothing in the renderer knew it was sent —
-   * so without this the pane saw two answers with no question between them
-   * and folded the first into the second's working. `step` is the box it
-   * came from.
-   */
-  | { type: "prompt"; text: string; step: string }
-  /** A workflow step that is not Claude, as a line — see `StepLine`. */
-  | { type: "step"; line: Omit<StepLine, "id"> }
-  /** A workflow run has ended in this chat — see `WorkflowEndLine`. */
-  | { type: "workflow"; line: Omit<WorkflowEndLine, "id"> }
   /**
    * Whether the chat is working on something.
    *
@@ -2578,46 +2505,6 @@ export type DesktopApi = {
   writeDrawingSvg: (id: string, svg: string) => Promise<void>
 
   /**
-   * The workflows the workspace holds — see `shared/workflows.ts`.
-   *
-   * The listing and the graph are two calls for the reason a chat's listing
-   * and its transcript are: the column wants every name and no diagram, and
-   * a tab wants one diagram. `saveWorkflows` replaces the listing whole, since
-   * the renderer holds the list it is editing; `writeWorkflow` is one graph,
-   * as text — main only stores it, and the shape is the renderer's to check
-   * on the way back in (`parseGraph`). `deleteWorkflow` removes the graph
-   * file; the row goes with the next `saveWorkflows`.
-   */
-  listWorkflows: () => Promise<Workflow[]>
-  saveWorkflows: (workflows: Workflow[]) => Promise<void>
-  /** Empty for a workflow nothing has been drawn in yet. */
-  readWorkflow: (id: string) => Promise<string>
-  writeWorkflow: (id: string, graph: string) => Promise<void>
-  deleteWorkflow: (id: string) => Promise<void>
-  /**
-   * Runs a workflow **in a chat** — `main/workflow-runner.ts`. Called by a
-   * message that starts with `@` and the workflow's name
-   * (`lib/workflows/invoke.ts`): `message` is that message, written into the
-   * chat as its own line, and `input` is what followed the name, which is
-   * `Start`'s output. Every step writes into that chat; nothing new is opened.
-   *
-   * The graph travels with the call rather than being read off disk, because
-   * the renderer's write is debounced and the run should be of what was last
-   * drawn. Resolves once the run has **started**; where it gets to arrives as
-   * `onWorkflowRunEvent`, the run whole on every change, and `workflowRun`
-   * answers the same for a pane that opened after it began. Refused with a
-   * sentence while the workflow is already running, or the chat is busy.
-   */
-  runWorkflow: (
-    id: string,
-    graph: WorkflowGraph,
-    call: { chatId: string; message: string; input: string }
-  ) => Promise<void>
-  stopWorkflow: (id: string) => Promise<void>
-  workflowRun: (id: string) => Promise<WorkflowRun | null>
-  onWorkflowRunEvent: (listener: (run: WorkflowRun) => void) => () => void
-
-  /**
    * A file dropped into a block document — a picture, in practice — kept in the
    * workspace so the document still has it once the file it came from has moved.
    *
@@ -2857,15 +2744,6 @@ export const IPC = {
   readDrawing: "drawings:read",
   writeDrawing: "drawings:write",
   writeDrawingSvg: "drawings:write-svg",
-  listWorkflows: "workflows:list",
-  saveWorkflows: "workflows:save",
-  readWorkflow: "workflows:read",
-  writeWorkflow: "workflows:write",
-  deleteWorkflow: "workflows:delete",
-  runWorkflow: "workflows:run",
-  stopWorkflow: "workflows:stop",
-  workflowRun: "workflows:run-state",
-  workflowRunEvent: "workflows:run-event",
   writeNoteFile: "note-files:write",
   terminalCreate: "terminal:create",
   terminalWrite: "terminal:write",

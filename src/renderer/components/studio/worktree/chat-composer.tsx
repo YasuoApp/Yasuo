@@ -31,7 +31,6 @@ import {
   Square,
   Star,
   Check as CheckIcon,
-  Workflow as WorkflowIcon,
 } from "lucide-react"
 
 import {
@@ -64,8 +63,6 @@ import { useGitStatus } from "@/lib/files/git-status"
 import { iconFor } from "@/lib/files/icons"
 import { useFiles } from "@/lib/files/store"
 import { cn } from "@/lib/utils"
-import { workflowInvocation, workflowRows } from "@/lib/workflows/invoke"
-import { useWorkflows } from "@/lib/workflows/store"
 import {
   accountLine,
   useClaudeProfiles,
@@ -206,8 +203,6 @@ const FIELD = "px-2.5 pt-2 pb-1 text-xs leading-relaxed md:text-xs"
 const KIND_HUE: Record<PlainMentionKind, string> = {
   directory: "color-mix(in oklab, var(--section-files) 60%, transparent)",
   file: "var(--section-files)",
-  // Not a path, so not the Explorer's hue: a mention that runs something.
-  workflow: "var(--section-api)",
 }
 
 /**
@@ -397,9 +392,6 @@ export function ChatComposer({
   // would otherwise offer a workspace that looks empty.
   useEffect(primeMentions, [])
 
-  const workflows = useWorkflows((state) => state.workflows)
-  useEffect(() => void useWorkflows.getState().load(), [])
-
   // Subscribed rather than read where they are needed: the walk and the
   // `git status` that filters it both land a moment after the first `@` may
   // already have been typed, and this is what redraws the menu — and the tint
@@ -461,14 +453,11 @@ export function ChatComposer({
     }
     if (dismissed.current) return
 
-    // Workflows first, and only for the message's first word — the one place
-    // `@<workflow>` runs anything (`lib/workflows/invoke.ts`).
-    const items = [
-      ...(text.slice(0, query.from).trim() === ""
-        ? rankPlainMentions(workflowRows(workflows), query.filter, MAX_ROWS)
-        : []),
-      ...rankPlainMentions(chatMentions(attachRoot), query.filter, MAX_ROWS),
-    ].slice(0, MAX_ROWS)
+    const items = rankPlainMentions(
+      chatMentions(attachRoot),
+      query.filter,
+      MAX_ROWS
+    )
     if (items.length === 0) {
       setMenu(null)
       return
@@ -703,13 +692,7 @@ export function ChatComposer({
     refresh(next, 1)
   }
 
-  // The workflow this draft would run is tinted as one, ahead of the paths so
-  // a folder of the same name does not claim it; one further in is a word.
-  const invoked = workflowInvocation(draft, workflows)
-  const segments = markMentions(draft, [
-    ...(invoked ? workflowRows([invoked.workflow]) : []),
-    ...chatMentions(attachRoot),
-  ])
+  const segments = markMentions(draft, chatMentions(attachRoot))
 
   return (
     <div className="relative">
@@ -1841,14 +1824,6 @@ function MentionMenu({
  * two lines of text, so it cannot be baseline-aligned to either.
  */
 function MentionIcon({ of }: { of: PlainMention }) {
-  if (of.kind === "workflow") {
-    return (
-      <WorkflowIcon
-        aria-hidden
-        className="mt-px size-3.5 shrink-0 opacity-70"
-      />
-    )
-  }
   if (of.kind === "directory") {
     return <Folder aria-hidden className="mt-px size-3.5 shrink-0 opacity-70" />
   }

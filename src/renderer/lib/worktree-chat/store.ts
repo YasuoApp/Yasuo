@@ -13,8 +13,6 @@ import {
   type WorkspaceFolder,
   type WorktreeChatOptions,
 } from "@shared/api"
-import { workflowInvocation } from "../workflows/invoke"
-import { useWorkflows } from "../workflows/store"
 import { localCommand } from "./command-text"
 import { marksUnread } from "./unread"
 import { useProjects } from "../projects"
@@ -185,13 +183,6 @@ type WorktreeChatState = {
   /** Puts a chat on screen, reading its lines the first time. */
   select: (id: string) => void
   /**
-   * Reads a chat's lines without putting it on screen — `select`'s read
-   * alone, for a pane that draws a chat somewhere other than the strip: the
-   * workflow editor shows the chat a Claude step ran in under its canvas, and
-   * `select` would move the pane, the project and the dock's shell with it.
-   */
-  read: (id: string) => void
-  /**
    * Forgets that a chat has anything unread in it.
    *
    * An action rather than something `select` does privately, because there is a
@@ -340,7 +331,7 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
   },
 
   select(id) {
-    const { openIds, chats } = get()
+    const { openIds, messages, chats } = get()
     const chat = chats.find((entry) => entry.id === id)
     set({
       openIds: openIds.includes(id) ? openIds : [...openIds, id],
@@ -377,29 +368,26 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
       useShells.getState().showFor(place.folderId)
     }
 
-    get().read(id)
-  },
-
-  read(id) {
     // Read once per run. The main process holds the lines and appends to them,
     // so a re-read on every tab switch would be a file read for an answer we
     // already have.
-    if (get().messages[id] || get().reading.includes(id)) return
-    set({ reading: [...get().reading, id] })
-    void window.desktop
-      .readWorktreeChat(id)
-      .then((lines) => {
-        set({ messages: { ...get().messages, [id]: lines } })
-      })
-      .catch((error: unknown) => {
-        console.error("Could not read that chat", error)
-      })
-      .finally(() => {
-        // In `finally` rather than beside the `set` above: a read that failed
-        // leaves no lines, and a chat left marked as reading would sit under
-        // a skeleton that never resolves.
-        set({ reading: get().reading.filter((entry) => entry !== id) })
-      })
+    if (!messages[id]) {
+      set({ reading: [...get().reading, id] })
+      void window.desktop
+        .readWorktreeChat(id)
+        .then((lines) => {
+          set({ messages: { ...get().messages, [id]: lines } })
+        })
+        .catch((error: unknown) => {
+          console.error("Could not read that chat", error)
+        })
+        .finally(() => {
+          // In `finally` rather than beside the `set` above: a read that failed
+          // leaves no lines, and a chat left marked as reading would sit under
+          // a skeleton that never resolves.
+          set({ reading: get().reading.filter((entry) => entry !== id) })
+        })
+    }
   },
 
   markRead(id) {
@@ -634,49 +622,6 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
       // A bare `/rename` renames nothing rather than blanking the title, which
       // is `rename`'s own rule for an empty name.
       get().rename(id, local.argument)
-      return
-    }
-
-    // `@<workflow>` at the head runs that workflow in this chat rather than
-    // sending the message — see `lib/workflows/invoke.ts`. Loaded here as
-    // well as by the studio, because a popped-out chat window has no studio.
-    await useWorkflows.getState().load()
-    const invoked = workflowInvocation(text, useWorkflows.getState().workflows)
-    if (invoked) {
-      // Drawn at once like any message, and written down by main rather than
-      // sent; nothing is marked `sending` — the workflow's own turns say so.
-      const add = (line: AssistantMessage) =>
-        set({
-          messages: {
-            ...get().messages,
-            [id]: [...(get().messages[id] ?? []), line],
-          },
-        })
-      add({
-        id: `local-${Date.now()}`,
-        role: "user",
-        text,
-        // The card's start — see `WorkflowBlock`.
-        workflow: { id: invoked.workflow.id, name: invoked.workflow.name },
-      })
-      try {
-        if (!(await get().save(id)))
-          throw new Error("Could not start that chat.")
-        await useWorkflows.getState().run(invoked.workflow.id, {
-          chatId: id,
-          message: text,
-          input: invoked.input,
-        })
-      } catch (error) {
-        // Refused before it ran, so main wrote nothing: the card is closed
-        // here, with main's sentence on it.
-        add({
-          id: `local-error-${Date.now()}`,
-          role: "workflow",
-          status: "failed",
-          error: error instanceof Error ? error.message : String(error),
-        })
-      }
       return
     }
 
@@ -1018,62 +963,53 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
               role: "assistant",
               text: event.text,
             }
-          : event.type === "prompt"
+          : event.type === "thinking"
             ? {
                 id: `s${Date.now()}-${Math.random()}`,
-                role: "user",
+                role: "thinking",
                 text: event.text,
-                step: event.step,
               }
-            : event.type === "step" || event.type === "workflow"
-              ? { id: `s${Date.now()}-${Math.random()}`, ...event.line }
-              : event.type === "thinking"
+            : event.type === "tool"
+              ? {
+                  id: `s${Date.now()}-${Math.random()}`,
+                  role: "tool",
+                  name: event.name,
+                  summary: event.summary,
+                  toolId: event.toolId,
+                  title: event.title,
+                  path: event.path,
+                  input: event.input,
+                  stat: event.stat,
+                  change: event.change,
+                }
+              : event.type === "usage"
                 ? {
                     id: `s${Date.now()}-${Math.random()}`,
-                    role: "thinking",
-                    text: event.text,
+                    role: "usage",
+                    usage: event.usage,
                   }
-                : event.type === "tool"
+                : event.type === "decision"
                   ? {
                       id: `s${Date.now()}-${Math.random()}`,
-                      role: "tool",
-                      name: event.name,
-                      summary: event.summary,
-                      toolId: event.toolId,
-                      title: event.title,
-                      path: event.path,
-                      input: event.input,
-                      stat: event.stat,
-                      change: event.change,
+                      role: "ask",
+                      text: event.text,
                     }
-                  : event.type === "usage"
+                  : event.type === "error"
                     ? {
                         id: `s${Date.now()}-${Math.random()}`,
-                        role: "usage",
-                        usage: event.usage,
+                        role: "error",
+                        text: event.text,
                       }
-                    : event.type === "decision"
+                    : event.type === "compact"
                       ? {
                           id: `s${Date.now()}-${Math.random()}`,
-                          role: "ask",
-                          text: event.text,
+                          role: "compact",
+                          trigger: event.trigger,
+                          preTokens: event.preTokens,
+                          postTokens: event.postTokens,
+                          durationMs: event.durationMs,
                         }
-                      : event.type === "error"
-                        ? {
-                            id: `s${Date.now()}-${Math.random()}`,
-                            role: "error",
-                            text: event.text,
-                          }
-                        : event.type === "compact"
-                          ? {
-                              id: `s${Date.now()}-${Math.random()}`,
-                              role: "compact",
-                              trigger: event.trigger,
-                              preTokens: event.preTokens,
-                              postTokens: event.postTokens,
-                              durationMs: event.durationMs,
-                            }
-                          : null
+                      : null
 
       if (!line) return
       set({
