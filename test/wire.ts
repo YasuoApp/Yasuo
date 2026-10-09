@@ -31,7 +31,7 @@ section("bytes")
   )
 
   const big = new Uint8Array(200_000).map((_, index) => index % 256)
-  const bigBack = decodeWire<Uint8Array[]>(encodeWire([big]))[0]
+  const bigBack = decodeWire<Uint8Array[]>(encodeWire([big]))[0]!
   check(
     "past one chunk of String.fromCharCode",
     bigBack.length === big.length && bigBack[199_999] === big[199_999]
@@ -51,7 +51,9 @@ section("undefined")
   check("keeps its place in an argument list", args.length === 3, args)
   check("and is undefined rather than null", args[1] === undefined, args)
 
-  const spread = ((a: unknown, b = "default") => [a, b])(...args)
+  const spread = ((a: unknown, b = "default") => [a, b])(
+    ...(args as [unknown, string?])
+  )
   check("so a default parameter applies", spread[1] === "default", spread)
 
   const object = decodeWire<{ value?: unknown }>(

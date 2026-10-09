@@ -41,7 +41,7 @@ export function runsOf(lines: (string | null)[]): BlameRun[] {
       open.to = i + 1
       continue
     }
-    open = id === null ? null : { from: i, to: i + 1, snapshotId: id }
+    open = id == null ? null : { from: i, to: i + 1, snapshotId: id }
     if (open) runs.push(open)
   }
   return runs

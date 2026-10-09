@@ -95,7 +95,7 @@ function tintsOf(blame: ChatBlame, state: EditorState): DecorationSet {
   const lines = Math.min(blame.lines.length, state.doc.lines)
   for (let i = 0; i < lines; i += 1) {
     const id = blame.lines[i]
-    if (id === null) continue
+    if (id == null) continue
     const snapshot = blame.snapshots[id]
     if (!snapshot) continue
     const line = state.doc.line(i + 1)

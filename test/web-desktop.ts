@@ -24,7 +24,9 @@ const preload = await readFile(
   "utf8"
 )
 const body = preload.slice(preload.indexOf("const api: DesktopApi = {"))
-const preloadKeys = [...body.matchAll(/^ {2}(\w+):/gm)].map((match) => match[1])
+const preloadKeys = [...body.matchAll(/^ {2}(\w+):/gm)].map(
+  (match) => match[1]!
+)
 
 const calls: { channel: string; args: unknown[] }[] = []
 const subscribed: string[] = []
