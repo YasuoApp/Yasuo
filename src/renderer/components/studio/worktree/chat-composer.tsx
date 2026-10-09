@@ -6,6 +6,7 @@ import {
   type ClipboardEvent,
   type ComponentProps,
   type KeyboardEvent,
+  type PointerEvent,
   type ReactNode,
   type RefObject,
 } from "react"
@@ -66,6 +67,7 @@ import { selectionLabel, selectionMention } from "@/lib/files/selected-lines"
 import { useGitStatus } from "@/lib/files/git-status"
 import { iconFor } from "@/lib/files/icons"
 import { useFiles } from "@/lib/files/store"
+import { useSettings } from "@/lib/settings"
 import { cn } from "@/lib/utils"
 import {
   accountLine,
@@ -208,6 +210,14 @@ function keepSelection(next: Menu, was: Menu | null): Menu {
 // holding room for; it is in the toolbar under the field now, so the text has
 // the whole width back.
 const FIELD = "px-2.5 pt-2 pb-1 text-xs leading-relaxed md:text-xs"
+
+/** The field's own `min-h-14` and `max-h-48`: a dragged height below the one
+ * is a box that no longer shows a line, and up to the other the text still
+ * grows the field by itself. */
+const FIELD_MIN = 56
+const FIELD_GROWS_TO = 192
+/** Of the window, so a composer dragged up cannot push the transcript off. */
+const FIELD_MAX_SHARE = 0.7
 
 /** The hue each kind is known by — the Explorer's own token, since that is the
  * panel a path belongs to, with a folder drawn in it more faintly than a file
@@ -405,6 +415,39 @@ export function ChatComposer({
 
   const field = useRef<HTMLTextAreaElement>(null)
   const mirror = useRef<HTMLDivElement>(null)
+
+  /**
+   * The height dragged by the box's top edge — the edge rather than the
+   * textarea's own corner, because the composer sits at the foot of the pane and
+   * grows upwards. A floor rather than a fixed height: up to `FIELD_GROWS_TO`
+   * the text still grows the field past it, and past that it scrolls. Held here
+   * while dragging and written once on release, since every write is the whole
+   * settings bag.
+   */
+  const savedHeight = useSettings((state) => state.composerHeight)
+  const setComposerHeight = useSettings((state) => state.setComposerHeight)
+  const [dragHeight, setDragHeight] = useState<number | null>(null)
+  const drag = useRef<{ y: number; height: number } | null>(null)
+  const height = dragHeight ?? savedHeight
+
+  const onResizeStart = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0 || !field.current) return
+    event.preventDefault()
+    event.currentTarget.setPointerCapture(event.pointerId)
+    drag.current = { y: event.clientY, height: field.current.offsetHeight }
+  }
+  const onResizeMove = (event: PointerEvent<HTMLDivElement>) => {
+    if (!drag.current) return
+    const max = Math.max(FIELD_MIN, window.innerHeight * FIELD_MAX_SHARE)
+    const next = drag.current.height + drag.current.y - event.clientY
+    setDragHeight(Math.round(Math.min(max, Math.max(FIELD_MIN, next))))
+  }
+  const onResizeEnd = () => {
+    if (!drag.current) return
+    drag.current = null
+    if (dragHeight !== null) setComposerHeight(dragHeight)
+    setDragHeight(null)
+  }
   /** Where the caret has to be put once a pick has re-rendered the value. */
   const pending = useRef<number | null>(null)
   /** Set by Escape and cleared once the caret leaves the query, so a dismissed
@@ -758,6 +801,28 @@ export function ChatComposer({
           "focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50"
         )}
       >
+        {/* Straddling the top border, so it is found by aiming at the edge.
+            A double-click gives the field back to its text. */}
+        <div
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label="Resize the composer"
+          title="Drag to resize · double-click to reset"
+          onPointerDown={onResizeStart}
+          onPointerMove={onResizeMove}
+          onPointerUp={onResizeEnd}
+          onPointerCancel={onResizeEnd}
+          onDoubleClick={() => setComposerHeight(null)}
+          className="group absolute inset-x-3 -top-1.5 z-10 flex h-3 cursor-ns-resize items-center justify-center"
+        >
+          <span
+            className={cn(
+              "h-1 w-8 rounded-full bg-border opacity-0 transition-opacity group-hover:opacity-100",
+              dragHeight !== null && "opacity-100"
+            )}
+          />
+        </div>
+
         {/* The mirror is positioned against the field alone rather than against
             the whole box: `inset-0` used to be the box, and with a toolbar in it
             the tint behind the last line would have been drawn over the
@@ -849,6 +914,14 @@ export function ChatComposer({
             rows={3}
             spellCheck={false}
             placeholder={placeholder}
+            style={
+              height === null
+                ? undefined
+                : {
+                    minHeight: height,
+                    maxHeight: Math.max(height, FIELD_GROWS_TO),
+                  }
+            }
             className={cn(
               FIELD,
               "relative block field-sizing-content max-h-48 min-h-14 w-full resize-none",

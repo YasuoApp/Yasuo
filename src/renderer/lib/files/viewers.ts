@@ -1,4 +1,3 @@
-import { isEnvFileName } from "./env-doc"
 import { nameOf } from "./paths"
 
 /**
@@ -24,7 +23,7 @@ import { nameOf } from "./paths"
  * a menu entry that appears and disappears with the working tree is one nobody
  * can learn. It is never the default: a diff is what somebody asks for.
  */
-export type Viewer = "image" | "text" | "markdown" | "blocks" | "env" | "diff"
+export type Viewer = "image" | "text" | "markdown" | "blocks" | "diff"
 
 /**
  * What the studio will draw as a picture.
@@ -69,16 +68,6 @@ const MARKDOWN_EXTENSIONS = new Set(["md", "markdown"])
 
 export function isMarkdown(filePath: string): boolean {
   return MARKDOWN_EXTENSIONS.has(extensionOf(filePath))
-}
-
-/**
- * What the studio will open as a table of variables.
- *
- * By name rather than by extension: `.env` is a dotfile with no extension, and
- * in `.env.local` the extension is the environment's name, not the format's.
- */
-export function isEnvFile(filePath: string): boolean {
-  return isEnvFileName(nameOf(filePath))
 }
 
 /**
@@ -133,11 +122,6 @@ export function viewersFor(filePath: string): Viewer[] {
   // note whose text somebody needs to see.
   if (isNote(filePath)) return ["blocks", "text", "diff"]
 
-  // The table first: a `.env` is opened to change a value, and the rows are
-  // what makes that a field rather than a hunt for the right `=`. The text is a
-  // right-click away for the line the table keeps verbatim.
-  if (isEnvFile(filePath)) return ["env", "text", "diff"]
-
   return ["text", "diff"]
 }
 
@@ -164,6 +148,5 @@ const FIXED_LABELS: Record<Exclude<Viewer, "blocks">, string> = {
   image: "Image preview",
   text: "Text editor",
   markdown: "Markdown preview",
-  env: "Env editor",
   diff: "Diff",
 }

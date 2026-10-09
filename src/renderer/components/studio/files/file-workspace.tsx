@@ -33,7 +33,6 @@ import { FileImage } from "./file-image"
 import { FileImageDiff } from "./file-image-diff"
 import { FileMarkdown } from "./file-markdown"
 import { FileBlocks } from "./file-blocks"
-import { FileEnv } from "./file-env"
 
 /**
  * The open files, one editor each.
@@ -452,12 +451,6 @@ function Body({
   }
 
   if (viewer === "markdown") return <FileMarkdown text={doc.text} path={path} />
-
-  // `text` rather than what was read, unlike the block editor: the table
-  // re-reads it when it moves under it, and not when it was the writer.
-  if (viewer === "env") {
-    return <FileEnv key={path} text={doc.text} onChange={onChange} />
-  }
 
   if (viewer === "blocks") {
     return (

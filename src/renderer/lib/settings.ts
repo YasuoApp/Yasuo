@@ -65,6 +65,13 @@ type Stored = {
    * it knows about a line, and somebody who finds it noise turns it off once.
    */
   gitBlame: boolean
+  /**
+   * The chat composer's field, dragged taller by its top edge — in pixels, or
+   * null for the height its text gives it. One for every chat rather than per
+   * chat: it is how much room somebody likes to write in, not something about a
+   * conversation.
+   */
+  composerHeight: number | null
 } & Appearance
 
 function isStored(value: unknown): value is Stored {
@@ -102,7 +109,10 @@ function isStored(value: unknown): value is Stored {
     (record.fontSize === undefined || isFontSize(record.fontSize)) &&
     (record.density === undefined || isDensity(record.density)) &&
     (record.onboarded === undefined || typeof record.onboarded === "boolean") &&
-    (record.gitBlame === undefined || typeof record.gitBlame === "boolean")
+    (record.gitBlame === undefined || typeof record.gitBlame === "boolean") &&
+    (record.composerHeight === undefined ||
+      record.composerHeight === null ||
+      typeof record.composerHeight === "number")
   )
 }
 
@@ -151,6 +161,7 @@ type SettingsState = Stored & {
   setDensity: (density: Appearance["density"]) => void
   setOnboarded: (onboarded: boolean) => void
   setGitBlame: (on: boolean) => void
+  setComposerHeight: (height: number | null) => void
   /** Reads the stored preferences. Called once, at launch. */
   restore: () => Promise<void>
 }
@@ -190,6 +201,7 @@ export const useSettings = create<SettingsState>((set, get) => {
       density,
       onboarded,
       gitBlame,
+      composerHeight,
     } = get()
     remember(SETTINGS_KEY, {
       groupTabs,
@@ -205,6 +217,7 @@ export const useSettings = create<SettingsState>((set, get) => {
       density,
       onboarded,
       gitBlame,
+      composerHeight,
     })
   }
 
@@ -223,6 +236,7 @@ export const useSettings = create<SettingsState>((set, get) => {
     // preference somebody already made.
     onboarded: false,
     gitBlame: true,
+    composerHeight: null,
     chatNotifications: true,
     chatTray: true,
     loaded: false,
@@ -300,6 +314,11 @@ export const useSettings = create<SettingsState>((set, get) => {
 
     setGitBlame(gitBlame) {
       set({ gitBlame })
+      save()
+    },
+
+    setComposerHeight(composerHeight) {
+      set({ composerHeight })
       save()
     },
 

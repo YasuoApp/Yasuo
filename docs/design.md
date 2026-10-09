@@ -4712,6 +4712,36 @@ somebody's writing out from under them, and a note worth keeping is a `.note`
 file in a repository now — copy it in and the Explorer opens it in the same
 editor.
 
+## The Env editor, removed
+
+**A `.env` used to open as a table** — a row per variable, a field for its
+value, the comments and blank lines kept verbatim by a parser and printer of
+its own (`lib/files/env-doc.ts`, `file-env.tsx`, an `env` viewer first in the
+file's menu). It is gone, and a `.env` opens in the text editor like every other
+file.
+
+The table was a second editor for a format that is one line deep. Everything it
+did, the text editor already does once the file is coloured: the key, the `=`
+and the value are told apart at a glance, and a value is changed by typing it.
+What it cost was a round trip through a parser that had to reproduce every
+spelling dotenv accepts — `export`, three quotes, a value running onto the next
+line, a `#` that is a comment after a space and a fragment inside a URL — or
+rewrite somebody's file on the way back.
+
+**What replaced it is highlighting**: `lib/editor-dotenv.ts`, a stream grammar
+registered ahead of `@codemirror/language-data` in `lib/editor-languages.ts`,
+which has none — the nearest it has, `properties`, colours neither `export` nor
+a `${VAR}`. Matched by name (`.env`, `.env.*`), because a dotfile has no
+extension and in `.env.local` the extension is the environment's. Being in the
+registry is what gives the diff and a ` ```env ` fence in a chat the same
+colours. `test/dotenv.ts` replaces `test/env-doc.ts`.
+
+A **Makefile** is the second name the registry has no answer for — its one
+`make` is CMake — so `lib/editor-makefile.ts` sits beside it the same way:
+`Makefile`, `makefile`, `GNUmakefile`, `*.mk` and `*.mak`, a line classified
+once as a recipe, a variable or a rule, and `$(…)` coloured wherever it falls
+(`test/makefile.ts`).
+
 ## The block editor
 
 The pane behind a `.note` or a `.md` in the Explorer (`files/file-blocks.tsx`

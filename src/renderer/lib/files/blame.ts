@@ -68,14 +68,12 @@ function titleOf(snapshot: Snapshot, chats: ChatBlame["chats"]): string {
 }
 
 /** The gutter's short label: the chat and the turn. */
-export function labelOf(
-  snapshot: Snapshot,
-  chats: ChatBlame["chats"]
-): string {
+export function labelOf(snapshot: Snapshot, chats: ChatBlame["chats"]): string {
   const title = titleOf(snapshot, chats)
   // A `before` snapshot is the tree as a turn started, so its lines are the
   // previous turn's work at the latest — "before turn n" is the honest word.
-  if (snapshot.kind === "before") return `${title} · before turn ${snapshot.turn + 1}`
+  if (snapshot.kind === "before")
+    return `${title} · before turn ${snapshot.turn + 1}`
   if (snapshot.kind === "rewind") return `${title} · rewind`
   return `${title} · turn ${snapshot.turn}`
 }
@@ -83,10 +81,7 @@ export function labelOf(
 const PROMPT_EXCERPT = 160
 
 /** The hover: the label, then the prompt that started the turn, then when. */
-export function hoverOf(
-  snapshot: Snapshot,
-  chats: ChatBlame["chats"]
-): string {
+export function hoverOf(snapshot: Snapshot, chats: ChatBlame["chats"]): string {
   const lines = [labelOf(snapshot, chats)]
   const prompt = snapshot.prompt?.replace(/\s+/g, " ").trim()
   if (prompt) {

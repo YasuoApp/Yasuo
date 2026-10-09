@@ -1,5 +1,5 @@
 import { LanguageDescription } from "@codemirror/language"
-import { languages } from "@codemirror/language-data"
+import { languages as registry } from "@codemirror/language-data"
 import type { Extension } from "@codemirror/state"
 
 import { nameOf } from "./files/paths"
@@ -24,6 +24,29 @@ import { nameOf } from "./files/paths"
  * is one small chunk off local disk. That is the trade that stopped this app
  * carrying four megabytes of grammars for a session that opens one JSON file.
  */
+
+/**
+ * The registry, and the two languages it lacks. A `.env` matches nothing there
+ * — it is a dotfile with no extension, and in `.env.local` the extension is the
+ * environment's name — so it is matched by name; a Makefile is a name too. Both
+ * go ahead of the registry so nothing in it can claim the file first.
+ */
+const languages: readonly LanguageDescription[] = [
+  LanguageDescription.of({
+    name: "dotenv",
+    alias: ["env"],
+    filename: /^\.env(\..+)?$/i,
+    load: () => import("./editor-dotenv").then((module) => module.dotenv()),
+  }),
+  LanguageDescription.of({
+    name: "Makefile",
+    alias: ["make", "mk"],
+    extensions: ["mk", "mak"],
+    filename: /^(?:GNUmakefile|makefile)$/i,
+    load: () => import("./editor-makefile").then((module) => module.makefile()),
+  }),
+  ...registry,
+]
 
 /**
  * The description for a file, by name then by extension.

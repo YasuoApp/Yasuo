@@ -37,11 +37,7 @@ export type PipelineTemplate = {
 }
 
 export type RunStageStatus =
-  | "pending"
-  | "waiting"
-  | "running"
-  | "done"
-  | "failed"
+  "pending" | "waiting" | "running" | "done" | "failed"
 
 export type RunStage = {
   stageId: string
@@ -57,11 +53,7 @@ export type RunStage = {
 }
 
 export type PipelineRunStatus =
-  | "running"
-  | "waiting"
-  | "done"
-  | "failed"
-  | "stopped"
+  "running" | "waiting" | "done" | "failed" | "stopped"
 
 export type PipelineRun = {
   id: string
