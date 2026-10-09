@@ -134,13 +134,13 @@ const api: DesktopApi = {
     ipcRenderer.invoke(IPC.saveClaudeProfiles, profiles),
   claudeAccount: (configDir) =>
     ipcRenderer.invoke(IPC.claudeAccount, configDir),
+  claudeVersions: () => ipcRenderer.invoke(IPC.claudeVersions),
   claudeLogin: (configDir, cols, rows) =>
     ipcRenderer.invoke(IPC.claudeLogin, configDir, cols, rows),
   listWorktreeChats: () => ipcRenderer.invoke(IPC.listWorktreeChats),
   createWorktreeChat: (place, seed) =>
     ipcRenderer.invoke(IPC.createWorktreeChat, place, seed),
   readWorktreeChat: (id) => ipcRenderer.invoke(IPC.readWorktreeChat, id),
-  chatDigests: () => ipcRenderer.invoke(IPC.chatDigests),
   chatSpend: () => ipcRenderer.invoke(IPC.chatSpend),
   saveTextFile: (input) => ipcRenderer.invoke(IPC.saveTextFile, input),
   openChatWindow: (chatId) => ipcRenderer.invoke(IPC.openChatWindow, chatId),

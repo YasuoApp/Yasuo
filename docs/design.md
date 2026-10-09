@@ -2398,7 +2398,7 @@ chat) can answer. The costs that argument named are paid deliberately here:
   summary says when it stopped.
 - **Transcripts are not made resident.** `WorktreeChats.search` uses the lines
   already held for an open chat, and for the rest keeps only the two voices
-  against the chat's `updatedAt` (`said`) — the bargain `digests` makes.
+  against the chat's `updatedAt` (`said`) — the bargain `spend` makes.
 
 What a chat row searches is what `⌘F` searches — the two voices, not tool
 summaries or thinking — for the same reason. **A file row** opens the file with
@@ -3662,9 +3662,8 @@ incomplete, over a list short enough to read, drawn as a row of `Untitled`
 chips that had to be hovered to be told apart. It cost a line of the panel's
 height for an answer somebody could not trust to be whole.
 
-What stays is the fold it read: `main/chat-digest.ts` still answers
-`ChatDigest.paths` beside the spend the system bar sums, and nothing in the
-renderer reads the paths any more.
+The fold it read went later, with the system bar's total — § What the chats
+have cost, removed.
 
 ### Commits
 
@@ -4272,6 +4271,18 @@ by both, with the same proportional side padding — because these are two views
 one file and switching between them must not move the text. `.mdx` is
 deliberately not offered one: it is markdown with JSX in it, and a commonmark
 parser drops the component tags rather than drawing them.
+
+**An `.html` makes the same choice**: it opens as **HTML preview**, with the
+**Text editor** after it in the menu and as `Edit` in the pane header's switch
+beside `Preview` (and `Diff`, when there is one), and a full-screen button over
+the page. The page is
+a `srcdoc` frame drawn off the same buffer, sandboxed with scripts allowed but
+**without `allow-same-origin`**, so a page's code runs in an opaque origin and
+cannot reach `window.desktop` or anything else of the window around it. Its
+relative pictures come in as `data:` URLs the way the markdown preview's do; a
+relative stylesheet or script does not, since nothing in main reads text
+relative to a document and the renderer does not build paths — a page that
+needs its own CSS to look right is one to open in a browser.
 
 **A `.note` is the third file, and the only one the studio invented.** It opens
 in the block editor — the one the Notes panel brought and left behind (see
@@ -4994,34 +5005,20 @@ The app's share is every process Electron runs, added up. The dock's shells are
 not in it: a pty is a child of the daemon, and counting it would make the studio
 look responsible for work the user started deliberately.
 
-### What the chats have cost
+### What the chats have cost, removed
 
-One more figure at that end of the row, beside the app's own: what every chat in
-the workspace has been billed, added up from the turns' own usage lines
-(`spentIn` over `ChatDigest`). It is here because it is the same question the
-meters answer — what is this costing — asked of the other resource the studio
-spends, and because there was nowhere else for it: a total belongs to the
-**workspace**, and every panel in this window is about one project. A chat's own
-total is still on its composer, where the conversation it is about is.
+The right-hand end of the row used to carry one more figure: what every chat in
+the workspace had been billed since its first, summed from the turns' own usage
+lines (`spentIn` over a per-chat `ChatDigest`, read through `chatDigests`).
 
-**Since the beginning, not today**, and that is a decision rather than a
-shortcut. A usage line carries what a turn cost and not when it ran (see
-`TurnUsage`), so "today" could only be worked out from a chat's `updatedAt` — the
-time of its _last_ line, which for a conversation resumed this morning would book
-last week's turns as today's. A figure that is honest and coarse beats one that
-is precise about the wrong thing. The breakdown per project is on the tooltip,
-where there is width for it, along with the count of turns that reported **no**
-cost: those are kept out of the sum and named, because a turn that crashed before
-it had a figure is not a free turn.
-
-It is drawn only once there is something to say. A `$0.00` in the corner of a
-fresh workspace is a claim, and "nothing has been spent" and "nothing has been
-read yet" are two different states.
-
-Nothing polls for it. The fold is re-read when the chat listing moves — which is
-what the end of a turn does — and again off the `Changes` list's own watcher,
-which needs the same call for its chat filter. Both are `chatDigests`, and
-neither is a timer.
+It is deleted — the figure, `lib/worktree-chat/digests.ts`, the `chatDigests`
+channel, `WorktreeChats.digests` and its cache, `ChatDigest`, and the
+`pathsTouched` / `spendOf` / `digestOf` folds with their tests. A lifetime total
+in the corner is a number that only grows: glanced at all day, it answers no
+question anybody is asking in the moment, and the meters beside it are about
+this second. Where the money went is the **cost dashboard**'s question, by day,
+project, model and chat, and it keeps its own fold (`spendRows`); a chat's own
+total is still on its composer, beside the conversation it is about.
 
 ### The plan's own limits
 

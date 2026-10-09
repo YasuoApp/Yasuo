@@ -18,7 +18,7 @@ import {
 import { isStudioShortcut } from "@/lib/shortcuts"
 import { useStudio } from "@/lib/store"
 import { cn } from "@/lib/utils"
-import { blockOf, blocksOf } from "@/lib/worktree-chat/activity"
+import { blockOf, blocksOf, splitSubagents } from "@/lib/worktree-chat/activity"
 import { useComposerBus } from "@/lib/worktree-chat/composer-bus"
 import { clearFind, paintFind, rectOfHit } from "@/lib/worktree-chat/find-marks"
 import { readImage } from "@/lib/worktree-chat/images"
@@ -33,7 +33,7 @@ import { ChatFind } from "./chat-find"
 import { ChatOutline } from "./chat-outline"
 import { ChatComposer, type ChatComposerHandle } from "./chat-composer"
 import { ChatActivity, DayDivider } from "./chat-activity"
-import { ChatMessage } from "./chat-message"
+import { ChatMessage, SubagentSteps } from "./chat-message"
 import { ChatSkeleton, ChatTranscriptSkeleton } from "./chat-skeleton"
 import { WorktreeWelcome } from "./worktree-welcome"
 
@@ -504,7 +504,26 @@ function Conversation({
     return () => observer.disconnect()
   }, [empty, reading])
 
-  const blocks = useMemo(() => blocksOf(lines), [lines])
+  /* A subagent's lines are drawn under the row that ran it, so the transcript
+     the pane lays out — and the find searches — is the main loop's alone. */
+  const { own, steps } = useMemo(() => splitSubagents(lines), [lines])
+  const blocks = useMemo(() => blocksOf(own), [own])
+
+  /*
+   * Where the running turn starts: blocks past the last thing the user said.
+   * Only those folds may say a call is *running* — one with no result in an
+   * earlier turn was cut off, and would spin for ever. Working is the
+   * skeleton's own test, so a background subagent keeps its row spinning for
+   * exactly as long as the loader below does.
+   */
+  const working = sending || (agents ?? []).length > 0
+  const liveFrom = useMemo(() => {
+    for (let index = blocks.length - 1; index >= 0; index -= 1) {
+      const block = blocks[index]!
+      if (block.kind === "line" && block.line.role === "user") return index
+    }
+    return -1
+  }, [blocks])
 
   /*
    * The table of contents — see `ChatOutline`. Which entry is current is read
@@ -565,8 +584,8 @@ function Conversation({
   /** The search, but only while it is this chat's — see `find`. */
   const finding = find?.chatId === chatId ? find : null
   const hits = useMemo(
-    () => (finding ? hitsIn(lines, finding.query) : []),
-    [finding, lines]
+    () => (finding ? hitsIn(own, finding.query) : []),
+    [finding, own]
   )
   const at = finding && hits.length > 0 ? finding.at % hits.length : 0
   const current = hits[at] ?? null
@@ -822,59 +841,64 @@ function Conversation({
                 ref={content}
                 className="transcript-gap mx-auto flex w-full max-w-2xl flex-col"
               >
-                {blocks.map((block, index) => (
-                  /*
-                   * A wrapper per block, for the one thing a block cannot carry
-                   * itself: where it is. The palette's search opens a chat *at* a
-                   * line, and both halves of landing on it — the scroll above and
-                   * the ring below — need a node to find and mark. Drawn for every
-                   * block rather than only the found one, so the transcript's
-                   * layout does not change under a reader when one is.
-                   *
-                   * The day divider sits between two blocks rather than inside
-                   * either, so neither block's position moves when one appears.
-                   */
-                  <Fragment key={block.id}>
-                    {index > 0 && (
-                      <DayDivider before={blocks[index - 1]!} after={block} />
-                    )}
-                    <div
-                      data-block={block.id}
-                      /*
-                       * A match is marked on the **words**, not on the block — see
-                       * `paintFind`, which paints them into the highlight registry.
-                       *
-                       * The ring is what is left of that for the one case the words
-                       * cannot answer: a **fold**. A turn's working is collapsed, so a
-                       * message the model wrote mid-turn has no text on screen to
-                       * paint — and a match that is counted, scrolled to and then
-                       * invisible is worse than one that was never counted. So a fold
-                       * holding a match says so, and says harder when it is the one
-                       * the arrows are on. An open fold gets both, which is the honest
-                       * answer for a container: the ring is where, the highlight is
-                       * what.
-                       */
-                      className={cn(
-                        "rounded-lg",
-                        block.kind === "activity" &&
-                          foundBlocks.has(block.id) &&
-                          "ring-1 ring-ring/25 ring-offset-4 ring-offset-background",
-                        block.kind === "activity" &&
-                          block.id === currentBlock &&
-                          "ring-2 ring-ring/70"
+                <SubagentSteps value={steps}>
+                  {blocks.map((block, index) => (
+                    /*
+                     * A wrapper per block, for the one thing a block cannot carry
+                     * itself: where it is. The palette's search opens a chat *at* a
+                     * line, and both halves of landing on it — the scroll above and
+                     * the ring below — need a node to find and mark. Drawn for every
+                     * block rather than only the found one, so the transcript's
+                     * layout does not change under a reader when one is.
+                     *
+                     * The day divider sits between two blocks rather than inside
+                     * either, so neither block's position moves when one appears.
+                     */
+                    <Fragment key={block.id}>
+                      {index > 0 && (
+                        <DayDivider before={blocks[index - 1]!} after={block} />
                       )}
-                    >
-                      {block.kind === "activity" ? (
-                        <ChatActivity of={block} />
-                      ) : (
-                        <ChatMessage
-                          of={block.line}
-                          queued={queued?.includes(block.line.id) === true}
-                        />
-                      )}
-                    </div>
-                  </Fragment>
-                ))}
+                      <div
+                        data-block={block.id}
+                        /*
+                         * A match is marked on the **words**, not on the block — see
+                         * `paintFind`, which paints them into the highlight registry.
+                         *
+                         * The ring is what is left of that for the one case the words
+                         * cannot answer: a **fold**. A turn's working is collapsed, so a
+                         * message the model wrote mid-turn has no text on screen to
+                         * paint — and a match that is counted, scrolled to and then
+                         * invisible is worse than one that was never counted. So a fold
+                         * holding a match says so, and says harder when it is the one
+                         * the arrows are on. An open fold gets both, which is the honest
+                         * answer for a container: the ring is where, the highlight is
+                         * what.
+                         */
+                        className={cn(
+                          "rounded-lg",
+                          block.kind === "activity" &&
+                            foundBlocks.has(block.id) &&
+                            "ring-1 ring-ring/25 ring-offset-4 ring-offset-background",
+                          block.kind === "activity" &&
+                            block.id === currentBlock &&
+                            "ring-2 ring-ring/70"
+                        )}
+                      >
+                        {block.kind === "activity" ? (
+                          <ChatActivity
+                            of={block}
+                            live={working && index > liveFrom}
+                          />
+                        ) : (
+                          <ChatMessage
+                            of={block.line}
+                            queued={queued?.includes(block.line.id) === true}
+                          />
+                        )}
+                      </div>
+                    </Fragment>
+                  ))}
+                </SubagentSteps>
                 {/* At the end of the transcript rather than over it: it is the turn
                 asking, so it belongs where the turn had got to. */}
                 {ask && (

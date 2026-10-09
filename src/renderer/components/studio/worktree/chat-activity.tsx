@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react"
-import { ChevronRight } from "lucide-react"
+import { ChevronRight, CircleAlert, Loader2 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import {
@@ -37,16 +37,25 @@ import { marksOf, toolMark } from "./chat-marks"
  */
 export function ChatActivity({
   of,
+  live = false,
 }: {
   of: Extract<ChatBlock, { kind: "activity" }>
+  /** Whether this fold is the running turn's, which is the only time a call
+   * with no result is still going rather than cut off. */
+  live?: boolean
 }) {
   return (
-    <Fold summary={summaryOf(of.counts)} lines={of.lines}>
+    <Fold counts={of.counts} lines={of.lines} live={live}>
       {rowsOf(of.lines).map((row) =>
         row.kind === "line" ? (
           <ChatMessage key={row.id} of={row.line} />
         ) : (
-          <ToolRun key={row.id} counts={row.counts} lines={row.lines} />
+          <ToolRun
+            key={row.id}
+            counts={row.counts}
+            lines={row.lines}
+            live={live}
+          />
         )
       )}
     </Fold>
@@ -89,14 +98,16 @@ export function DayDivider({
 function ToolRun({
   counts,
   lines,
+  live,
 }: {
   counts: ActivityCounts
   lines: AssistantMessage[]
+  live: boolean
 }) {
   return (
-    <Fold summary={summaryOf(counts)} lines={lines}>
+    <Fold counts={counts} lines={lines} live={live}>
       {lines.map((line) => (
-        <ChatMessage key={line.id} of={line} />
+        <ChatMessage key={line.id} of={line} live={live} />
       ))}
     </Fold>
   )
@@ -114,16 +125,19 @@ function ToolRun({
  * it is the mounting that `chat-message.tsx` is careful about.
  */
 function Fold({
-  summary,
+  counts,
   lines,
+  live,
   children,
 }: {
-  summary: string
+  counts: ActivityCounts
   lines: AssistantMessage[]
+  live: boolean
   children: ReactNode
 }) {
   const [open, setOpen] = useState(false)
   const marks = marksOf(lines)
+  const running = live && Boolean(counts.pending)
 
   return (
     <div className={cn(open && "space-y-3")}>
@@ -143,7 +157,22 @@ function Fold({
             open && "rotate-90"
           )}
         />
-        <span className="truncate">{summary}</span>
+        {/* Said on the closed line because closed is how a turn is watched:
+            what is running now, and that something failed, are the two
+            things that cannot wait for somebody to think of opening it. */}
+        {running && (
+          <Loader2
+            aria-hidden
+            className="size-3 shrink-0 animate-spin text-foreground/70"
+          />
+        )}
+        {!running && (counts.failed ?? 0) > 0 && (
+          <CircleAlert
+            aria-hidden
+            className="size-3 shrink-0 text-destructive/80"
+          />
+        )}
+        <span className="truncate">{summaryOf(counts, live)}</span>
         {/* Hidden once it is open: the rows below say the same thing in full,
             and a summary beside them is the same fact twice. */}
         {!open && marks.length > 0 && (

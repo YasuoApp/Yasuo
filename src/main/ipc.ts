@@ -20,6 +20,7 @@ import {
 import { agentCommands } from "./agent-commands"
 import { agentModels } from "./agent-models"
 import { claudeAccount } from "./claude-auth"
+import { claudeVersions } from "./claude-version"
 import { claudeBinary } from "./claude-bin"
 import { WorktreeChats } from "./worktree-chat"
 import * as files from "./files"
@@ -417,6 +418,8 @@ export function createIpc(host: Host): {
     claudeAccount(configDir)
   )
 
+  handle(IPC.claudeVersions, () => claudeVersions())
+
   /**
    * `claude auth login` for one profile's directory, in a pty of its own.
    *
@@ -470,8 +473,6 @@ export function createIpc(host: Host): {
   )
 
   handle(IPC.readWorktreeChat, (_event, id: string) => worktreeChats.read(id))
-
-  handle(IPC.chatDigests, () => worktreeChats.digests())
 
   handle(IPC.chatSpend, () => worktreeChats.spend())
 

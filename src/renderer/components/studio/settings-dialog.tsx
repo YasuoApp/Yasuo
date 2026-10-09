@@ -42,6 +42,7 @@ import {
   SANS_FONT_LABELS,
   sansFontFamily,
 } from "@/lib/appearance"
+import type { ClaudeVersions } from "@shared/api"
 import { useSettings } from "@/lib/settings"
 import { installLabel, pendingUpdate, useUpdates } from "@/lib/updates"
 import {
@@ -501,6 +502,13 @@ function UpdatesSection() {
   const install = useUpdates((state) => state.install)
   // Dismissal is the pill's business, not this page's.
   const update = useUpdates((state) => pendingUpdate(state, false))
+  const [versions, setVersions] = useState<ClaudeVersions | null>(null)
+
+  const askVersions = () =>
+    void window.desktop.claudeVersions().then(setVersions)
+  // Asked on open rather than at launch: the CLI updates itself, so the answer
+  // is worth having only when somebody is looking at it.
+  useEffect(askVersions, [])
 
   return (
     <Card>
@@ -518,12 +526,26 @@ function UpdatesSection() {
           variant="outline"
           size="sm"
           disabled={checking}
-          onClick={() => void refresh()}
+          onClick={() => {
+            askVersions()
+            void refresh()
+          }}
         >
           <RefreshCw className={cn("size-3.5", checking && "animate-spin")} />
           Check now
         </Button>
       </Row>
+
+      <Row
+        title="Claude Code"
+        description={
+          !versions
+            ? "Asking claude for its version."
+            : `CLI ${versions.cli ?? "not found"} · Agent SDK ${versions.sdk}${
+                versions.error ? ` — ${versions.error}` : ""
+              }`
+        }
+      />
 
       {update ? (
         <Row
@@ -862,7 +884,7 @@ function Row({
   /** A sentence, all but always — `ReactNode` because the update row swaps its
    * own for a progress bar while an install runs. */
   description: ReactNode
-  children: ReactNode
+  children?: ReactNode
 }) {
   return (
     <div className="flex gap-6 p-4">

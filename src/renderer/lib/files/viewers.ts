@@ -23,7 +23,7 @@ import { nameOf } from "./paths"
  * a menu entry that appears and disappears with the working tree is one nobody
  * can learn. It is never the default: a diff is what somebody asks for.
  */
-export type Viewer = "image" | "text" | "markdown" | "blocks" | "diff"
+export type Viewer = "image" | "text" | "markdown" | "html" | "blocks" | "diff"
 
 /**
  * What the studio will draw as a picture.
@@ -68,6 +68,13 @@ const MARKDOWN_EXTENSIONS = new Set(["md", "markdown"])
 
 export function isMarkdown(filePath: string): boolean {
   return MARKDOWN_EXTENSIONS.has(extensionOf(filePath))
+}
+
+/** What the studio will render as a page, in a sandboxed frame. */
+const HTML_EXTENSIONS = new Set(["html", "htm"])
+
+export function isHtml(filePath: string): boolean {
+  return HTML_EXTENSIONS.has(extensionOf(filePath))
 }
 
 /**
@@ -122,6 +129,11 @@ export function viewersFor(filePath: string): Viewer[] {
   // note whose text somebody needs to see.
   if (isNote(filePath)) return ["blocks", "text", "diff"]
 
+  // An `.html` opens as the page, for the `.md`'s reason: what somebody clicks
+  // one to find out is what it looks like. The source is `Edit` in the pane's
+  // header.
+  if (isHtml(filePath)) return ["html", "text", "diff"]
+
   return ["text", "diff"]
 }
 
@@ -148,5 +160,6 @@ const FIXED_LABELS: Record<Exclude<Viewer, "blocks">, string> = {
   image: "Image preview",
   text: "Text editor",
   markdown: "Markdown preview",
+  html: "HTML preview",
   diff: "Diff",
 }

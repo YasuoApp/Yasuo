@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { createContext, useContext, useState } from "react"
 import {
   Archive,
   Brain,
@@ -11,6 +11,7 @@ import {
   Copy,
   FileText,
   Hourglass,
+  Loader2,
   ShieldCheck,
   TriangleAlert,
 } from "lucide-react"
@@ -19,7 +20,12 @@ import type { AssistantMessage, ChatTodo } from "@shared/api"
 import { iconFor } from "@/lib/files/icons"
 import { nameOf } from "@/lib/files/paths"
 import { cn } from "@/lib/utils"
-import { isAgentTool } from "@/lib/worktree-chat/activity"
+import {
+  countsOf,
+  isAgentTool,
+  isPending,
+  summaryOf,
+} from "@/lib/worktree-chat/activity"
 import { dateTimeOf, timeOf } from "@/lib/worktree-chat/since"
 import { usageDetail, usageLine } from "@/lib/worktree-chat/usage"
 import { compactLine } from "@/lib/worktree-chat/window"
@@ -50,8 +56,11 @@ import { toolLabel, toolMark } from "./chat-marks"
 export function ChatMessage({
   of,
   queued = false,
+  live = false,
 }: {
   of: AssistantMessage
+  /** Whether the turn this line is in is still running — see `ToolRow`. */
+  live?: boolean
   /** Sent while the chat was already working, so the CLI is holding it for the
    * next turn — see `queued` in `lib/worktree-chat/store.ts`. Only ever true of
    * a user line. */
@@ -112,7 +121,7 @@ export function ChatMessage({
   }
 
   if (of.role === "tool") {
-    return <ToolRow of={of} />
+    return <ToolRow of={of} live={live} />
   }
 
   if (of.role === "ask") {
@@ -323,9 +332,60 @@ function CopyMessage({ text }: { text: string }) {
  * fifteen tool calls would be fifteen editor instances mounted to colour output
  * nobody can edit. Monospace, the git colours on a change, and the text itself.
  */
-function ToolRow({ of }: { of: Extract<AssistantMessage, { role: "tool" }> }) {
+/**
+ * Every subagent's own lines, keyed by the `toolId` of the call that ran it —
+ * `splitSubagents`, provided by the pane.
+ *
+ * A context rather than a prop because the row that needs it is three folds
+ * down from the only component holding the whole transcript, and each level
+ * between would carry a map it never reads.
+ */
+const SubagentContext = createContext<ReadonlyMap<string, AssistantMessage[]>>(
+  new Map()
+)
+export const SubagentSteps = SubagentContext.Provider
+
+function ToolRow({
+  of,
+  live,
+}: {
+  of: Extract<AssistantMessage, { role: "tool" }>
+  live: boolean
+}) {
   const [open, setOpen] = useState(false)
   const agent = isAgentTool(of.name)
+  /*
+   * What a subagent did, drawn under its row when it opens — and counted on
+   * the row while it is shut, with whatever it is running right now, since
+   * that is the question a turn waiting on three agents is being watched with.
+   * Live only while this call is still out: a finished agent's last call has
+   * an answer, and an interrupted one's never will.
+   */
+  const steps = useContext(SubagentContext).get(of.toolId ?? "") ?? []
+  const progress =
+    steps.length > 0
+      ? summaryOf(countsOf(steps), live && isPending(of))
+      : undefined
+
+  /*
+   * The glyph is where the call's state goes: a spinner while it runs, the
+   * mark in red once it failed. Only while the turn is live for the spinner —
+   * a call with no result in a finished turn was interrupted, and a spinner
+   * there would turn forever. Done is the plain mark, since that is nearly
+   * every row and a tick on each would be noise.
+   */
+  const mark =
+    live && isPending(of) ? (
+      <Loader2
+        aria-label="Running"
+        className="size-3 shrink-0 translate-y-0.5 animate-spin text-foreground/70"
+      />
+    ) : (
+      toolMark(
+        of.name,
+        cn("size-3 shrink-0 translate-y-0.5", of.failed && "text-destructive")
+      )
+    )
 
   /*
    * An edit says how much it moved, not what the CLI said about it.
@@ -341,7 +401,14 @@ function ToolRow({ of }: { of: Extract<AssistantMessage, { role: "tool" }> }) {
    * says so there and nowhere else.
    */
   const stat = of.failed ? undefined : of.stat
-  const said = stat ?? of.result
+  // Not on an agent that has steps: its result is its report, `6 lines` of
+  // which says nothing, and the row already counts what it did.
+  const said =
+    agent && steps.length > 0 && !of.failed ? undefined : (stat ?? of.result)
+  /* The report is the subagent's last sentence too, on a `claude` that
+     forwards what a subagent says — opened, it was drawn twice. */
+  const reported = steps.some((line) => line.role === "assistant")
+  const detail: typeof of = reported ? { ...of, output: undefined } : of
 
   /*
    * Openable where there is something to open, and a plain row otherwise.
@@ -353,7 +420,9 @@ function ToolRow({ of }: { of: Extract<AssistantMessage, { role: "tool" }> }) {
    * onto the sentence it was already displaying is worse than one that does not
    * open.
    */
-  const openable = Boolean(of.input || of.output || of.change || of.todos)
+  const openable = Boolean(
+    of.input || of.output || of.change || of.todos || steps.length > 0
+  )
 
   return (
     <div>
@@ -369,17 +438,37 @@ function ToolRow({ of }: { of: Extract<AssistantMessage, { role: "tool" }> }) {
               chevron in its place said "this opens" at the cost of the one
               thing the eye actually scans a transcript for, which is what ran.
               That it opens is the argument chip disappearing into the panel. */}
-          {toolMark(of.name, "size-3 shrink-0 translate-y-0.5")}
-          <ToolLine of={of} said={said} agent={agent} open={open} />
+          {mark}
+          <ToolLine
+            of={of}
+            said={said}
+            agent={agent}
+            open={open}
+            progress={progress}
+          />
         </button>
       ) : (
         <div className={TOOL_ROW} title={stampOf(of)}>
-          {toolMark(of.name, "size-3 shrink-0 translate-y-0.5")}
+          {mark}
           <ToolLine of={of} said={said} agent={agent} />
         </div>
       )}
 
-      {openable && open && <ToolDetail of={of} />}
+      {openable &&
+        open &&
+        (detail.input || detail.output || detail.change || detail.todos) && (
+          <ToolDetail of={detail} />
+        )}
+      {/* The subagent's own transcript, ruled off the row the way a fold's
+          rows are off its chevron — it is that agent's working, and one more
+          fold level is what it reads as. */}
+      {open && steps.length > 0 && (
+        <div className="mt-1 mb-1.5 ml-2.5 space-y-3 border-l pl-2.5">
+          {steps.map((line) => (
+            <ChatMessage key={line.id} of={line} live={live} />
+          ))}
+        </div>
+      )}
       {/* Outside the fold: a screenshot is the result, and a picture somebody
           has to open a row to find is one nobody looks at. */}
       {of.images && of.images.length > 0 && (
@@ -405,10 +494,13 @@ function ToolLine({
   said,
   agent,
   open = false,
+  progress,
 }: {
   of: Extract<AssistantMessage, { role: "tool" }>
   said?: string
   agent: boolean
+  /** A subagent's own working, summed — `3 tool calls · running Bash`. */
+  progress?: string
   /** Whether the panel below is showing. An open row keeps its label and drops
    * everything the panel is now saying in full — the same argument in both
    * places reads as two, and the row is what the eye follows down the fold. */
@@ -451,6 +543,11 @@ function ToolLine({
       {agent && of.title && (
         <span className="min-w-0 truncate font-mono opacity-70">
           {of.title}
+        </span>
+      )}
+      {progress && !open && (
+        <span className="min-w-0 shrink-[0.5] truncate text-foreground/60">
+          · {progress}
         </span>
       )}
 

@@ -1,13 +1,8 @@
-import { useEffect } from "react"
-import { Coins, Cpu, MemoryStick } from "lucide-react"
+import { Cpu, MemoryStick } from "lucide-react"
 
-import type { ChatDigest, SystemUsage, WorkspaceFolder } from "@shared/api"
+import type { SystemUsage } from "@shared/api"
 import { useSystemUsage } from "@/lib/system/usage"
-import { useStudio } from "@/lib/store"
 import { useUpdateWatch } from "@/lib/updates"
-import { spentIn, useDigests } from "@/lib/worktree-chat/digests"
-import { money } from "@/lib/worktree-chat/usage"
-import { useWorktreeChats } from "@/lib/worktree-chat/store"
 import { Meter } from "./meter"
 import { UpdatePill } from "./update-pill"
 
@@ -73,7 +68,6 @@ export function SystemBar() {
           them moves nothing else in the row. */}
       <span className="ml-auto flex shrink-0 items-center gap-2">
         <UpdatePill />
-        <Spend />
         <span
           className="flex shrink-0 items-center gap-1.5 tabular-nums"
           title={appTitle(usage)}
@@ -86,86 +80,6 @@ export function SystemBar() {
       </span>
     </footer>
   )
-}
-
-/**
- * What the workspace's chats have cost, beside what the machine is spending.
- *
- * The one figure in this row that is not about this second. It is here because
- * it is the same question the meters answer — what is this costing — asked of
- * the other resource the studio spends, and because there was nowhere else for
- * it: a total belongs to the workspace rather than to a chat, and every panel
- * here is about one project.
- *
- * **Since the beginning, not today.** A turn's usage line carries what it cost
- * and not when it ran (see `TurnUsage`), so "today" would be a figure worked out
- * from a chat's `updatedAt` — the time of its *last* line, which for a
- * conversation resumed this morning would count last week's turns as today's. A
- * number that is honest and coarse beats one that is precise about the wrong
- * thing; the breakdown per project is on the tooltip, where the width is.
- *
- * Drawn only once there is something to say. A `$0.00` in the corner of a fresh
- * workspace is a claim, and what it would mean — nothing has been spent, or
- * nothing has been read yet — are two different states.
- */
-function Spend() {
-  const digests = useDigests((state) => state.digests)
-  const folders = useStudio((state) => state.folders)
-  /*
-   * Re-read when the chat listing moves, which is what a turn ending does
-   * (`done` re-reads it) — so the figure lands with the answer rather than on a
-   * clock of its own. The `Changes` list's own watcher refreshes this too, for
-   * the filter above it; both are the same call, and neither is a timer.
-   */
-  const chats = useWorktreeChats((state) => state.chats)
-  useEffect(() => {
-    void useDigests.getState().refresh()
-  }, [chats])
-
-  const total = spentIn(digests)
-  if (total.turns === 0) return null
-
-  return (
-    <>
-      <span className="text-muted-foreground/40">·</span>
-      <span
-        className="flex shrink-0 items-center gap-1.5 tabular-nums"
-        title={spendTitle(digests, folders)}
-      >
-        <Coins className="size-3 shrink-0" />
-        {money(total.costUsd)}
-      </span>
-    </>
-  )
-}
-
-/** The same total said in full: per project, and what it is not counting. */
-function spendTitle(digests: ChatDigest[], folders: WorkspaceFolder[]): string {
-  const total = spentIn(digests)
-
-  const perProject = folders
-    .map((folder) => ({ folder, spent: spentIn(digests, folder.id) }))
-    .filter(({ spent }) => spent.turns > 0)
-    .sort((a, b) => b.spent.costUsd - a.spent.costUsd)
-    .map(({ folder, spent }) => `${folder.name} — ${money(spent.costUsd)}`)
-
-  return [
-    `${money(total.costUsd)} across ${total.turns} ${
-      total.turns === 1 ? "turn" : "turns"
-    }, since this workspace's first chat.`,
-    ...(perProject.length > 1 ? ["", ...perProject] : []),
-    "",
-    // The CLI's own estimate, said out loud: this is not read back from an
-    // account, and a turn that crashed before it had a figure is not free.
-    "The CLI's own estimate per turn, added up.",
-    ...(total.unpriced > 0
-      ? [
-          `${total.unpriced} ${
-            total.unpriced === 1 ? "turn is" : "turns are"
-          } not in it: they reported no cost.`,
-        ]
-      : []),
-  ].join("\n")
 }
 
 function memoryUsedPercent(usage: SystemUsage): number {

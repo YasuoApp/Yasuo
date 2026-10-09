@@ -5,7 +5,9 @@ import {
   countsOf,
   dayDividerBetween,
   rowsOf,
+  splitSubagents,
   summaryOf,
+  usageOfAll,
 } from "../src/renderer/lib/worktree-chat/activity"
 import {
   changeOf,
@@ -585,6 +587,159 @@ check(
 check(
   "a run with no list says nothing about one",
   countsOf([tool("Read", "/a")]).todo === undefined
+)
+
+section("a call's state on the closed fold")
+
+const answered = (
+  name: string,
+  result: string,
+  failed = false
+): AssistantMessage => ({
+  id: id(),
+  role: "tool",
+  name,
+  summary: "",
+  result,
+  failed,
+})
+
+// An empty result is still an answer: main writes `""` for a call that
+// printed nothing, and only absence means the call has not come back.
+check(
+  "a call with an empty result is not pending",
+  countsOf([answered("Bash", "")]).pending === undefined
+)
+
+check(
+  "the running call is the latest one without a result",
+  countsOf([tool("Read", "/a"), answered("Grep", "3 lines"), tool("Bash")])
+    .pending === "Bash"
+)
+
+check(
+  "a subagent runs as Agent, under either of its names",
+  countsOf([tool("Task", "Explore")]).pending === "Agent"
+)
+
+{
+  const counts = countsOf([
+    answered("Read", "10 lines"),
+    answered("Edit", "old_string not found", true),
+    tool("Bash"),
+  ])
+  check(
+    "a live fold says what failed and what is running",
+    summaryOf(counts, true) === "3 tool calls · 1 failed · running Bash",
+    summaryOf(counts, true)
+  )
+  // A finished turn's call with no result was interrupted, not running.
+  check(
+    "a finished fold keeps the failure and drops the running call",
+    summaryOf(counts) === "3 tool calls · 1 failed",
+    summaryOf(counts)
+  )
+}
+
+section("a subagent's own lines")
+
+{
+  const agent: AssistantMessage = {
+    ...tool("Agent", "Explore"),
+    toolId: "agent-1",
+  } as AssistantMessage
+  const inner = (line: AssistantMessage): AssistantMessage => ({
+    ...line,
+    parent: "agent-1",
+  })
+  const prompt = user("look around")
+  const step = inner(tool("Grep", "foo"))
+  const aside = inner(said("found it in store.ts"))
+  const answer = said("Done.")
+  const { own, steps } = splitSubagents([prompt, agent, step, aside, answer])
+
+  check(
+    "the main loop keeps only its own lines",
+    own.length === 3 && own.every((line) => !line.parent)
+  )
+  check(
+    "a subagent's lines are filed under the call that ran it, in order",
+    steps
+      .get("agent-1")
+      ?.map((line) => line.id)
+      .join() === [step.id, aside.id].join()
+  )
+  // Before the split, the subagent's last sentence was the turn's last
+  // assistant line once the main loop's answer had not arrived yet.
+  {
+    const running = splitSubagents([prompt, agent, step, aside]).own
+    const blocks = blocksOf(running)
+    check(
+      "a subagent's sentence is never taken for the turn's answer",
+      blocks.length === 2 && blocks[1]!.kind === "activity"
+    )
+  }
+}
+
+section("background agents waking the turn")
+
+{
+  const spent = (output: number, cost: number | null, context: number) =>
+    ({
+      id: id(),
+      role: "usage",
+      usage: {
+        model: "claude-opus-5-5",
+        input: 1,
+        cacheWrite: 0,
+        cacheRead: 10,
+        output,
+        thinking: 0,
+        costUsd: cost,
+        context,
+        durationMs: 1000,
+      },
+    }) as AssistantMessage
+  const first = spent(100, 0.5, 40_000)
+  const lines = [
+    user("three agents"),
+    tool("Agent", "Explore"),
+    said("started them"),
+    first,
+    said("A is done"),
+    spent(20, 0.1, 41_000),
+    said("all done, here is the table"),
+    spent(300, null, 42_000),
+  ]
+  const blocks = blocksOf(lines)
+
+  check(
+    "one prompt's working is one fold, its answer and one cost",
+    blocks.map((block) => block.kind).join() === "line,activity,line,line",
+    blocks.map((block) => block.kind).join()
+  )
+  const usage = usageOfAll(lines)
+  check(
+    "the costs are summed and the context is the last",
+    usage?.role === "usage" &&
+      usage.usage.output === 420 &&
+      usage.usage.costUsd === 0.6 &&
+      usage.usage.context === 42_000 &&
+      usage.usage.durationMs === 3000
+  )
+  check("one usage line is drawn as itself", usageOfAll([first]) === first)
+}
+
+check(
+  "an agent call is a row of its own, not one more call in a run",
+  rowsOf([tool("Read", "/a"), tool("Agent", "Explore"), tool("Grep", "b")])
+    .map((row) => row.kind)
+    .join() === "tools,line,tools"
+)
+
+check(
+  "nothing failed says nothing about failing",
+  countsOf([answered("Read", "1 line")]).failed === undefined
 )
 
 section("what a row opens onto")

@@ -61,18 +61,25 @@ export function ChatSkeleton({
             it is waiting for off the screen. The last tool is what shows movement
             — a name on its own for five minutes reads as something stuck. */}
         {agents.slice(0, AGENTS_SHOWN).map((agent) => (
-          <div
-            key={agent.id}
-            className="flex items-baseline gap-1.5 text-[0.7rem]"
-          >
-            <Bot className="size-3 shrink-0 translate-y-0.5 text-muted-foreground/50" />
-            <span className="min-w-0 truncate text-muted-foreground/70">
-              {agent.description}
-            </span>
-            {agent.lastTool && (
-              <span className="shrink-0 font-mono text-muted-foreground/40">
-                {agent.lastTool}
+          <div key={agent.id} className="text-[0.7rem]">
+            <div className="flex items-baseline gap-1.5">
+              <Bot className="size-3 shrink-0 translate-y-0.5 text-muted-foreground/50" />
+              <span className="min-w-0 truncate text-muted-foreground/70">
+                {agent.description}
               </span>
+              {agent.lastTool && (
+                <span className="shrink-0 font-mono text-muted-foreground/40">
+                  {agent.lastTool}
+                </span>
+              )}
+            </div>
+            {/* Where it has got to, under what it was asked: the description
+                is the same for the agent's whole life, and this is the line
+                that moves. One line, so seven agents still fit. */}
+            {agent.summary && (
+              <div className="truncate pl-4.5 text-muted-foreground/50">
+                {agent.summary}
+              </div>
             )}
           </div>
         ))}

@@ -205,17 +205,15 @@ learnings…`, its dialog, `main/learnings.ts`, `shared/learnings.ts` and the
   the files and the chats has the argument. Free of `electron`
   (`test/content-search.ts`).
 
-- **`chat-digest.ts`** — a chat read as a whole rather than as a conversation:
-  which files its edit tools wrote to, and what its turns were billed. Pure and
-  free of `electron` (`test/chat-digest.ts`); `WorktreeChats.digests` holds the
-  lines and the cache, and deliberately does **not** go through `read`, which
-  would keep every transcript in the workspace resident to answer a question worth
-  two numbers and a list of paths. Nothing in the renderer reads
-  `ChatDigest.paths` since the `Changes` filter was removed. Searching what a chat **said** is not here and is
-  not main's: it is asked of the conversation on screen, whose lines the renderer
-  already holds (`lib/worktree-chat/search.ts`). `spendRows` beside it is the
-  **cost dashboard's** fold — one row per usage line, with the chat's title and
-  the line's `at` — served by `WorktreeChats.spend` the same three-source way.
+- **`chat-digest.ts`** — `spendRows`, the **cost dashboard's** fold: one row
+  per usage line, with the chat's title and the line's `at`. Pure and free of
+  `electron` (`test/chat-digest.ts`); `WorktreeChats.spend` holds the lines and
+  the cache, and deliberately does **not** go through `read`, which would keep
+  every transcript in the workspace resident. The per-chat `ChatDigest`, its
+  `chatDigests` channel and the system bar's running total are **deleted**
+  (`docs/design.md` § What the chats have cost, removed). Searching what a chat
+  **said** is not here and is not main's: it is asked of the conversation on
+  screen, whose lines the renderer already holds (`lib/worktree-chat/search.ts`).
 
 - **Every chat line carries `at`** (ISO), stamped in `WorktreeChats.append`,
   the one writer; lines from before it have none and draw no time. There is
@@ -557,8 +555,7 @@ Logic worth testing is split out from the drawing: `lib/worktree-chat/activity.t
 `lib/worktree-chat/running.ts` (`test/chat-running.ts`) with `main/notify.ts`'s
 own `ChatNotices` (`test/notify.ts`),
 `lib/worktree-chat/unread.ts` (`test/chat-unread.ts`),
-`lib/worktree-chat/digests.ts`'s `spentIn` with `main/chat-digest.ts`
-(`test/chat-digest.ts`),
+`main/chat-digest.ts`'s `spendRows` (`test/chat-digest.ts`),
 `lib/worktree-chat/search.ts` (`test/chat-search.ts`),
 `lib/worktree-chat/outline.ts` — the chat's table of contents, one entry per
 user message (`test/chat-outline.ts`),

@@ -1,4 +1,4 @@
-import type { AssistantMessage } from "@shared/api"
+import type { AssistantMessage, TurnUsage } from "@shared/api"
 import { dayBreak, dayLabel } from "./since"
 
 /**
@@ -46,6 +46,24 @@ export type ActivityCounts = {
   /** Where the turn's own list had got to, when it kept one. Absent for a run
    * with no `TodoWrite` in it, which is most of them. */
   todo?: ActivityTodo
+  /** Calls that came back an error. Absent at zero, like `todo`: a failure is
+   * what a closed fold most needs to say, and a `0 failed` on every turn would
+   * teach the eye to skip the place it is said. */
+  failed?: number
+  /**
+   * The latest call with no result yet, by the name the summary says it with.
+   *
+   * Only *meaningful* while the turn is running — a call with no result in a
+   * finished turn is one that was interrupted, not one still going — which is
+   * why `summaryOf` is told whether it is live rather than this guessing.
+   */
+  pending?: string
+}
+
+/** A call still waiting on its result. `recordResult` in main writes `""` for
+ * a call that printed nothing, so absence is the only way to be unanswered. */
+export function isPending(line: AssistantMessage): boolean {
+  return line.role === "tool" && line.result === undefined
 }
 
 /**
@@ -88,6 +106,35 @@ export function isAgentTool(name: string): boolean {
   return AGENT_TOOLS.includes(name)
 }
 
+/**
+ * The transcript with every subagent's lines taken out, and those lines filed
+ * under the call that ran them.
+ *
+ * Out of the main flow **before** anything else reads it, because everything
+ * else is about the main loop: a subagent's last sentence is not the turn's
+ * answer (`answerIndexOf` would have taken it for one), its calls are not the
+ * turn's calls, and the find bar has nowhere to land on a line that is drawn
+ * inside a row. Keyed by the parent's `toolId`, so a subagent that ran a
+ * subagent nests by the same lookup one level down.
+ */
+export function splitSubagents(messages: AssistantMessage[]): {
+  own: AssistantMessage[]
+  steps: ReadonlyMap<string, AssistantMessage[]>
+} {
+  const own: AssistantMessage[] = []
+  const steps = new Map<string, AssistantMessage[]>()
+  for (const line of messages) {
+    if (!line.parent) {
+      own.push(line)
+      continue
+    }
+    const under = steps.get(line.parent)
+    if (under) under.push(line)
+    else steps.set(line.parent, [line])
+  }
+  return { own, steps }
+}
+
 export function blocksOf(messages: AssistantMessage[]): ChatBlock[] {
   const blocks: ChatBlock[] = []
 
@@ -107,7 +154,19 @@ export function blocksOf(messages: AssistantMessage[]): ChatBlock[] {
      * `answerIndexOf`, which is what "last word" has to mean for a turn that
      * carried on working after saying something.
      */
-    const answer = answerIndexOf(turn.lines)
+    /*
+     * What the turn cost, taken out of the flow and put back once, at the end.
+     *
+     * A "turn" here is everything after one prompt, and that is not always one
+     * CLI turn: background subagents wake the CLI as each one finishes, and
+     * every wake ends with a usage line of its own. Left where they landed,
+     * three agents cut one question's working into a fold, a coin, a fold of
+     * one sentence, a coin, and so on down the pane. One question, one cost —
+     * summed by `usageOfAll`, under the answer.
+     */
+    const spent = turn.lines.filter((line) => line.role === "usage")
+    const lines = turn.lines.filter((line) => line.role !== "usage")
+    const answer = answerIndexOf(lines)
 
     let run: AssistantMessage[] = []
     const flush = () => {
@@ -123,7 +182,7 @@ export function blocksOf(messages: AssistantMessage[]): ChatBlock[] {
       run = []
     }
 
-    turn.lines.forEach((line, index) => {
+    lines.forEach((line, index) => {
       if (answer !== -1 && index >= answer) {
         flush()
         blocks.push({ kind: "line", id: line.id, line })
@@ -137,9 +196,59 @@ export function blocksOf(messages: AssistantMessage[]): ChatBlock[] {
       run.push(line)
     })
     flush()
+
+    const usage = usageOfAll(spent)
+    if (usage) blocks.push({ kind: "line", id: usage.id, line: usage })
   }
 
   return blocks
+}
+
+/**
+ * Several usage lines as one: the spends summed, the levels taken from the
+ * last. Null for none, and the line itself for one, so a turn that was one CLI
+ * turn draws exactly what it always did.
+ */
+export function usageOfAll(lines: AssistantMessage[]): AssistantMessage | null {
+  const usages = lines.flatMap((line) =>
+    line.role === "usage" ? [{ line, usage: line.usage }] : []
+  )
+  if (usages.length === 0) return null
+  if (usages.length === 1) return usages[0]!.line
+
+  const last = usages[usages.length - 1]!
+  const sum = (pick: (usage: TurnUsage) => number) =>
+    usages.reduce((total, { usage }) => total + pick(usage), 0)
+  const costs = usages.flatMap(({ usage }) =>
+    usage.costUsd === null ? [] : [usage.costUsd]
+  )
+  const durations = usages.flatMap(({ usage }) =>
+    usage.durationMs ? [usage.durationMs] : []
+  )
+  const context = usages
+    .map(({ usage }) => usage.context)
+    .filter(Boolean)
+    .at(-1)
+
+  return {
+    // The first line's id, which is stable while later wakes add to the sum.
+    id: usages[0]!.line.id,
+    role: "usage",
+    ...(last.line.at ? { at: last.line.at } : {}),
+    usage: {
+      model: last.usage.model,
+      input: sum((usage) => usage.input),
+      cacheWrite: sum((usage) => usage.cacheWrite),
+      cacheRead: sum((usage) => usage.cacheRead),
+      output: sum((usage) => usage.output),
+      thinking: sum((usage) => usage.thinking),
+      costUsd: costs.length > 0 ? costs.reduce((a, b) => a + b, 0) : null,
+      // A level, not a spend: where the chat stands after the last wake.
+      context: context ?? null,
+      durationMs:
+        durations.length > 0 ? durations.reduce((a, b) => a + b, 0) : null,
+    },
+  }
 }
 
 /**
@@ -213,8 +322,11 @@ export type ActivityRow =
  * about the call makes the reader work out which of the two they are looking at
  * before they can read it, and the count is the thing being scanned either way.
  *
- * Subagents are not split out from the run: they are tool calls in the
- * transcript, and `summaryOf` already names them separately in the line.
+ * **Subagents are not folded into a run.** An `Agent` row is a fold of its
+ * own — its steps are under it — so inside a run it was a fold in a fold in a
+ * fold: three clicks from a closed turn to what an agent was doing, the middle
+ * one opening onto a list that said `3 subagents` a second time. Drawn as
+ * itself, it splits the run it falls in, which is the order things happened.
  */
 export function rowsOf(lines: AssistantMessage[]): ActivityRow[] {
   const rows: ActivityRow[] = []
@@ -234,7 +346,7 @@ export function rowsOf(lines: AssistantMessage[]): ActivityRow[] {
   }
 
   for (const line of lines) {
-    if (line.role === "tool") {
+    if (line.role === "tool" && !isAgentTool(line.name)) {
       run.push(line)
       continue
     }
@@ -282,11 +394,16 @@ export function countsOf(lines: AssistantMessage[]): ActivityCounts {
   let messages = 0
   let subagents = 0
   let todo: ActivityTodo | undefined
+  let failed = 0
+  let pending: string | undefined
 
   for (const line of lines) {
     if (line.role === "tool") {
       if (isAgentTool(line.name)) subagents += 1
       else tools += 1
+      if (line.failed) failed += 1
+      if (isPending(line))
+        pending = isAgentTool(line.name) ? "Agent" : line.name
       // Overwritten rather than kept from the first: the same list is written
       // again every time an item starts or finishes, and only the last of them
       // says where the turn actually is.
@@ -304,19 +421,34 @@ export function countsOf(lines: AssistantMessage[]): ActivityCounts {
     if (line.role === "assistant" || line.role === "thinking") messages += 1
   }
 
-  return { tools, messages, subagents, ...(todo ? { todo } : {}) }
+  return {
+    tools,
+    messages,
+    subagents,
+    ...(todo ? { todo } : {}),
+    ...(failed > 0 ? { failed } : {}),
+    ...(pending ? { pending } : {}),
+  }
 }
 
 /** The folded line's own words. Left out of the component so the phrasing is
- * testable and so a count of zero is dropped rather than drawn as `0 tools`. */
-export function summaryOf(counts: ActivityCounts): string {
+ * testable and so a count of zero is dropped rather than drawn as `0 tools`.
+ *
+ * `live` is whether the turn the fold belongs to is still running: only then
+ * is a call without a result one that is *running* rather than one that was
+ * cut off. */
+export function summaryOf(counts: ActivityCounts, live = false): string {
   const parts: string[] = []
   if (counts.tools > 0) parts.push(plural(counts.tools, "tool call"))
   if (counts.messages > 0) parts.push(plural(counts.messages, "message"))
   if (counts.subagents > 0) parts.push(plural(counts.subagents, "subagent"))
   // Nothing but the lines that are never folded can produce this, and a run of
   // those is never made — so it is a fallback rather than a case.
-  const line = parts.join(", ") || "working"
+  let line = parts.join(", ") || "working"
+  // Before the todo: what went wrong and what is moving now are about the
+  // calls the counts just named, and the todo is about the turn.
+  if (counts.failed) line += ` · ${counts.failed} failed`
+  if (live && counts.pending) line += ` · running ${counts.pending}`
   if (!counts.todo) return line
 
   /* After the counts rather than instead of them, and separated the way a tool

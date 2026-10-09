@@ -320,7 +320,21 @@ export type ChatTodo = {
  * those rather than the epoch. Stamped in main's `append`, which is the one
  * writer, so the clock is one clock.
  */
-export type AssistantMessage = AssistantLine & { at?: string }
+export type AssistantMessage = AssistantLine & {
+  at?: string
+  /**
+   * The `toolId` of the subagent call this line was produced inside, on the
+   * lines a subagent wrote — its narration, its thinking and its own tool calls.
+   *
+   * The CLI sends them on the same stream as the main loop's, told apart only
+   * by `parent_tool_use_id`, and drawn without this they were the main turn's
+   * own: a turn that ran three `Explore`s read as one agent doing ninety things,
+   * interleaved, and a subagent's last sentence could be taken for the turn's
+   * answer. With it they are drawn under the `Agent` row that ran them. Absent
+   * on everything else, and on every line written before it existed.
+   */
+  parent?: string
+}
 
 type AssistantLine =
   | {
@@ -770,6 +784,9 @@ export type ChatAgent = {
   /** The last tool it called, so a long-running agent shows movement rather
    * than only a name. */
   lastTool?: string
+  /** Where it has got to, in a sentence — the CLI's own progress summary, on
+   * a `claude` that writes one. */
+  summary?: string
 }
 
 /** One of the choices in a question the model asked. */
@@ -1330,6 +1347,14 @@ export type ClaudeProfile = {
  * token lives in a keychain that no longer has it. So this is asked of `claude`
  * itself (`main/claude-auth.ts`) rather than parsed out of the CLI's own files.
  */
+/** What `claudeVersions` answers. `cli` is null when `claude` could not be run,
+ * and `error` says why; `sdk` is this build's own and always known. */
+export type ClaudeVersions = {
+  cli: string | null
+  sdk: string
+  error: string | null
+}
+
 export type ClaudeAccount = {
   /** The directory asked about, `~` expanded — empty for the default login. */
   configDir: string
@@ -1694,54 +1719,11 @@ export type WorkspaceSearch = {
 }
 
 /**
- * What one chat did, folded out of its lines — the two questions asked *about* a
- * conversation rather than inside it.
- *
- * One shape for both because they are one read. The lines are the expensive part
- * — a chat's transcript is a file, and there is one per chat — so a call that
- * answered "which files did this touch" and a second that answered "what did it
- * cost" would read the same files twice on the same tick.
- *
- * Computed in main and never written down: it is a fold of what is already on
- * disk, and a stored copy would be a second account of the transcript able to
- * disagree with it. `main/chat-digest.ts` is the fold, and says what it can and
- * cannot see.
- */
-export type ChatDigest = {
-  chatId: string
-  /** The project it belongs to, or null for a chat whose folder is gone —
-   * `chatRootId` on the record. Carried so a caller can group by project
-   * without reading the listing a second time. */
-  folderId: string | null
-  /**
-   * The files its edits named, absolute, in the order they were first written
-   * to.
-   *
-   * **What an edit tool said it was about**, which is not the same as what the
-   * turn changed: a file rewritten by a `Bash` line (`sed -i`, `mv`, a
-   * formatter, a build) is not here, because nothing in the transcript says it
-   * was. So this narrows a list of changed files to the ones a chat can be
-   * shown to have touched; it never claims the rest were somebody else's.
-   */
-  paths: string[]
-  /** What its turns were billed, in USD, summed over the lines that carry a
-   * figure. Turns that reported none contribute nothing rather than zero — see
-   * `unpriced`. */
-  costUsd: number
-  /** How many turns are in it, and how many of those had no cost on them: a
-   * chat read back from before that field existed is a chat with nothing to say
-   * about what it cost, not one that was free. */
-  turns: number
-  unpriced: number
-}
-
-/**
  * One turn's bill, for the cost dashboard — a row per usage line across every
  * chat, which is what a chart by day, by project or by model is drawn from.
  *
- * Its own shape beside `ChatDigest` rather than a field on it: the digest is
- * one row per chat and this is one per turn, and a dashboard that only had the
- * per-chat sum could not say which afternoon the money went on.
+ * One row per turn rather than per chat: a dashboard that only had the per-chat
+ * sum could not say which afternoon the money went on.
  */
 export type ChatSpend = {
   chatId: string
@@ -2352,6 +2334,8 @@ export type DesktopApi = {
    * while somebody is looking at this section.
    */
   claudeAccount: (configDir: string) => Promise<ClaudeAccount>
+  /** The user's `claude --version` and the agent SDK this build bundles. */
+  claudeVersions: () => Promise<ClaudeVersions>
   /**
    * Signs one of those directories in: `claude auth login` in a pty of its own,
    * with that directory as `CLAUDE_CONFIG_DIR`. Resolves with the id its output
@@ -2399,18 +2383,8 @@ export type DesktopApi = {
   ) => Promise<WorktreeChat>
   readWorktreeChat: (id: string) => Promise<AssistantMessage[]>
   /**
-   * Every chat folded to what it did — see `ChatDigest`.
-   *
-   * All of them in one call rather than one chat at a time, because both callers
-   * want the set: the `Changes` list asks which chat touched which file in *this*
-   * project, and the system bar sums what the workspace has spent. Main holds the
-   * lines of any chat that has been read or is running this run, so the usual
-   * answer costs no disk at all.
-   */
-  chatDigests: () => Promise<ChatDigest[]>
-  /**
-   * Every turn's bill across every chat — see `ChatSpend`. Folded the way
-   * `chatDigests` is, from lines already in memory where there are any.
+   * Every turn's bill across every chat — see `ChatSpend`. Folded from lines
+   * already in memory where there are any, and off disk for the rest.
    */
   chatSpend: () => Promise<ChatSpend[]>
   /**
@@ -2778,11 +2752,11 @@ export const IPC = {
   listClaudeProfiles: "claude-profiles:list",
   saveClaudeProfiles: "claude-profiles:save",
   claudeAccount: "claude-profiles:account",
+  claudeVersions: "claude:versions",
   claudeLogin: "claude-profiles:login",
   listWorktreeChats: "worktree-chats:list",
   createWorktreeChat: "worktree-chats:create",
   readWorktreeChat: "worktree-chats:read",
-  chatDigests: "worktree-chats:digests",
   chatSpend: "worktree-chats:spend",
   saveTextFile: "files:save-text",
   openChatWindow: "window:open-chat",

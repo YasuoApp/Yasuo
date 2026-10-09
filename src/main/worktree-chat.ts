@@ -9,7 +9,6 @@ import {
   type AssistantMessage,
   type ChatAskOption,
   type ChatAskQuestion,
-  type ChatDigest,
   type ChatEffort,
   type ChatImage,
   type ChatPermission,
@@ -25,7 +24,7 @@ import {
   type WorktreeChatOptions,
 } from "../shared/api"
 import { extensionForType } from "../shared/note-files"
-import { digestOf, spendRows } from "./chat-digest"
+import { spendRows } from "./chat-digest"
 import { chatMatchesIn } from "./content-search"
 import {
   AGENT_TOOLS,
@@ -142,6 +141,9 @@ type Live = {
   /** Armed whenever the session goes quiet, cleared whenever it does not — see
    * `IDLE_MS`. */
   idle: ReturnType<typeof setTimeout> | null
+  /** Stop was pressed, so the session is closed as soon as it goes quiet
+   * rather than after `IDLE_MS` — see `stop`. */
+  stopped: boolean
 }
 
 /**
@@ -451,28 +453,19 @@ export class WorktreeChats {
   private readonly messages = new Map<string, AssistantMessage[]>()
 
   /**
-   * What `digests` folded out of a chat nobody has open, against the
-   * `updatedAt` it was folded from.
+   * The dashboard's rows for a chat nobody has open, against the `updatedAt`
+   * they were folded from.
    *
-   * The fold and not the lines, which is the point of it: this is asked for
-   * every chat in the workspace whenever the `Changes` list re-reads, and
-   * caching the transcripts instead would hold every conversation ever had in
-   * memory to save re-reading a file. A record whose `at` no longer matches the
-   * listing is simply folded again.
+   * The fold and not the lines: caching the transcripts instead would hold
+   * every conversation ever had in memory to save re-reading a file. A record
+   * whose `at` no longer matches the listing is simply folded again.
    */
-  private readonly digested = new Map<
-    string,
-    { at: string; digest: ChatDigest }
-  >()
-
-  /** The dashboard's rows for a chat nobody has open — the same bargain as
-   * `digested`, one row per turn instead of one per chat. */
   private readonly spent = new Map<string, { at: string; rows: ChatSpend[] }>()
 
   /**
    * What `search` keeps of a chat nobody has open: the two voices and nothing
    * else, against the `updatedAt` they were read at — the same bargain as
-   * `digested`. Tool output is most of a transcript and none of what is
+   * `spent`. Tool output is most of a transcript and none of what is
    * searched, so this is a small fraction of the file it saves re-reading on
    * every keystroke.
    */
@@ -600,54 +593,15 @@ export class WorktreeChats {
   }
 
   /**
-   * Every chat folded to what it did — see `ChatDigest` and `chat-digest.ts`.
+   * Every turn's bill across every chat — see `spendRows`.
    *
-   * **Deliberately not `read`.** That one keeps a chat's whole transcript in
-   * memory for the rest of the run, which is the right bargain for a chat
-   * somebody is switching between and the wrong one for a fold over *every*
-   * chat in the workspace: it would end with every conversation ever had
-   * resident, to answer a question whose answer is two numbers and a list of
-   * paths. So a chat nobody has open is read, folded and dropped, and what is
-   * kept is the fold.
-   *
-   * Three sources, in the order they cost: the lines already in memory for a
-   * chat that is open or running, which is the live case and touches no disk;
-   * the digest cached against the `updatedAt` it was folded from, which is what
-   * makes the second call on the same tick free; and the file. `updatedAt`
-   * moves on every appended line (`append`), so a running chat cannot be served
-   * a stale fold from the cache — and it never reaches the cache anyway,
-   * because its lines are in memory.
-   */
-  async digests(): Promise<ChatDigest[]> {
-    const chats = await this.source.chats()
-
-    const digests: ChatDigest[] = []
-    for (const chat of chats) {
-      const place = { id: chat.id, folderId: chatRootId(chat) }
-
-      const held = this.messages.get(chat.id)
-      if (held) {
-        digests.push(digestOf(place, held))
-        continue
-      }
-
-      const cached = this.digested.get(chat.id)
-      if (cached && cached.at === chat.updatedAt) {
-        digests.push(cached.digest)
-        continue
-      }
-
-      const digest = digestOf(place, await this.source.readChat(chat.id))
-      this.digested.set(chat.id, { at: chat.updatedAt, digest })
-      digests.push(digest)
-    }
-
-    return digests
-  }
-
-  /**
-   * Every turn's bill across every chat — `digests` with the fold swapped, and
-   * the same three sources in the same order. See `spendRows`.
+   * **Deliberately not `read`**, which keeps a chat's whole transcript resident
+   * for the rest of the run: right for a chat somebody is switching between,
+   * wrong for a fold over every chat in the workspace. Three sources, in the
+   * order they cost: the lines already in memory for a chat that is open or
+   * running; the rows cached against the `updatedAt` they were folded from; and
+   * the file. `updatedAt` moves on every appended line, so a running chat is
+   * never served a stale fold.
    */
   async spend(): Promise<ChatSpend[]> {
     const chats = await this.source.chats()
@@ -685,7 +639,7 @@ export class WorktreeChats {
    * Every chat with a match in what was said, the most recently active first —
    * the left column's Search (`content-search.ts`).
    *
-   * Not `read`, for the reason `digests` is not: that keeps a whole transcript
+   * Not `read`, for the reason `spend` is not: that keeps a whole transcript
    * resident for the rest of the run. The lines already held are used as they
    * are; the rest go through `said`.
    */
@@ -780,7 +734,6 @@ export class WorktreeChats {
     live?.session?.close()
 
     this.messages.delete(id)
-    this.digested.delete(id)
     this.spent.delete(id)
     this.said.delete(id)
     this.startedIn.delete(id)
@@ -970,6 +923,7 @@ export class WorktreeChats {
       // to come up is one `reap` could close under the message.
       busy: true,
       idle: null,
+      stopped: false,
     }
     // In the map *before* the open, because the open reads `options` back off
     // it: `permits` is consulted for the first tool call of the first turn, and
@@ -1540,6 +1494,11 @@ export class WorktreeChats {
 
     live.busy = busy
     if (live.idle) clearTimeout(live.idle)
+    if (!busy && live.stopped) {
+      live.idle = null
+      this.reap(id)
+      return
+    }
     live.idle = busy ? null : setTimeout(() => this.reap(id), IDLE_MS)
     // Nothing in this app waits on the app: a chat quiet at quitting time must
     // not be the reason Electron stays up for five more minutes.
@@ -1573,9 +1532,22 @@ export class WorktreeChats {
    * the process, and it cost the chat its warm CLI as well. Whatever was queued
    * behind the interrupted turn still runs — the CLI's own rule, and the same
    * one the terminal follows.
+   *
+   * **And then the session is let go of**, once it goes quiet, rather than
+   * kept warm for `IDLE_MS`. An interrupt ends the turn, not the CLI, and the
+   * CLI's MCP servers are its children: a Playwright left holding its browser
+   * profile after Stop meant every other chat was told the browser was in use
+   * by another session for the next five minutes. Closing on quiet rather than
+   * at once keeps the queued messages above, and the next message resumes —
+   * the same cost an idle close already has.
    */
   stop(id: string): void {
-    this.live.get(id)?.session?.interrupt()
+    const live = this.live.get(id)
+    if (!live) return
+    live.stopped = true
+    live.session?.interrupt()
+    // A Stop that raced the end of the turn: nothing will say quiet again.
+    if (!live.busy) this.reap(id)
   }
 
   /** Closes every session, for shutdown. */

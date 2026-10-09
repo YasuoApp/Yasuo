@@ -544,6 +544,11 @@ export async function startAgentSession(
       ...(session.resume
         ? { resume: session.sessionId }
         : { sessionId: session.sessionId }),
+      // A subagent's narration and thinking as well as its tool calls, which
+      // is all the SDK forwards by default. Output only — nothing about the
+      // request changes, so the cached prefix is untouched — and drawn under
+      // the `Agent` row that ran it (see `parent` on a line).
+      forwardSubagentText: true,
       ...(session.model ? { model: session.model } : {}),
       ...(session.effort
         ? { effort: session.effort as Options["effort"] }
@@ -747,6 +752,14 @@ export async function startAgentSession(
             ...(message.last_tool_name
               ? { lastTool: message.last_tool_name }
               : {}),
+            // Kept across a frame without one: the summary is written now and
+            // then, and a line that flickered between it and nothing would be
+            // worse than one a few seconds stale.
+            ...(message.summary
+              ? { summary: message.summary }
+              : known?.summary
+                ? { summary: known.summary }
+                : {}),
           })
           announceAgents()
           continue
@@ -1108,15 +1121,29 @@ function read(message: SDKMessage, handlers: AgentHandlers): void {
   const { onMessage, onToolResult } = handlers
 
   if (message.type === "assistant") {
+    // A subagent's own work, on the same stream — see `parent` on the line.
+    const within = message.parent_tool_use_id
+      ? { parent: message.parent_tool_use_id }
+      : {}
     for (const block of message.message.content) {
       if (block.type === "text" && block.text.trim()) {
-        onMessage({ id: lineId(), role: "assistant", text: block.text })
+        onMessage({
+          id: lineId(),
+          role: "assistant",
+          text: block.text,
+          ...within,
+        })
       }
       // Only when the model was actually thinking, which is what the effort on
       // the toolbar decides — a turn at `low` sends none of these and draws no
       // rows for them, rather than empty ones.
       if (block.type === "thinking" && block.thinking.trim()) {
-        onMessage({ id: lineId(), role: "thinking", text: block.thinking })
+        onMessage({
+          id: lineId(),
+          role: "thinking",
+          text: block.thinking,
+          ...within,
+        })
       }
       if (block.type === "tool_use") {
         onMessage({
@@ -1126,6 +1153,7 @@ function read(message: SDKMessage, handlers: AgentHandlers): void {
           ...describeCall(block.name, block.input),
           // The CLI's own id, kept so the result can find this line again.
           toolId: block.id,
+          ...within,
         })
       }
     }

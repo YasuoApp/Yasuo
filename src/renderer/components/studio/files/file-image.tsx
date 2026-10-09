@@ -40,24 +40,30 @@ export function FileImage({ image, alt }: { image: ImageDoc; alt: string }) {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="grid min-h-0 flex-1 place-items-center overflow-auto p-6">
-        <img
-          src={image.src}
-          alt={alt}
-          onLoad={(event) =>
-            setSize({
-              width: event.currentTarget.naturalWidth,
-              height: event.currentTarget.naturalHeight,
-            })
-          }
-          style={{
-            backgroundImage:
-              "linear-gradient(45deg, var(--muted) 25%, transparent 25%), linear-gradient(-45deg, var(--muted) 25%, transparent 25%), linear-gradient(45deg, transparent 75%, var(--muted) 75%), linear-gradient(-45deg, transparent 75%, var(--muted) 75%)",
-            backgroundSize: "16px 16px",
-            backgroundPosition: "0 0, 0 8px, 8px -8px, -8px 0px",
-          }}
-          className="max-h-full max-w-full rounded-sm object-contain shadow-sm"
-        />
+      {/* Pinned to the pane's box rather than a grid cell that grows with its
+          content: `max-h-full` needs a height to be a percentage of, and an SVG
+          with a `viewBox` but no `width` has no size of its own — it took the
+          pane's whole width and ran off the bottom. */}
+      <div className="relative min-h-0 flex-1">
+        <div className="absolute inset-0 flex items-center justify-center p-6">
+          <img
+            src={image.src}
+            alt={alt}
+            onLoad={(event) =>
+              setSize({
+                width: event.currentTarget.naturalWidth,
+                height: event.currentTarget.naturalHeight,
+              })
+            }
+            style={{
+              backgroundImage:
+                "linear-gradient(45deg, var(--muted) 25%, transparent 25%), linear-gradient(-45deg, var(--muted) 25%, transparent 25%), linear-gradient(45deg, transparent 75%, var(--muted) 75%), linear-gradient(-45deg, transparent 75%, var(--muted) 75%)",
+              backgroundSize: "16px 16px",
+              backgroundPosition: "0 0, 0 8px, 8px -8px, -8px 0px",
+            }}
+            className="max-h-full max-w-full rounded-sm object-contain shadow-sm"
+          />
+        </div>
       </div>
 
       {size && (

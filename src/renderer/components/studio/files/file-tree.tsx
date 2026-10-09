@@ -31,6 +31,7 @@ import {
 import { cn } from "@/lib/utils"
 import {
   BookOpen,
+  Globe,
   ChevronDown,
   ChevronRight,
   Copy,
@@ -706,9 +707,11 @@ function ViewerIcon({ viewer }: { viewer: Viewer }) {
       ? Image
       : viewer === "markdown"
         ? BookOpen
-        : viewer === "blocks"
-          ? NotebookPen
-          : FileCode
+        : viewer === "html"
+          ? Globe
+          : viewer === "blocks"
+            ? NotebookPen
+            : FileCode
   return <Icon className="text-muted-foreground" />
 }
 

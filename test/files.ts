@@ -202,6 +202,13 @@ async function main() {
   )
 
   check(
+    "an html file opens as the page, with its source after it",
+    viewersFor("/w/index.HTML").join() === "html,text,diff" &&
+      viewersFor("/w/a.htm").join() === "html,text,diff",
+    "what somebody clicks one to find out is what it looks like"
+  )
+
+  check(
     "a markdown file opens as the document",
     defaultViewer("/w/README.md") === "markdown",
     "the Explorer is where files are read; the editor is asked for"

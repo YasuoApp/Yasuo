@@ -18,7 +18,7 @@ import {
 } from "lucide-react"
 
 import { hasGitChange, useGitStatus } from "@/lib/files/git-status"
-import { relativeTo } from "@/lib/files/paths"
+import { parentOf, relativeTo } from "@/lib/files/paths"
 import { fileRootsOf, rootOfPath } from "@/lib/files/roots"
 import { isDirty, useFiles, viewOf, type FileDoc } from "@/lib/files/store"
 import { viewersFor, type Viewer } from "@/lib/files/viewers"
@@ -31,6 +31,7 @@ import { FileDiff } from "./file-diff"
 import { FileEditor } from "./file-editor"
 import { FileImage } from "./file-image"
 import { FileImageDiff } from "./file-image-diff"
+import { FileHtml } from "./file-html"
 import { FileMarkdown } from "./file-markdown"
 import { FileBlocks } from "./file-blocks"
 
@@ -267,12 +268,10 @@ export function FilePane({
             unchanged file is the same text in both columns, so the switch would
             be offering a view with nothing in it. `viewer === "diff"` keeps it
             for the diff already on screen — a file committed while its diff is
-            open must not lose the way back to `Edit`. */}
-        {(viewer === "diff" || viewer === "text") &&
-          viewersFor(path).includes("diff") &&
-          (viewer === "diff" || changed) && (
-            <ViewerSwitch path={path} viewer={viewer} />
-          )}
+            open must not lose the way back to `Edit`. An `.html` adds its
+            `Preview` to the same control, since the page is the other thing
+            somebody editing one keeps switching to. */}
+        <ViewerSwitch path={path} viewer={viewer} changed={changed} />
 
         {/* Shown for every document, including the ones with no editor: a
             picture still has a path worth copying and a place in Finder worth
@@ -452,6 +451,9 @@ function Body({
 
   if (viewer === "markdown") return <FileMarkdown text={doc.text} path={path} />
 
+  if (viewer === "html")
+    return <FileHtml text={doc.text} dir={parentOf(path)} />
+
   if (viewer === "blocks") {
     return (
       <FileBlocks
@@ -495,19 +497,40 @@ function Body({
  * editor, and a control labelled `Edit` beside a diff of a file's text means
  * that text.
  */
-function ViewerSwitch({ path, viewer }: { path: string; viewer: Viewer }) {
+function ViewerSwitch({
+  path,
+  viewer,
+  changed,
+}: {
+  path: string
+  viewer: Viewer
+  changed: boolean
+}) {
+  if (viewer !== "diff" && viewer !== "text" && viewer !== "html") return null
+
+  const offered = viewersFor(path)
+  const choices: [Viewer, string][] = [
+    ...(offered.includes("html")
+      ? [["html", "Preview"] as [Viewer, string]]
+      : []),
+    ...(offered.includes("diff") && (viewer === "diff" || changed)
+      ? [["diff", "Diff"] as [Viewer, string]]
+      : []),
+    ["text", "Edit"],
+  ]
+  // `Edit` alone is a control with nothing to switch to.
+  if (choices.length < 2) return null
+
   return (
     <div className="flex shrink-0 items-center rounded-md border p-0.5">
-      <SwitchButton
-        label="Diff"
-        on={viewer === "diff"}
-        onClick={() => void useFiles.getState().setView(path, "diff")}
-      />
-      <SwitchButton
-        label="Edit"
-        on={viewer === "text"}
-        onClick={() => void useFiles.getState().setView(path, "text")}
-      />
+      {choices.map(([choice, label]) => (
+        <SwitchButton
+          key={choice}
+          label={label}
+          on={viewer === choice}
+          onClick={() => void useFiles.getState().setView(path, choice)}
+        />
+      ))}
     </div>
   )
 }
