@@ -1006,6 +1006,13 @@ export type TerminalExit = {
   signal: number | null
 }
 
+/** A shell installed on this machine that the dock can start — PowerShell,
+ * Git Bash, zsh. Named and identified only: the command line stays in main. */
+export type TerminalShell = {
+  id: string
+  name: string
+}
+
 /**
  * One chat in a project: a conversation the app hosts, not a pty it reads.
  *
@@ -2566,12 +2573,19 @@ export type DesktopApi = {
    * a cwd this process had to validate, and the rule here is that the renderer
    * never names a directory main has not already written down (`insideAny` in
    * `files.ts` is the same rule for reads).
+   *
+   * `shellId` is one of `terminalShells`' ids, by the same rule — the renderer
+   * picks from main's list rather than naming a program; an id main does not
+   * know, or none, is the default shell.
    */
   terminalCreate: (
     folderId: string,
     cols: number,
-    rows: number
+    rows: number,
+    shellId?: string
   ) => Promise<string>
+  /** The shells installed on this machine, the default first. */
+  terminalShells: () => Promise<TerminalShell[]>
   /** Sends keystrokes to a shell. */
   terminalWrite: (terminalId: string, data: string) => Promise<void>
   /** Tells a shell its new size. */
@@ -2782,6 +2796,7 @@ export const IPC = {
   writeDrawingSvg: "drawings:write-svg",
   writeNoteFile: "note-files:write",
   terminalCreate: "terminal:create",
+  terminalShells: "terminal:shells",
   terminalWrite: "terminal:write",
   terminalResize: "terminal:resize",
   terminalKill: "terminal:kill",

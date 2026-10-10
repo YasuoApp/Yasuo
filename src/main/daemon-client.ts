@@ -22,6 +22,9 @@ import {
 export type TerminalTarget = {
   cwd: string
   command?: string
+  /** A shell other than the user's default — one of `shells.ts`'s profiles.
+   * Ignored when `command` is given. */
+  shell?: { file: string; args: string[] }
   /** The project's own environment, e.g. its Node on the PATH. */
   env?: Record<string, string>
 }
@@ -228,6 +231,7 @@ export class DaemonClient {
       reqId: randomUUID(),
       cwd: target.cwd,
       command: target.command,
+      shell: target.shell,
       env: target.env,
       cols,
       rows,

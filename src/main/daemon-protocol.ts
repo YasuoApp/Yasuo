@@ -33,6 +33,9 @@ export type CreateRequest = {
   reqId: string
   cwd: string
   command?: string
+  /** The program to start instead of the user's default shell. A daemon left
+   * running by an older build ignores it and starts the default. */
+  shell?: { file: string; args: string[] }
   env?: Record<string, string>
   cols: number
   rows: number

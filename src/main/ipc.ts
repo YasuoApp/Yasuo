@@ -49,6 +49,7 @@ import type { Host } from "./host"
 import { expandHome, quote } from "./shell-env"
 import { systemUsage } from "./system-usage"
 import { Store } from "./store"
+import { installedShells } from "./shells"
 import { TerminalManager } from "./terminal"
 import { TsServers } from "./tsserver"
 import { checkForUpdate, downloadUpdate, startInstaller } from "./updater"
@@ -1138,14 +1139,28 @@ export function createIpc(host: Host): {
 
   handle(
     IPC.terminalCreate,
-    async (_event, folderId: string, cols: number, rows: number) => {
+    async (
+      _event,
+      folderId: string,
+      cols: number,
+      rows: number,
+      shellId?: string
+    ) => {
       const cwd = await store.resolveFolderDir(folderId)
-      // No command: the user's own login shell, which is the only thing a pty
-      // is started for now. The agent CLIs used to be started here too, with
+      // No command: an interactive shell, which is the only thing a pty is
+      // started for now. The agent CLIs used to be started here too, with
       // their flags built alongside — what runs one is the agent SDK in
       // `worktree-chat.ts`, which spawns its own process and needs no pty.
-      return terminals.create({ cwd }, cols, rows)
+      const picked = shellId
+        ? (await installedShells()).find((profile) => profile.id === shellId)
+        : undefined
+      const shell = picked && { file: picked.file, args: picked.args }
+      return terminals.create({ cwd, shell }, cols, rows)
     }
+  )
+
+  handle(IPC.terminalShells, async () =>
+    (await installedShells()).map(({ id, name }) => ({ id, name }))
   )
 
   handle(IPC.terminalWrite, (_event, terminalId: string, data: string) =>

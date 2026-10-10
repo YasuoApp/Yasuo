@@ -70,7 +70,10 @@ function broadcast(session: Session, message: unknown): void {
 }
 
 function handleCreate(socket: net.Socket, request: CreateRequest): void {
-  const { file, args } = shell(request.command)
+  const { file, args } =
+    request.command === undefined && request.shell
+      ? request.shell
+      : shell(request.command)
   const pty = spawn(file, args, {
     name: "xterm-256color",
     cwd: request.cwd,

@@ -7,6 +7,13 @@ import {
   X,
 } from "lucide-react"
 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 import { useDock, DOCK_STRIP_HEIGHT } from "@/lib/dock"
 import { shellLabels, useShells } from "@/lib/shell/store"
@@ -46,6 +53,8 @@ export function Dock() {
   const close = useShells((state) => state.close)
   const add = useShells((state) => state.add)
   const restart = useShells((state) => state.restart)
+  const installed = useShells((state) => state.installed)
+  const loadInstalled = useShells((state) => state.loadInstalled)
 
   const folders = useStudio((state) => state.folders)
   const labels = shellLabels(
@@ -54,6 +63,10 @@ export function Dock() {
       folders.find((folder) => folder.id === folderId)?.name ?? "project"
   )
   const active = shells.find((shell) => shell.id === activeId)
+  const shellName = (shellId: string | null) =>
+    shellId
+      ? installed?.find((candidate) => candidate.id === shellId)?.name
+      : undefined
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -96,6 +109,9 @@ export function Dock() {
             <TabFace
               key={shell.id}
               label={labels.get(shell.id) ?? "project"}
+              // Named only when picked from the menu: a tab on the default
+              // shell is every tab there was before there was a menu.
+              kind={shellName(shell.shellId)}
               title={shell.cwd ?? undefined}
               // Nothing is "selected" while the dock is shut: the strip is all
               // there is, and a lit tab would be pointing at a panel that is
@@ -110,11 +126,53 @@ export function Dock() {
 
         <IconButton
           label="New terminal"
-          onClick={add}
+          onClick={() => add()}
           className="size-6 shrink-0"
         >
           <Plus className="size-3.5" />
         </IconButton>
+        {/* The other shells, as VS Code's `+` has them beside it — PowerShell,
+            Command Prompt, Git Bash on Windows; whatever `/etc/shells` lists
+            elsewhere. Asked of main the first time it opens. */}
+        <DropdownMenu
+          onOpenChange={(next) => {
+            if (next) loadInstalled()
+          }}
+        >
+          <DropdownMenuTrigger
+            render={
+              <IconButton
+                label="New terminal with…"
+                className="-ml-0.5 h-6 w-4 shrink-0"
+              >
+                <ChevronDown className="size-3" />
+              </IconButton>
+            }
+          />
+          <DropdownMenuContent align="start" className="w-48">
+            <DropdownMenuLabel>New terminal</DropdownMenuLabel>
+            {installed === null ? (
+              <DropdownMenuItem disabled>Looking for shells…</DropdownMenuItem>
+            ) : installed.length === 0 ? (
+              <DropdownMenuItem disabled>No shells found</DropdownMenuItem>
+            ) : (
+              installed.map((profile, index) => (
+                <DropdownMenuItem
+                  key={profile.id}
+                  onClick={() => add(profile.id)}
+                >
+                  <SquareTerminal />
+                  {profile.name}
+                  {index === 0 && (
+                    <span className="ml-auto text-[0.65rem] text-muted-foreground">
+                      default
+                    </span>
+                  )}
+                </DropdownMenuItem>
+              ))
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
 
         {open && active && (
           <IconButton
@@ -136,6 +194,7 @@ export function Dock() {
 
 function TabFace({
   label,
+  kind,
   title,
   selected,
   exited = false,
@@ -143,6 +202,8 @@ function TabFace({
   onClose,
 }: {
   label: string
+  /** The shell it runs, when that is not the default one. */
+  kind?: string
   /** The whole path, on hover — the label is only its last segment. */
   title?: string
   selected: boolean
@@ -178,6 +239,11 @@ function TabFace({
         <span className={cn("truncate", exited && "line-through opacity-60")}>
           {label}
         </span>
+        {kind && (
+          <span className="shrink-0 text-[0.65rem] text-muted-foreground">
+            {kind}
+          </span>
+        )}
       </button>
       {onClose && (
         <button

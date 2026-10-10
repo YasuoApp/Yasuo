@@ -81,7 +81,7 @@ function ShellView({ shell }: { shell: Shell }) {
   // so writes go through a ref rather than state.
   const terminalId = useRef<string | null>(null)
 
-  const { id, folderId } = shell
+  const { id, folderId, shellId } = shell
 
   const onReady = useCallback(
     (terminal: TerminalHandle) => {
@@ -111,7 +111,12 @@ function ShellView({ shell }: { shell: Shell }) {
       }
 
       void window.desktop
-        .terminalCreate(folderId, terminal.cols, terminal.rows)
+        .terminalCreate(
+          folderId,
+          terminal.cols,
+          terminal.rows,
+          shellId ?? undefined
+        )
         .then((created) => {
           // The pane unmounted while the shell was starting; it would otherwise
           // be left running with nothing reading it.
@@ -160,7 +165,7 @@ function ShellView({ shell }: { shell: Shell }) {
         if (current) void window.desktop.terminalKill(current)
       }
     },
-    [id, folderId, setExited, setCwd]
+    [id, folderId, shellId, setExited, setCwd]
   )
 
   const onResize = useCallback((size: { cols: number; rows: number }) => {

@@ -1,5 +1,7 @@
 import { create } from "zustand"
 
+import type { TerminalShell } from "@shared/api"
+
 import { useDock } from "../dock"
 import { nameOf } from "../files/paths"
 import { useStudio } from "../store"
@@ -27,6 +29,10 @@ export type Shell = {
   /** An **id**, never a path: main resolves the directory from its own
    * record. */
   folderId: string
+  /** Which of main's shells this runs — PowerShell, Git Bash — or null for
+   * the machine's default. Kept across a restart, which is the same shell
+   * started over. */
+  shellId: string | null
   /** Bumped to remount the pane, which is what starting a shell over is. */
   attempt: number
   exited: boolean
@@ -49,6 +55,9 @@ type ShellState = {
    * for. Showing the dock is the asking; see `ensure`.
    */
   target: string | null
+  /** The shells installed on this machine, default first — null until the
+   * `+` menu first asks. */
+  installed: TerminalShell[] | null
 
   /** Points the dock at a project. Switches to one of its shells when it has
    * one, and otherwise only records where the next one goes. */
@@ -63,8 +72,11 @@ type ShellState = {
    * question is a tab that has to be answered before it is any use.
    */
   ensure: () => void
-  /** The `+`: another shell, in the target project, beside the ones open. */
-  add: () => void
+  /** The `+`: another shell, in the target project, beside the ones open —
+   * the default one, or the one picked from the menu beside it. */
+  add: (shellId?: string) => void
+  /** Asks main which shells there are, once. */
+  loadInstalled: () => void
   select: (id: string) => void
   /** Ends the shell's pty and drops its tab. The last one closing shuts the
    * dock, as an editor's panel does — a dock left open onto nothing would start
@@ -137,10 +149,11 @@ export const useShells = create<ShellState>((set, get) => {
     )
   }
 
-  function start(folderId: string) {
+  function start(folderId: string, shellId: string | null = null) {
     const shell: Shell = {
       id: crypto.randomUUID(),
       folderId,
+      shellId,
       attempt: 0,
       exited: false,
       cwd: null,
@@ -161,6 +174,7 @@ export const useShells = create<ShellState>((set, get) => {
     shells: [],
     activeId: null,
     target: null,
+    installed: null,
 
     showFor(folderId) {
       const { shells, activeId } = get()
@@ -187,11 +201,19 @@ export const useShells = create<ShellState>((set, get) => {
       else start(folderId)
     },
 
-    add() {
+    add(shellId) {
       const folderId = place()
       if (!folderId) return
-      start(folderId)
+      start(folderId, shellId ?? null)
       useDock.getState().show()
+    },
+
+    loadInstalled() {
+      if (get().installed) return
+      void window.desktop
+        .terminalShells()
+        .then((installed) => set({ installed }))
+        .catch(() => set({ installed: [] }))
     },
 
     select(id) {
