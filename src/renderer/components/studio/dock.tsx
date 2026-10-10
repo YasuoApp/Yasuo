@@ -10,6 +10,7 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuTrigger,
@@ -150,27 +151,32 @@ export function Dock() {
             }
           />
           <DropdownMenuContent align="start" className="w-48">
-            <DropdownMenuLabel>New terminal</DropdownMenuLabel>
-            {installed === null ? (
-              <DropdownMenuItem disabled>Looking for shells…</DropdownMenuItem>
-            ) : installed.length === 0 ? (
-              <DropdownMenuItem disabled>No shells found</DropdownMenuItem>
-            ) : (
-              installed.map((profile, index) => (
-                <DropdownMenuItem
-                  key={profile.id}
-                  onClick={() => add(profile.id)}
-                >
-                  <SquareTerminal />
-                  {profile.name}
-                  {index === 0 && (
-                    <span className="ml-auto text-[0.65rem] text-muted-foreground">
-                      default
-                    </span>
-                  )}
+            {/* A label outside a group throws in Base UI. */}
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>New terminal</DropdownMenuLabel>
+              {installed === null ? (
+                <DropdownMenuItem disabled>
+                  Looking for shells…
                 </DropdownMenuItem>
-              ))
-            )}
+              ) : installed.length === 0 ? (
+                <DropdownMenuItem disabled>No shells found</DropdownMenuItem>
+              ) : (
+                installed.map((profile, index) => (
+                  <DropdownMenuItem
+                    key={profile.id}
+                    onClick={() => add(profile.id)}
+                  >
+                    <SquareTerminal />
+                    {profile.name}
+                    {index === 0 && (
+                      <span className="ml-auto text-[0.65rem] text-muted-foreground">
+                        default
+                      </span>
+                    )}
+                  </DropdownMenuItem>
+                ))
+              )}
+            </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
 
