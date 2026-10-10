@@ -71,6 +71,7 @@ import {
 } from "@/lib/files/viewers"
 import { useProjects } from "@/lib/projects"
 import { shownRootOf } from "@/lib/files/roots"
+import { relativeTo } from "@/lib/files/paths"
 import { useStudio } from "@/lib/store"
 import { RenameDialog } from "../rename-dialog"
 import { IconButton } from "../icon-button"
@@ -511,6 +512,18 @@ export function FileTree({ onAddFolder }: { onAddFolder: () => void }) {
             <Copy />
             Copy path
           </ContextMenuItem>
+          {shown && (
+            <ContextMenuItem
+              onClick={() =>
+                void navigator.clipboard.writeText(
+                  relativeTo(shown.path, menuTarget.entry.path)
+                )
+              }
+            >
+              <Copy />
+              Copy relative path
+            </ContextMenuItem>
+          )}
           <ContextMenuItem
             onClick={() =>
               void window.desktop.revealPath(menuTarget.entry.path)
