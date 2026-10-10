@@ -1,4 +1,4 @@
-import { mergeShellEnv, parseEnv } from "../src/main/shell-env"
+import { mergeShellEnv, parseEnv, pickWindowsHit } from "../src/main/shell-env"
 import { check, finish, section } from "./harness"
 
 /**
@@ -57,5 +57,23 @@ check(
     merged.PWD === undefined &&
     merged._ === undefined
 )
+
+section("picking a hit out of where.exe")
+
+check(
+  // An npm install's `.cmd` is refused by spawn without a shell.
+  "an .exe wins over the npm shims listed after it",
+  pickWindowsHit([
+    "C:\\Users\\me\\.local\\bin\\claude.exe",
+    "C:\\Users\\me\\AppData\\Roaming\\npm\\claude",
+    "C:\\Users\\me\\AppData\\Roaming\\npm\\claude.cmd",
+  ]) === "C:\\Users\\me\\.local\\bin\\claude.exe"
+)
+check(
+  "with no .exe, the last line as before",
+  pickWindowsHit(["C:\\npm\\claude", "C:\\npm\\claude.cmd"]) ===
+    "C:\\npm\\claude.cmd"
+)
+check("nothing found is nothing", pickWindowsHit([]) === undefined)
 
 finish()

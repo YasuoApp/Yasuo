@@ -8,6 +8,7 @@
  */
 
 import { execFile } from "node:child_process"
+import { existsSync } from "node:fs"
 import { homedir } from "node:os"
 import path from "node:path"
 import { promisify } from "node:util"
@@ -80,13 +81,17 @@ export function quote(value: string): string {
  * well as real binaries.
  */
 export async function locate(command: string): Promise<string | null> {
+  // A `CLAUDE_BIN` naming a file is the answer already — and on Windows the
+  // probe below could not say so, since `where.exe` takes no full path.
+  if (path.isAbsolute(command)) return existsSync(command) ? command : null
+
+  const windows = process.platform === "win32"
   // `where.exe` rather than `where`: in PowerShell the bare name is an alias
   // for `Where-Object`, which would filter a pipeline instead of finding
   // anything.
-  const probe =
-    process.platform === "win32"
-      ? `where.exe "${command}"`
-      : `command -v ${quote(command)}`
+  const probe = windows
+    ? `where.exe "${command}"`
+    : `command -v ${quote(command)}`
   const { file, args } = shell(probe)
 
   try {
@@ -100,14 +105,41 @@ export async function locate(command: string): Promise<string | null> {
       windowsHide: true,
     })
 
-    const lines = stdout.split("\n").filter((line) => line.trim() !== "")
-    return lines.at(-1)?.trim() ?? null
+    const lines = stdout
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line !== "")
+    return (windows ? pickWindowsHit(lines) : lines.at(-1)) ?? null
   } catch {
     // A non-zero exit is `command -v` saying it found nothing. Anything else —
     // no such shell, the timeout above — leaves the caller to treat the tool as
     // installable, which is the recoverable half of being wrong.
-    return null
+    return windows ? windowsInstallOf(command) : null
   }
+}
+
+/**
+ * Which of `where.exe`'s hits can be spawned without a shell: an `.exe`.
+ *
+ * An npm install lists an extensionless sh script and a `.cmd` beside it, and
+ * Node refuses to spawn a `.cmd` without `shell: true` (CVE-2024-27980) — so the
+ * last line, which is what the POSIX branch takes, was a CLI that ran fine in
+ * PowerShell and failed here.
+ */
+export function pickWindowsHit(lines: string[]): string | undefined {
+  return lines.find((line) => /\.exe$/i.test(line)) ?? lines.at(-1)
+}
+
+/**
+ * Where the native installer puts the CLI on Windows, if it is there.
+ *
+ * Windows has no login shell to ask, so `where.exe` sees only the PATH this
+ * process was started with: one added after the app opened, or only in a
+ * PowerShell `$PROFILE`, never reaches it.
+ */
+function windowsInstallOf(command: string): string | null {
+  const candidate = path.join(homedir(), ".local", "bin", `${command}.exe`)
+  return existsSync(candidate) ? candidate : null
 }
 
 /** Markers a running `claude` exports for whatever it spawns, none of which
