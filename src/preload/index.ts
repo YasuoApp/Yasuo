@@ -33,8 +33,6 @@ function subscribe<T>(channel: string, listener: (payload: T) => void) {
 const api: DesktopApi = {
   // `process.platform` is one of the few things a sandboxed preload still has.
   platform: process.platform as DesktopApi["platform"],
-  runtime: "electron",
-  resolveNoteFileUrl: (url) => Promise.resolve(url),
 
   getWorkspace: () => ipcRenderer.invoke(IPC.getWorkspace),
   addFolder: (input) => ipcRenderer.invoke(IPC.addFolder, input),
@@ -47,12 +45,10 @@ const api: DesktopApi = {
     ipcRenderer.invoke(IPC.nameWorktree, folderId, title),
 
   pickDirectory: () => ipcRenderer.invoke(IPC.pickDirectory),
-  pickImages: () => ipcRenderer.invoke(IPC.pickImages),
   pickFiles: (directory) => ipcRenderer.invoke(IPC.pickFiles, directory),
   // Never leaves this script: `webUtils` only resolves a real path for a
   // `File` from inside the preload's own privileged context.
   getPathForFile: (file) => webUtils.getPathForFile(file),
-  readImageDataUrl: (path) => ipcRenderer.invoke(IPC.readImageDataUrl, path),
   clipboardImagePath: () => ipcRenderer.invoke(IPC.clipboardImagePath),
 
   onMenuCommand: (listener) =>
@@ -151,15 +147,6 @@ const api: DesktopApi = {
   openChatWindow: (chatId) => ipcRenderer.invoke(IPC.openChatWindow, chatId),
   setAlwaysOnTop: (on) => ipcRenderer.invoke(IPC.setAlwaysOnTop, on),
   isAlwaysOnTop: () => ipcRenderer.invoke(IPC.isAlwaysOnTop),
-  listSnapshots: (chatId) => ipcRenderer.invoke(IPC.listSnapshots, chatId),
-  snapshotDiff: (folderId, snapshotId) =>
-    ipcRenderer.invoke(IPC.snapshotDiff, folderId, snapshotId),
-  restoreSnapshot: (chatId, snapshotId) =>
-    ipcRenderer.invoke(IPC.restoreSnapshot, chatId, snapshotId),
-  chatBlame: (filePath, text) =>
-    ipcRenderer.invoke(IPC.chatBlame, filePath, text),
-  onSnapshotsChanged: (listener) =>
-    subscribe<string>(IPC.snapshotsChanged, listener),
   searchWorkspace: (query, options) =>
     ipcRenderer.invoke(IPC.searchWorkspace, query, options),
   deleteWorktreeChat: (id) => ipcRenderer.invoke(IPC.deleteWorktreeChat, id),

@@ -22,7 +22,6 @@ export default [
   {
     ignores: [
       "dist-electron/**",
-      "dist-web/**",
       "dist-renderer/**",
       "release/**",
       "src/renderer/public/**",
@@ -44,13 +43,7 @@ export default [
   { plugins: { onlyWarn } },
 
   {
-    files: [
-      "src/main/**",
-      "src/preload/**",
-      "src/server/**",
-      "scripts/**",
-      "test/**",
-    ],
+    files: ["src/main/**", "src/preload/**", "scripts/**", "test/**"],
     languageOptions: { globals: globals.node },
   },
 

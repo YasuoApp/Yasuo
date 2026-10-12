@@ -15,7 +15,6 @@ import type { ChatActivity } from "@shared/chat-activity"
  * is still the one place the sidebar asks about it.
  */
 export {
-  NOTHING_RUNNING,
   isRunning,
   activityLabel,
   activityTitle,

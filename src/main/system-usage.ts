@@ -3,8 +3,7 @@ import os from "node:os"
 import type { SystemUsage } from "../shared/api"
 
 /** The part of `SystemUsage` that is this app's own rather than the machine's —
- * asked of the host, since what "this app" is differs between Electron's
- * family of processes and the server's one. */
+ * asked of the host, which is what knows Electron's family of processes. */
 export type AppShare = Pick<
   SystemUsage,
   "appCpuPercent" | "appCoreCpuPercent" | "appMemory" | "appProcesses"
@@ -99,8 +98,8 @@ function machineCpuPercent(): number {
  */
 function memory(): { memoryTotal: number; memoryAvailable: number } {
   try {
-    // Electron's addition to `process`, absent under plain Node — the server
-    // build lands in the `catch` and reports free pages.
+    // Electron's addition to `process`, absent under plain Node — a test lands
+    // in the `catch` and reports free pages.
     const info = (
       process as unknown as { getSystemMemoryInfo: () => unknown }
     ).getSystemMemoryInfo() as Record<string, unknown>
@@ -126,30 +125,6 @@ export function kilobytes(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) && value > 0
     ? value * 1024
     : 0
-}
-
-/**
- * This process alone, for a host with no family of processes to add up — the
- * localhost server. `cpuUsage` is microseconds of CPU since the last call, so
- * it is divided by the wall-clock span the same way the machine figure is.
- */
-let lastProcess = { at: Date.now(), cpu: process.cpuUsage() }
-
-export function processShare(cores: number): AppShare {
-  const at = Date.now()
-  const cpu = process.cpuUsage()
-  const spent =
-    cpu.user - lastProcess.cpu.user + cpu.system - lastProcess.cpu.system
-  const elapsed = (at - lastProcess.at) * 1000
-  lastProcess = { at, cpu }
-
-  const core = elapsed > 0 ? (spent / elapsed) * 100 : 0
-  return {
-    appCpuPercent: clampPercent(core / Math.max(1, cores)),
-    appCoreCpuPercent: Math.max(0, core),
-    appMemory: process.memoryUsage().rss,
-    appProcesses: 1,
-  }
 }
 
 export function clampPercent(value: number): number {

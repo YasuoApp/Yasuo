@@ -90,25 +90,22 @@ export function ChatWindow({ chatId }: { chatId: string }) {
         <span className="min-w-0 flex-1 truncate text-xs font-medium text-muted-foreground">
           {chat?.title ?? "Chat"}
         </span>
-        {/* A browser window cannot be pinned over others. */}
-        {window.desktop.runtime === "electron" && (
-          <IconButton
-            label={pinned ? "Unpin from the top" : "Keep over other windows"}
-            side="bottom"
-            pressed={pinned}
-            onClick={togglePin}
-            className={cn(
-              "no-drag size-6",
-              pinned && "bg-accent text-accent-foreground"
-            )}
-          >
-            {pinned ? (
-              <Pin className="size-3.5" />
-            ) : (
-              <PinOff className="size-3.5" />
-            )}
-          </IconButton>
-        )}
+        <IconButton
+          label={pinned ? "Unpin from the top" : "Keep over other windows"}
+          side="bottom"
+          pressed={pinned}
+          onClick={togglePin}
+          className={cn(
+            "no-drag size-6",
+            pinned && "bg-accent text-accent-foreground"
+          )}
+        >
+          {pinned ? (
+            <Pin className="size-3.5" />
+          ) : (
+            <PinOff className="size-3.5" />
+          )}
+        </IconButton>
       </header>
 
       <div className="min-h-0 flex-1">

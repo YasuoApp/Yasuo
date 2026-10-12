@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { X } from "lucide-react"
 
 import { noteFileUrl } from "@shared/note-files"
@@ -81,31 +81,12 @@ export function ImageThumb({
 /**
  * A line's pictures, by the note files it names — a sent message's, or what a
  * tool call came back with.
- *
- * The URL is asked of `resolveNoteFileUrl` rather than built: under Electron a
- * `note-file://` URL is the picture, in a browser tab it is a route of the
- * server's — the same split the block editor's pictures go through.
  */
 export function NoteImages({ files }: { files: string[] }) {
-  const [urls, setUrls] = useState<string[] | null>(null)
-
-  useEffect(() => {
-    let current = true
-    void Promise.all(
-      files.map((name) => window.desktop.resolveNoteFileUrl(noteFileUrl(name)))
-    ).then((resolved) => {
-      if (current) setUrls(resolved)
-    })
-    return () => {
-      current = false
-    }
-  }, [files])
-
-  if (!urls) return null
   return (
     <div className="flex flex-wrap gap-1.5 pt-1.5 pb-0.5">
-      {urls.map((src, index) => (
-        <ImageThumb key={files[index]} src={src} n={index + 1} />
+      {files.map((name, index) => (
+        <ImageThumb key={name} src={noteFileUrl(name)} n={index + 1} />
       ))}
     </div>
   )

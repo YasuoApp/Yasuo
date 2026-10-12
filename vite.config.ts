@@ -90,19 +90,11 @@ export default defineConfig({
   // they do against the dev server — which is what the runtime's
   // `/almostnode/...` and `/__sw__.js` URLs rely on.
   base: "/",
-  // The browser build in development (`scripts/web.mjs`): the page is Vite's
-  // and the calls are the localhost server's, proxied so both share an origin —
-  // the server's token check and its `Host` check see the same request either
-  // way. Off for the Electron dev run, which has no server to point at.
-  //
   // `bun run dev --hmr=false` turns hot reload off (`scripts/dev.mjs` sets the
   // variable), for a session where an edit should not swap modules under a
   // live pty and a running chat; the window then picks changes up on ⌘R.
   server: {
     hmr: process.env.VSCLAUDE_HMR !== "false",
-    proxy: process.env.VSCLAUDE_WEB_API
-      ? { "/__vsclaude": process.env.VSCLAUDE_WEB_API }
-      : undefined,
   },
   build: {
     // Out of `src/`, and named to match `dist-electron/` beside it. Vite would
