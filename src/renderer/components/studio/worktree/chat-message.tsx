@@ -134,7 +134,7 @@ function UserMessage({
        which are the two the find searches, and at every depth: a message
        inside an open fold is drawn by this same component. */
     <div data-line={of.id} className="group ml-4">
-      <div className="rounded-lg rounded-br-sm bg-accent/60 px-2.5 py-1.5 text-xs">
+      <div className="rounded-lg rounded-br-sm bg-accent/60 px-2.5 py-1.5 text-chat">
         <MentionText text={of.text} />
         {of.images && of.images.length > 0 && <NoteImages files={of.images} />}
       </div>
@@ -254,7 +254,7 @@ function OtherMessage({
       <p
         className={cn(
           "rounded-lg border border-destructive/40 bg-destructive/5 px-2.5 py-1.5",
-          "text-xs break-words whitespace-pre-wrap text-destructive"
+          "text-chat break-words whitespace-pre-wrap text-destructive"
         )}
       >
         <TriangleAlert className="mr-1.5 inline size-3 shrink-0 -translate-y-px" />
@@ -275,7 +275,7 @@ function OtherMessage({
     // copy button: a turn's reply is several of these, copied once from its
     // cost line.
     <div data-line={of.id} title={stampOf(of)}>
-      <MarkdownView source={of.text} className="px-1 text-xs" />
+      <MarkdownView source={of.text} className="px-1 text-chat" />
     </div>
   )
 }
@@ -433,7 +433,7 @@ function EditMessage({
             if (ready) onSave(draft)
           }
         }}
-        className="max-h-64 min-h-12 resize-none bg-background px-2 py-1.5 text-xs md:text-xs"
+        className="max-h-64 min-h-12 resize-none bg-background px-2 py-1.5 text-chat md:text-chat"
       />
       <p className="px-0.5 text-[0.65rem] leading-snug text-muted-foreground">
         Everything after this message is removed and the conversation goes on

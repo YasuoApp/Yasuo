@@ -114,7 +114,9 @@ function chromeTheme(dark: boolean): Extension {
       "&.cm-focused": { outline: "none" },
       ".cm-scroller": {
         fontFamily: monoFont(),
-        fontSize: "13px",
+        // `rem`, so Settings › Appearance's size reaches the code as well as
+        // the chrome around it: 13px at the default root.
+        fontSize: "0.8125rem",
         lineHeight: "1.6",
       },
       ".cm-content": { caretColor: "var(--foreground)" },
@@ -177,7 +179,7 @@ function chromeTheme(dark: boolean): Extension {
       ".cm-panels.cm-panels-bottom": { borderTop: "1px solid var(--border)" },
       ".cm-panel.cm-search": { padding: "6px 8px", fontFamily: "inherit" },
       ".cm-panel.cm-search input, .cm-panel.cm-search button, .cm-panel.cm-search label":
-        { fontSize: "12px" },
+        { fontSize: "0.75rem" },
       ".cm-panel.cm-search input[type=text]": {
         backgroundColor: "var(--input)",
         color: "var(--foreground)",
@@ -209,7 +211,7 @@ function chromeTheme(dark: boolean): Extension {
       },
       ".cm-tooltip.cm-tooltip-autocomplete > ul": {
         fontFamily: monoFont(),
-        fontSize: "12px",
+        fontSize: "0.75rem",
         maxHeight: "16em",
       },
       ".cm-tooltip.cm-tooltip-autocomplete > ul > li": { padding: "2px 6px" },

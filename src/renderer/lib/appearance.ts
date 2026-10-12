@@ -169,6 +169,15 @@ export function rootFontSize(size: FontSize): string {
 }
 
 /**
+ * The terminal's font size, in pixels: its 12px at the default root, scaled
+ * with the root like every `rem` around it. xterm takes a number for a canvas
+ * font string, so it cannot be handed a `rem` and follow along by itself.
+ */
+export function terminalFontSize(size: FontSize): number {
+  return Math.round((12 * parseInt(rootFontSize(size))) / 16)
+}
+
+/**
  * The custom properties a density sets, as `globals.css` reads them: a
  * sidebar row's height, the gap between a transcript's turns, and the tab
  * strip's height.

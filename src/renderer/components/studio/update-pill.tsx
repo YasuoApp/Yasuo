@@ -47,7 +47,7 @@ export function UpdatePill() {
         type="button"
         onClick={() => setOpen(true)}
         title={`Visual Studio Claude ${update.version} is available. You are on ${update.current}.`}
-        className="flex shrink-0 items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary outline-none hover:bg-primary/20 focus-visible:ring-3 focus-visible:ring-ring/50"
+        className="flex shrink-0 items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[0.6875rem] font-medium text-primary outline-none hover:bg-primary/20 focus-visible:ring-3 focus-visible:ring-ring/50"
       >
         <ArrowUpCircle className="size-3 shrink-0" />
         {/* The percentage reaches the pill too, not only the sheet: the sheet

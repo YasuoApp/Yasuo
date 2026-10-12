@@ -55,16 +55,16 @@ export const DIFF_CONTEXT = 3
 export const DIFF_MIN_COLLAPSE = 4
 
 /**
- * The height of one row of the diff, in pixels.
+ * The height of one row of the diff, as a CSS length.
  *
  * Pinned rather than left to the font, and stated here rather than written into
  * the theme, because three different pieces of code lay out rows that have to
  * line up: the editor's own lines, the merge extension's removed rows inside a
- * block widget, and the gutter columns beside them. It is also what turns a
- * pointer's Y inside a removed chunk back into which removed line it is over —
- * see `reviewGutter`, which has no other way to ask.
+ * block widget, and the gutter columns beside them. In `rem` like the diff's
+ * 0.75rem text, so Settings › Appearance's size scales the rows with it — 20px
+ * at the default root.
  */
-export const DIFF_ROW_HEIGHT = 20
+export const DIFF_ROW_HEIGHT = "1.25rem"
 
 /** One hunk, in the form a unified diff header states it. */
 type Hunk = {
@@ -624,10 +624,10 @@ export function githubDiffTheme(isDark: boolean): Extension {
       // A diff's own metrics, not the editor's. Pinned rather than inherited
       // because the removed rows and the gutter column beside them are laid out
       // by two different pieces of code and line up only if both use this.
-      ".cm-scroller": { fontSize: "12px", lineHeight: `${DIFF_ROW_HEIGHT}px` },
+      ".cm-scroller": { fontSize: "0.75rem", lineHeight: DIFF_ROW_HEIGHT },
       ".cm-content, .cm-line": {
-        fontSize: "12px",
-        lineHeight: `${DIFF_ROW_HEIGHT}px`,
+        fontSize: "0.75rem",
+        lineHeight: DIFF_ROW_HEIGHT,
       },
       ".cm-content": { padding: "0" },
       // The selection drawn **over** the code rather than under it. CodeMirror
@@ -679,21 +679,21 @@ export function githubDiffTheme(isDark: boolean): Extension {
       ".cm-diffSigns": { borderLeft: "1px solid var(--border)" },
       ".cm-diffSigns .cm-gutterElement": { padding: "0 4px 0 6px" },
       // Stated rather than inherited. `lib/editor.ts` sets the studio's editors
-      // to 13px, and which of two themes wins is not the order they appear in
+      // to 0.8125rem, and which of two themes wins is not the order they appear in
       // an extension array — so anything that has to match the code text says
       // its size here.
       ".cm-diffNum": {
         display: "block",
         textAlign: "right",
-        fontSize: "12px",
-        lineHeight: `${DIFF_ROW_HEIGHT}px`,
+        fontSize: "0.75rem",
+        lineHeight: DIFF_ROW_HEIGHT,
       },
       ".cm-diffSign": {
         display: "block",
         width: "1ch",
         textAlign: "center",
-        fontSize: "12px",
-        lineHeight: `${DIFF_ROW_HEIGHT}px`,
+        fontSize: "0.75rem",
+        lineHeight: DIFF_ROW_HEIGHT,
       },
       ".cm-diffSign-added": { color: sign.add },
       ".cm-diffSign-removed": { color: sign.del },
@@ -724,8 +724,8 @@ export function githubDiffTheme(isDark: boolean): Extension {
       },
       ".cm-diffRemovedCol > *": {
         display: "block",
-        height: `${DIFF_ROW_HEIGHT}px`,
-        lineHeight: `${DIFF_ROW_HEIGHT}px`,
+        height: DIFF_ROW_HEIGHT,
+        lineHeight: DIFF_ROW_HEIGHT,
       },
 
       // An added line, tinted from the sign column across. No inner highlight:
@@ -756,7 +756,7 @@ export function githubDiffTheme(isDark: boolean): Extension {
       },
       ".cm-deletedChunk .cm-deletedLine": {
         display: "block",
-        lineHeight: `${DIFF_ROW_HEIGHT}px`,
+        lineHeight: DIFF_ROW_HEIGHT,
         padding: "0 2px 0 6px",
       },
       ".cm-deletedChunk .cm-deletedLine del": { textDecoration: "none" },
@@ -785,9 +785,9 @@ export function githubDiffTheme(isDark: boolean): Extension {
         borderTop: `1px solid ${hunk.edge}`,
         borderBottom: `1px solid ${hunk.edge}`,
         cursor: "pointer",
-        lineHeight: `${DIFF_ROW_HEIGHT}px`,
+        lineHeight: DIFF_ROW_HEIGHT,
         padding: "0",
-        fontSize: "12px",
+        fontSize: "0.75rem",
       },
       // And the `⦚` it puts on both sides of its own text. The `::after` is
       // already claimed below for the `@@` header; this is the other one, which
@@ -829,7 +829,7 @@ export function githubDiffTheme(isDark: boolean): Extension {
         display: "inline-flex",
         alignItems: "center",
         justifyContent: "center",
-        height: `${DIFF_ROW_HEIGHT}px`,
+        height: DIFF_ROW_HEIGHT,
         color: hunk.icon,
         cursor: "pointer",
         verticalAlign: "middle",
