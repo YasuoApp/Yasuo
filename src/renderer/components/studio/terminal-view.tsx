@@ -11,7 +11,7 @@ import { WebglAddon } from "@xterm/addon-webgl"
 import { Terminal } from "@xterm/xterm"
 import { ClipboardPaste, Copy, Eraser, MessageSquarePlus } from "lucide-react"
 
-import { monoFontFamily } from "@/lib/appearance"
+import { monoFontFamily, terminalFontSize } from "@/lib/appearance"
 import { useSettings } from "@/lib/settings"
 import { useTheme } from "next-themes"
 
@@ -163,6 +163,7 @@ export function TerminalView({ onReady, onResize }: TerminalViewProps) {
   const pillRef = useRef<HTMLDivElement>(null)
   const { resolvedTheme } = useTheme()
   const terminalRef = useRef<Terminal | null>(null)
+  const refitRef = useRef<(() => void) | null>(null)
 
   // xterm outlives every render, so callbacks are reached through refs.
   const onReadyRef = useRef(onReady)
@@ -189,7 +190,7 @@ export function TerminalView({ onReady, onResize }: TerminalViewProps) {
        * get, from Settings › Appearance.
        */
       fontFamily: monoFontFamily(useSettings.getState().fontMono),
-      fontSize: 12,
+      fontSize: terminalFontSize(useSettings.getState().fontSize),
       // Room to read, nothing more. The seams this used to have to avoid came
       // from the text renderer stretching box-drawing glyphs across a taller
       // cell; the renderer below draws them to whatever the cell is.
@@ -485,6 +486,7 @@ export function TerminalView({ onReady, onResize }: TerminalViewProps) {
         if (disposed) return
 
         refit()
+        refitRef.current = refit
 
         observer = new ResizeObserver(refit)
         observer.observe(host)
@@ -520,6 +522,7 @@ export function TerminalView({ onReady, onResize }: TerminalViewProps) {
       observer?.disconnect()
       terminal.dispose()
       terminalRef.current = null
+      refitRef.current = null
     }
   }, [])
 
@@ -529,15 +532,19 @@ export function TerminalView({ onReady, onResize }: TerminalViewProps) {
     terminal.options.theme = resolvedTheme === "dark" ? darkTheme : lightTheme
   }, [resolvedTheme])
 
-  // Settings › Appearance's monospace face, applied to a live terminal: the
-  // atlas is rebuilt by xterm on the option change, so a refit follows for the
-  // new cell size.
+  // Settings › Appearance's monospace face and size, applied to a live
+  // terminal: xterm rebuilds the atlas on the option change, but the host's
+  // box has not moved, so the observer never fires — the refit for the new
+  // cell size is called here, or the pty keeps the old columns.
   const fontMono = useSettings((state) => state.fontMono)
+  const fontSize = useSettings((state) => state.fontSize)
   useEffect(() => {
     const terminal = terminalRef.current
     if (!terminal) return
     terminal.options.fontFamily = monoFontFamily(fontMono)
-  }, [fontMono])
+    terminal.options.fontSize = terminalFontSize(fontSize)
+    refitRef.current?.()
+  }, [fontMono, fontSize])
 
   return (
     <TerminalMenu terminalRef={terminalRef}>

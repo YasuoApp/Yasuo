@@ -209,7 +209,7 @@ function keepSelection(next: Menu, was: Menu | null): Menu {
 // The send button used to sit on top of the text, which is what `pr-10` was
 // holding room for; it is in the toolbar under the field now, so the text has
 // the whole width back.
-const FIELD = "px-2.5 pt-2 pb-1 text-xs leading-relaxed md:text-xs"
+const FIELD = "px-2.5 pt-2 pb-1 text-chat leading-relaxed md:text-chat"
 
 /** The field's own `min-h-14` and `max-h-48`: a dragged height below the one
  * is a box that no longer shows a line, and up to the other the text still
@@ -1221,18 +1221,18 @@ export function ModelMenu({
                     {/* `Default (recommended)` names no model, so the row says
                         which one it is standing for — see `defaultModelAlias`. */}
                     {entry.value === "default" && alias && (
-                      <span className="shrink-0 text-[11px] text-muted-foreground">
+                      <span className="shrink-0 text-[0.6875rem] text-muted-foreground">
                         {alias}
                       </span>
                     )}
                     {entry.isNew && (
-                      <span className="rounded border border-muted-foreground/40 px-1 py-[0.5px] text-[9px] leading-tight font-semibold tracking-tight text-muted-foreground uppercase">
+                      <span className="rounded border border-muted-foreground/40 px-1 py-[0.5px] text-[0.5625rem] leading-tight font-semibold tracking-tight text-muted-foreground uppercase">
                         NEW
                       </span>
                     )}
                   </div>
                   {isSelected && effort && (
-                    <span className="text-[11px] font-normal text-muted-foreground/80">
+                    <span className="text-[0.6875rem] font-normal text-muted-foreground/80">
                       {EFFORT_LABELS[effort]}
                     </span>
                   )}
@@ -1285,12 +1285,12 @@ export function ModelMenu({
                 {/* `Default (recommended)` names no model, so the row says
                     which one it is standing for — see `defaultModelAlias`. */}
                 {entry.value === "default" && alias && (
-                  <span className="shrink-0 text-[11px] text-muted-foreground">
+                  <span className="shrink-0 text-[0.6875rem] text-muted-foreground">
                     {alias}
                   </span>
                 )}
                 {entry.isNew && (
-                  <span className="rounded border border-muted-foreground/40 px-1 py-[0.5px] text-[9px] leading-tight font-semibold tracking-tight text-muted-foreground uppercase">
+                  <span className="rounded border border-muted-foreground/40 px-1 py-[0.5px] text-[0.5625rem] leading-tight font-semibold tracking-tight text-muted-foreground uppercase">
                     NEW
                   </span>
                 )}
@@ -1313,7 +1313,7 @@ export function ModelMenu({
           </div>
           <div className="flex min-w-0 flex-1 flex-col">
             <span className="truncate text-xs font-normal">Inherit</span>
-            <span className="truncate text-[10px] text-muted-foreground">
+            <span className="truncate text-[0.625rem] text-muted-foreground">
               Whatever your own `claude` is set to
             </span>
           </div>
@@ -1503,7 +1503,7 @@ export function ProfileMenu({
                   busy={checking.includes(profile.configDir.trim())}
                 />
               ) : (
-                <span className="truncate text-[10px] text-muted-foreground">
+                <span className="truncate text-[0.625rem] text-muted-foreground">
                   No directory set
                 </span>
               )}
@@ -1540,7 +1540,7 @@ function AccountLine({
   return (
     <span
       className={cn(
-        "truncate text-[10px]",
+        "truncate text-[0.625rem]",
         tone === "bad" && !busy ? "text-destructive" : "text-muted-foreground"
       )}
     >
@@ -1850,7 +1850,7 @@ function CommandMenu({
                       type: a command taking `[low|medium|high]` should say so
                       before it is sent without one. */}
                   {command.argumentHint && (
-                    <span className="truncate font-mono text-[10px] text-muted-foreground/70">
+                    <span className="truncate font-mono text-[0.625rem] text-muted-foreground/70">
                       {command.argumentHint}
                     </span>
                   )}
@@ -1860,7 +1860,7 @@ function CommandMenu({
                   {(LOCAL_COMMANDS as readonly string[]).includes(
                     command.name
                   ) && (
-                    <span className="ml-auto shrink-0 text-[10px] text-muted-foreground/70">
+                    <span className="ml-auto shrink-0 text-[0.625rem] text-muted-foreground/70">
                       this app
                     </span>
                   )}
@@ -1943,7 +1943,7 @@ function MentionMenu({
                   <span className="truncate font-mono font-medium">
                     {mention.label}
                   </span>
-                  <span className="ml-auto shrink-0 text-[10px] text-muted-foreground/70">
+                  <span className="ml-auto shrink-0 text-[0.625rem] text-muted-foreground/70">
                     {PLAIN_LABELS[mention.kind]}
                   </span>
                 </span>

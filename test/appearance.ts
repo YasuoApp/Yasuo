@@ -17,6 +17,7 @@ import {
   SANS_FONT_LABELS,
   SANS_FONTS,
   sansFontFamily,
+  terminalFontSize,
   type Density,
 } from "../src/renderer/lib/appearance"
 import { check, finish, section } from "./harness"
@@ -87,6 +88,13 @@ check(
 check(
   "every size is a pixel length the root can take",
   FONT_SIZES.every((size) => /^\d+px$/.test(rootFontSize(size)))
+)
+check(
+  "the terminal keeps its 12px at the default and moves with the root",
+  terminalFontSize("default") === 12 &&
+    terminalFontSize("small") < 12 &&
+    terminalFontSize("large") > 12,
+  FONT_SIZES.map(terminalFontSize)
 )
 
 section("density")

@@ -41,7 +41,7 @@ export function SystemBar() {
   return (
     // No edge or fill of its own: it sits on the canvas under the cards, which
     // is what separates it from them.
-    <footer className="flex h-6 shrink-0 items-center gap-2 px-3 text-[11px] text-muted-foreground">
+    <footer className="flex h-6 shrink-0 items-center gap-2 px-3 text-[0.6875rem] text-muted-foreground">
       <BranchLabel />
 
       <span
