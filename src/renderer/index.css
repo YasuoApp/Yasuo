@@ -1,0 +1,54 @@
+@import "./styles/globals.css";
+
+/*
+ * globals.css expects the app shell to define these (Next's app previously
+ * supplied them via next/font's Geist variable classes); we use the system
+ * font stack instead since there's no SSR font-loading step here.
+ */
+:root {
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica,
+    Arial, sans-serif;
+  --font-mono:
+    ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Menlo, Consolas,
+    monospace;
+}
+
+/*
+ * On macOS the window has no title bar of its own — the studio's header stands
+ * in for it (see `titleBarStyle` in electron/main.ts). That makes the header
+ * the only thing left to drag the window by, and a drag region swallows clicks
+ * unless whatever is clickable inside it opts back out.
+ *
+ * The opt-out below is a backstop, not something to rely on: macOS drops the
+ * `no-drag` rect often enough that a button inside a drag region is one that
+ * works every other press. So the header keeps its buttons outside the region
+ * altogether — the draggable part is the space between them — rather than
+ * punching holes in it.
+ */
+.drag-region {
+  -webkit-app-region: drag;
+}
+
+.drag-region button,
+.drag-region a,
+.drag-region input,
+.drag-region [role="button"],
+.drag-region [role="combobox"] {
+  -webkit-app-region: no-drag;
+}
+
+/*
+ * Claimed by hand, for the corner of the title bar that holds a button.
+ *
+ * The button is already outside the drag region rather than inside it, so this
+ * is not the opt-out above — it is against a *stale* rect. macOS keeps a drag
+ * region after the element that asked for it is gone (electron#20926), and the
+ * launch screen draws one across the top of the window on every run
+ * (`TitleBarDragStrip`), which is exactly where this bar is. That strip now
+ * stays mounted and gives its rect up rather than being unmounted, which is the
+ * actual fix; this stays as the cheap half of the belt and braces.
+ */
+.no-drag {
+  -webkit-app-region: no-drag;
+}

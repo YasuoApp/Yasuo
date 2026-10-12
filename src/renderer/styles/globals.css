@@ -1,0 +1,553 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "./motion.css";
+
+@custom-variant dark (&:is(.dark *));
+@source "../**/*.{ts,tsx}";
+
+@theme inline {
+  --font-heading: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+
+  /*
+   * Elevation as tokens rather than Tailwind's own shadow scale, which is one
+   * set of numbers for both themes — a stack tuned to read on white is
+   * invisible over a near-black surface, and every dialog in the app was
+   * therefore floating on nothing in the dark. `@theme inline` emits the
+   * reference rather than resolving it, so `.dark` below hands `shadow-md` a
+   * deeper stack without a single call site spelling out a dark twin.
+   */
+  --shadow-2xs: var(--elevation-2xs);
+  --shadow-xs: var(--elevation-xs);
+  --shadow-sm: var(--elevation-sm);
+  --shadow-md: var(--elevation-md);
+  --shadow-lg: var(--elevation-lg);
+  --shadow-xl: var(--elevation-xl);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+  --font-sans: var(--font-sans);
+}
+
+/*
+ * The palette is built around one hue — 277, indigo — and every neutral carries
+ * a little of it rather than being a true grey. shadcn's default ships every
+ * token at chroma 0, which is what made the studio read as uniformly grey no
+ * matter how the layout was arranged; a surface at chroma 0.012 still reads as
+ * "grey" but stops reading as *nothing*.
+ *
+ * It was 285 (violet) with a **true-grey** dark half, and both moved together.
+ * The tint is back in the dark surfaces because the constraint that took it out
+ * is gone: that half matched Monaco's flat `#1e1e1e` because `vs-dark` could not
+ * be re-tinted without a hand-written theme per grammar, and CodeMirror paints
+ * no ground of its own (`lib/editor.ts`) — an open file is transparent over
+ * whatever pane holds it, so the chrome no longer has to match an editor's idea
+ * of black. What the tint buys is what a flat grey could not give: seven
+ * surfaces a step apart that still read as one material.
+ *
+ * **The neutrals read their hue from `--brand-hue`** and scale their chroma by
+ * `--brand-tint`, so an accent palette (`[data-palette]`, below) re-tints every
+ * surface by setting two numbers rather than twenty tokens, and Graphite can
+ * zero the tint for a true grey. The accents themselves — `--primary`, `--ring`,
+ * `--sidebar-primary`, `--chart-1` — stay literal, because each palette's accent
+ * needs its own lightness and its own foreground to keep contrast, and that is
+ * not a hue swap.
+ */
+:root {
+  --brand-hue: 277;
+  --brand-tint: 1;
+
+  --background: oklch(0.995 calc(0.002 * var(--brand-tint)) var(--brand-hue));
+  --foreground: oklch(0.2 calc(0.015 * var(--brand-tint)) var(--brand-hue));
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(
+    0.2 calc(0.015 * var(--brand-tint)) var(--brand-hue)
+  );
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(
+    0.2 calc(0.015 * var(--brand-tint)) var(--brand-hue)
+  );
+  --primary: oklch(0.54 0.2 277);
+  --primary-foreground: oklch(0.99 0.005 277);
+  --secondary: oklch(0.965 calc(0.006 * var(--brand-tint)) var(--brand-hue));
+  --secondary-foreground: oklch(
+    0.3 calc(0.03 * var(--brand-tint)) var(--brand-hue)
+  );
+  --muted: oklch(0.965 calc(0.006 * var(--brand-tint)) var(--brand-hue));
+  --muted-foreground: oklch(
+    0.52 calc(0.02 * var(--brand-tint)) var(--brand-hue)
+  );
+  --accent: oklch(0.945 calc(0.014 * var(--brand-tint)) var(--brand-hue));
+  --accent-foreground: oklch(
+    0.34 calc(0.11 * var(--brand-tint)) var(--brand-hue)
+  );
+  --destructive: oklch(0.58 0.22 25);
+  --border: oklch(0.9 calc(0.006 * var(--brand-tint)) var(--brand-hue));
+  --input: oklch(0.9 calc(0.008 * var(--brand-tint)) var(--brand-hue));
+  --ring: oklch(0.6 0.19 277);
+
+  /*
+   * Status colours as tokens rather than as `text-emerald-600` at each call
+   * site. The raw utilities forced every one of them to spell out its own
+   * dark-mode twin (`text-emerald-600 dark:text-emerald-400`), which is why
+   * they had already drifted between panels.
+   */
+  --success: oklch(0.56 0.14 158);
+  --success-foreground: oklch(0.99 0.01 158);
+  --warning: oklch(0.65 0.15 70);
+  --warning-foreground: oklch(0.99 0.01 70);
+  --info: oklch(0.56 0.16 245);
+  --info-foreground: oklch(0.99 0.01 245);
+
+  /*
+   * One hue per section, far enough apart that the active item says which panel
+   * you are in before the icon does. None of them sits on 277 — the brand hue
+   * stays reserved for primary actions, so a coloured section mark never looks
+   * like a button.
+   */
+  --section-files: oklch(0.55 0.13 205);
+  --section-database: oklch(0.54 0.16 250);
+  --section-api: oklch(0.57 0.21 325);
+  --section-terminal: oklch(0.55 0.14 162);
+  /* Notes takes the amber nobody else had: its nearest neighbour is Terminal's
+     green at 162, 92 away. */
+
+  --chart-1: oklch(0.54 0.2 277);
+  --chart-2: oklch(0.57 0.21 325);
+  --chart-3: oklch(0.54 0.16 250);
+  --chart-4: oklch(0.55 0.14 162);
+  --chart-5: oklch(0.62 0.15 70);
+
+  /*
+   * 8px rather than 10px. The studio is a dense workbench — a tab is 28px tall
+   * and a sidebar row 24px — and a radius that reads as soft on a 200px card
+   * reads as a lozenge on a 24px row. Every step above and below is derived
+   * from this one (see `@theme inline`), so this is the only number to move.
+   */
+  --radius: 0.5rem;
+
+  /*
+   * Two shadows per step, never one: a tight contact shadow at 1–2px that draws
+   * the edge, and a wide soft one that puts the surface above the page. One
+   * blurry shadow at 20px is a grey smudge — the edge is what actually reads as
+   * lift. The hairline in `--elevation-2xs` is a *border* drawn as a shadow, so
+   * it costs no layout on a control that already has one.
+   */
+  --elevation-2xs: 0 1px 2px oklch(0.2 0.02 277 / 0.05);
+  --elevation-xs:
+    0 1px 2px oklch(0.2 0.02 277 / 0.06), 0 1px 3px oklch(0.2 0.02 277 / 0.06);
+  --elevation-sm:
+    0 1px 2px oklch(0.2 0.02 277 / 0.06), 0 2px 6px oklch(0.2 0.02 277 / 0.07);
+  --elevation-md:
+    0 1px 2px oklch(0.2 0.02 277 / 0.06), 0 4px 12px oklch(0.2 0.02 277 / 0.09);
+  --elevation-lg:
+    0 1px 3px oklch(0.2 0.02 277 / 0.07), 0 8px 24px oklch(0.2 0.02 277 / 0.11);
+  --elevation-xl:
+    0 2px 4px oklch(0.2 0.02 277 / 0.08), 0 16px 48px oklch(0.2 0.02 277 / 0.14);
+
+  /*
+   * The measure a document is set to — the note editor's column, and the
+   * markdown preview's, which are two views of the same file and must not be
+   * two widths. Wider than a book's measure on purpose: a note is not only
+   * prose, it holds tables, code blocks and drawings, and those are read across
+   * rather than down. Here rather than in either stylesheet so that changing it
+   * moves both, and neither is the one that decides.
+   */
+  --prose-measure: 60rem;
+
+  /*
+   * The sidebar is a step *darker* than the content in both halves, which is
+   * the one structural change the repaint makes: it was a step lighter, so the
+   * navigation was the brightest thing on screen and the file being worked on
+   * the dimmest. Every studio that does this well — an editor, a terminal, a
+   * design tool — sinks its chrome and lifts its content.
+   */
+  --sidebar: oklch(0.972 calc(0.005 * var(--brand-tint)) var(--brand-hue));
+  --sidebar-foreground: oklch(
+    0.2 calc(0.015 * var(--brand-tint)) var(--brand-hue)
+  );
+  --sidebar-primary: oklch(0.54 0.2 277);
+  --sidebar-primary-foreground: oklch(0.99 0.005 277);
+  --sidebar-accent: oklch(
+    0.94 calc(0.016 * var(--brand-tint)) var(--brand-hue)
+  );
+  --sidebar-accent-foreground: oklch(
+    0.32 calc(0.11 * var(--brand-tint)) var(--brand-hue)
+  );
+  --sidebar-border: oklch(0.9 calc(0.006 * var(--brand-tint)) var(--brand-hue));
+  --sidebar-ring: oklch(0.6 0.19 277);
+
+  /*
+   * Density, as three lengths `lib/appearance.ts` rewrites on `<html>` from the
+   * setting: a sidebar row (`SIDE_ROW_SHAPE`), the gap between a transcript's
+   * turns (`.transcript-gap`), and the tab strip. These are the comfortable
+   * values, here only for the frame before the setting has been read — the
+   * table itself is `densityVars`, so a test can hold it.
+   */
+  --density-row: 1.5rem;
+  --density-gap: 0.75rem;
+  --density-tab: 2.25rem;
+}
+
+/*
+ * The accent palettes — `data-palette` on `<html>`, written by
+ * `applyAppearance` from the Appearance setting.
+ *
+ * Each one is a hue for the neutrals (or no tint at all, for Graphite) and a
+ * literal accent with a foreground chosen against it: the brighter accents
+ * carry dark text, since white on a 0.72-lightness teal is a 2.5:1 contrast
+ * and near-black on it is 7:1. A chart hue that collides with the accent is
+ * swapped for the indigo the accent vacated.
+ *
+ * **These light blocks sit above `.dark` on purpose.** `[data-palette="…"]`
+ * and `.dark` are both one attribute or class deep, so with both on `<html>`
+ * the later rule wins — these have to lose to `.dark`, and the `.dark[…]`
+ * blocks below it have to beat it.
+ */
+[data-palette="graphite"] {
+  --brand-tint: 0;
+  --primary: oklch(0.3 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --ring: oklch(0.55 0 0);
+  --sidebar-primary: oklch(0.3 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-ring: oklch(0.55 0 0);
+  --chart-1: oklch(0.3 0 0);
+}
+
+[data-palette="teal"] {
+  --brand-hue: 192;
+  --primary: oklch(0.52 0.11 192);
+  --primary-foreground: oklch(0.99 0.005 192);
+  --ring: oklch(0.6 0.11 192);
+  --sidebar-primary: oklch(0.52 0.11 192);
+  --sidebar-primary-foreground: oklch(0.99 0.005 192);
+  --sidebar-ring: oklch(0.6 0.11 192);
+  --chart-1: oklch(0.52 0.11 192);
+  --chart-4: oklch(0.54 0.2 277);
+}
+
+[data-palette="rose"] {
+  --brand-hue: 350;
+  --primary: oklch(0.58 0.19 350);
+  --primary-foreground: oklch(0.99 0.005 350);
+  --ring: oklch(0.64 0.17 350);
+  --sidebar-primary: oklch(0.58 0.19 350);
+  --sidebar-primary-foreground: oklch(0.99 0.005 350);
+  --sidebar-ring: oklch(0.64 0.17 350);
+  --chart-1: oklch(0.58 0.19 350);
+  --chart-2: oklch(0.54 0.2 277);
+}
+
+[data-palette="amber"] {
+  --brand-hue: 70;
+  --primary: oklch(0.72 0.15 70);
+  --primary-foreground: oklch(0.24 0.06 70);
+  --ring: oklch(0.68 0.14 70);
+  --sidebar-primary: oklch(0.72 0.15 70);
+  --sidebar-primary-foreground: oklch(0.24 0.06 70);
+  --sidebar-ring: oklch(0.68 0.14 70);
+  --chart-1: oklch(0.72 0.15 70);
+  --chart-5: oklch(0.54 0.2 277);
+}
+
+/*
+ * Dark is not the light palette inverted: chroma has to rise as lightness falls
+ * or the hue disappears into the black, and the accents move lighter so they
+ * clear the surface they sit on.
+ *
+ * Six neutral steps carry the whole studio — sidebar `0.165`, background
+ * `0.185`, card `0.215`, muted `0.26`, accent `0.30`, and the hairline borders,
+ * which are a **white at low alpha** rather than a lighter grey. That is the
+ * distinction worth keeping: an alpha border is the same line over every one of
+ * those six surfaces, where a fixed grey is a line that disappears on two of
+ * them and glows on a third.
+ *
+ * `--background` is no longer `#1e1e1e`, so the two places that hold it as a
+ * literal have to follow: the terminal's xterm palette (`terminal-view.tsx`,
+ * which takes hex and not variables) and the window's own first-paint colour
+ * (`main/main.ts`). Both say so where they are.
+ */
+.dark {
+  --background: oklch(0.185 calc(0.012 * var(--brand-tint)) var(--brand-hue));
+  --foreground: oklch(0.965 calc(0.004 * var(--brand-tint)) var(--brand-hue));
+  --card: oklch(0.215 calc(0.013 * var(--brand-tint)) var(--brand-hue));
+  --card-foreground: oklch(
+    0.965 calc(0.004 * var(--brand-tint)) var(--brand-hue)
+  );
+  --popover: oklch(0.225 calc(0.014 * var(--brand-tint)) var(--brand-hue));
+  --popover-foreground: oklch(
+    0.965 calc(0.004 * var(--brand-tint)) var(--brand-hue)
+  );
+  --primary: oklch(0.66 0.17 277);
+  --primary-foreground: oklch(0.99 0.01 277);
+  --secondary: oklch(0.26 calc(0.012 * var(--brand-tint)) var(--brand-hue));
+  --secondary-foreground: oklch(
+    0.965 calc(0.004 * var(--brand-tint)) var(--brand-hue)
+  );
+  --muted: oklch(0.26 calc(0.012 * var(--brand-tint)) var(--brand-hue));
+  --muted-foreground: oklch(
+    0.7 calc(0.018 * var(--brand-tint)) var(--brand-hue)
+  );
+  --accent: oklch(0.3 calc(0.016 * var(--brand-tint)) var(--brand-hue));
+  --accent-foreground: oklch(
+    0.95 calc(0.02 * var(--brand-tint)) var(--brand-hue)
+  );
+  --destructive: oklch(0.68 0.19 25);
+  /* Alpha rather than a lighter grey, for the reason in the block above; a
+     hair more opaque on inputs, which have to read as a field rather than as a
+     seam between two panels. */
+  --border: oklch(1 0 0 / 9%);
+  --input: oklch(1 0 0 / 13%);
+  --ring: oklch(0.66 0.17 277);
+
+  --success: oklch(0.74 0.15 160);
+  --success-foreground: oklch(0.18 0.04 160);
+  --warning: oklch(0.8 0.14 78);
+  --warning-foreground: oklch(0.2 0.05 78);
+  --info: oklch(0.72 0.14 242);
+  --info-foreground: oklch(0.18 0.04 242);
+
+  --section-files: oklch(0.74 0.12 205);
+  --section-database: oklch(0.72 0.14 250);
+  --section-api: oklch(0.73 0.17 325);
+  --section-terminal: oklch(0.76 0.13 162);
+
+  --chart-1: oklch(0.66 0.17 277);
+  --chart-2: oklch(0.73 0.17 325);
+  --chart-3: oklch(0.72 0.14 250);
+  --chart-4: oklch(0.76 0.13 162);
+  --chart-5: oklch(0.79 0.13 70);
+
+  /* Near-black rather than tinted-transparent: over a dark ground a shadow is
+     the only thing separating two surfaces a step apart, and the alpha has to
+     roughly double to do the same work it does on white. */
+  --elevation-2xs: 0 1px 2px oklch(0 0 0 / 0.3);
+  --elevation-xs: 0 1px 2px oklch(0 0 0 / 0.35), 0 1px 3px oklch(0 0 0 / 0.3);
+  --elevation-sm: 0 1px 2px oklch(0 0 0 / 0.4), 0 2px 6px oklch(0 0 0 / 0.35);
+  --elevation-md: 0 1px 2px oklch(0 0 0 / 0.4), 0 4px 12px oklch(0 0 0 / 0.45);
+  --elevation-lg: 0 1px 3px oklch(0 0 0 / 0.45), 0 8px 24px oklch(0 0 0 / 0.5);
+  --elevation-xl: 0 2px 4px oklch(0 0 0 / 0.5), 0 16px 48px oklch(0 0 0 / 0.6);
+
+  --sidebar: oklch(0.165 calc(0.012 * var(--brand-tint)) var(--brand-hue));
+  --sidebar-foreground: oklch(
+    0.965 calc(0.004 * var(--brand-tint)) var(--brand-hue)
+  );
+  --sidebar-primary: oklch(0.66 0.17 277);
+  --sidebar-primary-foreground: oklch(0.99 0.01 277);
+  --sidebar-accent: oklch(
+    0.29 calc(0.016 * var(--brand-tint)) var(--brand-hue)
+  );
+  --sidebar-accent-foreground: oklch(
+    0.965 calc(0.004 * var(--brand-tint)) var(--brand-hue)
+  );
+  --sidebar-border: oklch(1 0 0 / 8%);
+  --sidebar-ring: oklch(0.66 0.17 277);
+}
+
+/* The palettes' dark halves — after `.dark`, for the reason on the light ones.
+   The neutrals' hue and tint are already set by the light block, which applies
+   in both modes; only the literal accents need a dark twin. */
+.dark[data-palette="graphite"] {
+  --primary: oklch(0.87 0 0);
+  --primary-foreground: oklch(0.2 0 0);
+  --ring: oklch(0.7 0 0);
+  --sidebar-primary: oklch(0.87 0 0);
+  --sidebar-primary-foreground: oklch(0.2 0 0);
+  --sidebar-ring: oklch(0.7 0 0);
+  --chart-1: oklch(0.87 0 0);
+}
+
+.dark[data-palette="teal"] {
+  --primary: oklch(0.75 0.11 192);
+  --primary-foreground: oklch(0.2 0.04 192);
+  --ring: oklch(0.75 0.11 192);
+  --sidebar-primary: oklch(0.75 0.11 192);
+  --sidebar-primary-foreground: oklch(0.2 0.04 192);
+  --sidebar-ring: oklch(0.75 0.11 192);
+  --chart-1: oklch(0.75 0.11 192);
+  --chart-4: oklch(0.66 0.17 277);
+}
+
+.dark[data-palette="rose"] {
+  --primary: oklch(0.74 0.15 350);
+  --primary-foreground: oklch(0.2 0.05 350);
+  --ring: oklch(0.74 0.15 350);
+  --sidebar-primary: oklch(0.74 0.15 350);
+  --sidebar-primary-foreground: oklch(0.2 0.05 350);
+  --sidebar-ring: oklch(0.74 0.15 350);
+  --chart-1: oklch(0.74 0.15 350);
+  --chart-2: oklch(0.66 0.17 277);
+}
+
+.dark[data-palette="amber"] {
+  --primary: oklch(0.8 0.14 75);
+  --primary-foreground: oklch(0.22 0.06 70);
+  --ring: oklch(0.8 0.14 75);
+  --sidebar-primary: oklch(0.8 0.14 75);
+  --sidebar-primary-foreground: oklch(0.22 0.06 70);
+  --sidebar-ring: oklch(0.8 0.14 75);
+  --chart-1: oklch(0.8 0.14 75);
+  --chart-5: oklch(0.66 0.17 277);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    /*
+     * The two type settings the whole studio inherits.
+     *
+     * `antialiased` because the default on macOS is subpixel rendering tuned
+     * for dark-on-light, and the studio's own default is the other way round —
+     * light text on a near-black surface comes out visibly heavier and slightly
+     * fringed without it.
+     *
+     * The negative tracking is what the interface fonts this app actually runs
+     * on are drawn for: SF and Inter are set tight at UI sizes, and the browser
+     * default is not. It is small enough to be invisible on any one label and
+     * is the difference between a dense panel reading as a panel and reading as
+     * a wall.
+     */
+    -webkit-font-smoothing: antialiased;
+    letter-spacing: -0.011em;
+    /* Contextual alternates and kerning on; ligatures stay where they are, so
+       nothing in a monospaced pane is affected. */
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  /*
+   * Numbers that change in place — a byte count, a token total, a row count —
+   * are set on a fixed advance so the digits do not shuffle sideways under
+   * their own label. Opt-in rather than global: proportional figures are
+   * better in running prose, which the note editor and the chat are full of.
+   */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /*
+   * The space between a transcript's turns, read off the density setting. A
+   * class rather than `gap-(--density-gap)` at the call site so the chat pane
+   * names the *thing* — a transcript — and the number stays here with the
+   * other two densities.
+   */
+  .transcript-gap {
+    gap: var(--density-gap);
+  }
+
+  /*
+   * A selection in the studio's own accent rather than the OS blue, which is
+   * the one colour on screen belonging to no theme. Excluded from anything
+   * `contenteditable` or in an editor, where a selection is over content and
+   * the tint has to stay light enough to read the characters through — those
+   * paint their own (`lib/editor.ts`, `note-editor.css`).
+   */
+  ::selection {
+    background-color: color-mix(in oklch, var(--primary) 28%, transparent);
+  }
+
+  /*
+   * `⌘F` in a chat, painted over the words themselves — see
+   * `lib/worktree-chat/find-marks.ts` for why the marks are ranges in the
+   * highlight registry rather than `<mark>` elements in the transcript.
+   *
+   * Here beside `::selection` because it is the same kind of thing: a painted
+   * run of text that belongs to no element, and so has nowhere else to be
+   * styled. Two registrations and two colours — every match in the amber every
+   * editor uses for a search result, and the one the arrows are on filled in
+   * properly, which is the only thing that says which of nine yellow words `4 of
+   * 9` is about.
+   *
+   * A `color` is set on the current one and not on the others: at 30% the text
+   * underneath still reads as itself, and at full strength it does not.
+   */
+  ::highlight(chat-find) {
+    background-color: color-mix(in oklch, var(--warning) 30%, transparent);
+  }
+
+  ::highlight(chat-find-current) {
+    background-color: var(--warning);
+    color: var(--warning-foreground);
+  }
+
+  /*
+   * Scrollbars, which are the last piece of platform chrome in a window that
+   * draws everything else itself — a 15px light-grey track down the side of a
+   * dark panel is the single loudest thing left. Overlay-thin, no track, no
+   * arrows, and only visible against what it is scrolling.
+   *
+   * WebKit's pseudo-elements rather than `scrollbar-width`/`scrollbar-color`:
+   * this app is Chromium alone, and the standard pair cannot do a transparent
+   * track. The `scrollbar-none` utility elsewhere still wins, being more
+   * specific than these element selectors.
+   */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: color-mix(in oklch, var(--foreground) 18%, transparent);
+    /* The border is the inset: a 10px box with a 3px transparent border is a
+       4px thumb that still takes a 10px pointer target. `padding-box` is what
+       keeps the background out from under it. */
+    border: 3px solid transparent;
+    background-clip: padding-box;
+    border-radius: 9999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in oklch, var(--foreground) 34%, transparent);
+  }
+}

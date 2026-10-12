@@ -1,0 +1,159 @@
+/*
+ * The document layer over `markdown-view.css`.
+ *
+ * That stylesheet is written for a chat bubble — tight margins and headings
+ * barely larger than the text, because an agent reaching for `##` means "next
+ * section". A README is the other case: it was written expecting a document,
+ * with a title at the top and sections under it, and read at arm's length
+ * rather than scanned in a column of messages. So this puts the scale and the
+ * air back, and nothing else — the colors below are the same theme tokens the
+ * base uses, so the preview follows the light/dark toggle with the rest of the
+ * studio rather than carrying a palette of its own.
+ */
+.markdown-document {
+  line-height: 1.7;
+  color: var(--foreground);
+}
+
+.markdown-document p,
+.markdown-document blockquote,
+.markdown-document pre,
+.markdown-document ul,
+.markdown-document ol,
+.markdown-document table {
+  margin: 0 0 1rem;
+}
+
+.markdown-document h1,
+.markdown-document h2,
+.markdown-document h3,
+.markdown-document h4,
+.markdown-document h5,
+.markdown-document h6 {
+  margin: 1.75rem 0 0.75rem;
+  line-height: 1.25;
+}
+
+/* A heading that opens the document has nothing above it to be spaced from,
+ * and the pane's own padding is already that space. */
+.markdown-document > :first-child {
+  margin-top: 0;
+}
+
+.markdown-document h1 {
+  font-size: 1.75em;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.markdown-document h2 {
+  font-size: 1.35em;
+}
+
+.markdown-document h3 {
+  font-size: 1.15em;
+}
+
+.markdown-document h4,
+.markdown-document h5,
+.markdown-document h6 {
+  font-size: 1em;
+}
+
+/* The rule under the top two levels is how a long README stays navigable when
+ * scrolled past quickly: the eye finds the line before it reads the words. */
+.markdown-document h1,
+.markdown-document h2 {
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--border);
+}
+
+.markdown-document ul,
+.markdown-document ol {
+  padding-left: 1.5rem;
+}
+
+.markdown-document li {
+  margin: 0.25rem 0;
+}
+
+.markdown-document pre {
+  padding: 0.75rem 0.875rem;
+  line-height: 1.5;
+}
+
+.markdown-document blockquote {
+  border-left-width: 3px;
+  padding-left: 1rem;
+}
+
+.markdown-document hr {
+  margin: 1.75rem 0;
+}
+
+.markdown-document th,
+.markdown-document td {
+  padding: 0.375rem 0.75rem;
+}
+
+/* A picture in a README is a screenshot at whatever size it was taken, which is
+ * routinely wider than this column. */
+.markdown-document img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.375rem;
+}
+
+/*
+ * The file's frontmatter, above the document.
+ *
+ * Drawn like the tables in the document below it — same border, same padding —
+ * so it reads as part of the file rather than as a panel the studio put there.
+ * What sets it apart is the keys: a header *column* rather than a header row,
+ * which is the shape of a key/value block and is what GitHub draws for the same
+ * bytes.
+ */
+.markdown-frontmatter {
+  width: 100%;
+  margin: 0 0 1.5rem;
+  border-collapse: collapse;
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  table-layout: fixed;
+}
+
+.markdown-frontmatter th,
+.markdown-frontmatter td {
+  border: 1px solid var(--border);
+  padding: 0.375rem 0.75rem;
+  text-align: left;
+  vertical-align: top;
+  /* A description runs to a paragraph and a URL has no break in it; both have
+   * to stay inside the column rather than widening the table past the measure. */
+  overflow-wrap: break-word;
+}
+
+.markdown-frontmatter th {
+  width: 11rem;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  background: var(--muted);
+  color: var(--muted-foreground);
+}
+
+/* A block with shape to it — nested keys, a list over several lines — shown as
+ * the YAML it is, because there is no honest way to put it in two columns. */
+.markdown-frontmatter-source {
+  margin: 0 0 1.5rem;
+  padding: 0.625rem 0.875rem;
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  background: var(--muted);
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  overflow-x: auto;
+}

@@ -1,0 +1,9 @@
+{
+  // The two halves are typechecked separately — see `tsconfig.main.json` and
+  // `tsconfig.renderer.json`, which `bun run typecheck` runs in turn. This file
+  // exists so an editor, and the shadcn CLI resolving the aliases in
+  // `components.json`, both find the path mapping without having to guess which
+  // of the two to open.
+  "extends": "./tsconfig.base.json",
+  "include": ["src", "test", "scripts", "vite.config.ts"]
+}

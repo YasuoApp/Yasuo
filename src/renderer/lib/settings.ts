@@ -1,0 +1,350 @@
+import { create } from "zustand"
+
+import {
+  CHAT_NOTIFICATIONS_KEY,
+  CHAT_TRAY_KEY,
+  type ChatEffort,
+} from "@shared/api"
+import {
+  DEFAULT_APPEARANCE,
+  isAccentPalette,
+  isDensity,
+  isFontSize,
+  isMonoFont,
+  isSansFont,
+  type Appearance,
+} from "./appearance"
+import { recall, remember } from "./tab-memory"
+import { getSetting, setSetting } from "./workspace"
+
+/** Where the studio's own preferences live, beside the strip's arrangement. */
+const SETTINGS_KEY = "workbench.settings"
+
+type Stored = {
+  groupTabs: boolean
+  /**
+   * The diff view's two: the committed side beside the working one or the two
+   * interleaved, and whether whitespace is drawn.
+   *
+   * Here rather than per file, because it is how somebody reads a diff rather
+   * than something about a particular one — and here rather than in the Settings
+   * dialog, because the control is the toolbar over the diff itself, where the
+   * effect of the click is the thing being looked at.
+   */
+  diffSideBySide: boolean
+  diffWhitespace: boolean
+  /**
+   * `--model`, `--effort` and the `CLAUDE_CONFIG_DIR` profile the read-only
+   * one-turn agent runs on — `draftCommitMessage` in `main/one-turn-agent.ts`.
+   *
+   * A setting rather than a picker beside each button: unlike a chat, one of
+   * these turns is not something anybody sits in front of for the length of a
+   * conversation — it is a button pressed once in a while — so a picker beside
+   * it is a control mostly seen once and then in the way. Chosen here instead
+   * and left alone until it is changed again. Null on both is the same "leave
+   * it alone" a chat's `Inherit` row means.
+   *
+   * Named `review*` because the agent review these were introduced for is what
+   * first needed them, and the names are what is **already on disk** under
+   * `workbench.settings`: renaming them would silently reset the choice for
+   * everybody who had made one. See `docs/design.md` § Comments.
+   */
+  reviewModel: string | null
+  reviewEffort: ChatEffort | null
+  reviewProfileId: string | null
+  /**
+   * Whether the first-launch tour has been seen through or skipped. Written
+   * here with the preferences rather than in its own key because Settings has
+   * the button that unsets it — **Replay the tour** — and a flag the dialog
+   * can flip belongs in the bag the dialog edits.
+   */
+  onboarded: boolean
+  /**
+   * The faint `who, when • why` after the caret's line in a file, and its hover
+   * — `lib/editor-git-blame.ts`. On by default: it is the editor saying what
+   * it knows about a line, and somebody who finds it noise turns it off once.
+   */
+  gitBlame: boolean
+  /**
+   * The chat composer's field, dragged taller by its top edge — in pixels, or
+   * null for the height its text gives it. One for every chat rather than per
+   * chat: it is how much room somebody likes to write in, not something about a
+   * conversation.
+   */
+  composerHeight: number | null
+} & Appearance
+
+function isStored(value: unknown): value is Stored {
+  // Every field is optional since `tabsPlacement` went, so this is the whole of
+  // what tells a bag from a stored `null` — which would otherwise pass and be
+  // spread over the defaults as though it had parsed. A leftover
+  // `tabsPlacement` key is ignored rather than rejected: what is on disk is
+  // left alone, and the next `save()` stops writing it.
+  if (typeof value !== "object" || value === null) return false
+  const record = value as Partial<Stored>
+  return (
+    // Absent from anything written before grouping existed, which is read as
+    // off — the arrangement somebody already has is the one they chose. The two
+    // diff flags are the same story, one feature later.
+    (record.groupTabs === undefined || typeof record.groupTabs === "boolean") &&
+    (record.diffSideBySide === undefined ||
+      typeof record.diffSideBySide === "boolean") &&
+    (record.diffWhitespace === undefined ||
+      typeof record.diffWhitespace === "boolean") &&
+    (record.reviewModel === undefined ||
+      record.reviewModel === null ||
+      typeof record.reviewModel === "string") &&
+    (record.reviewEffort === undefined ||
+      record.reviewEffort === null ||
+      typeof record.reviewEffort === "string") &&
+    (record.reviewProfileId === undefined ||
+      record.reviewProfileId === null ||
+      typeof record.reviewProfileId === "string") &&
+    // The appearance choices are checked against their lists rather than as
+    // strings: a name this build has no rule for would leave `data-palette`
+    // pointing at nothing and the picker with no row lit.
+    (record.palette === undefined || isAccentPalette(record.palette)) &&
+    (record.fontSans === undefined || isSansFont(record.fontSans)) &&
+    (record.fontMono === undefined || isMonoFont(record.fontMono)) &&
+    (record.fontSize === undefined || isFontSize(record.fontSize)) &&
+    (record.density === undefined || isDensity(record.density)) &&
+    (record.onboarded === undefined || typeof record.onboarded === "boolean") &&
+    (record.gitBlame === undefined || typeof record.gitBlame === "boolean") &&
+    (record.composerHeight === undefined ||
+      record.composerHeight === null ||
+      typeof record.composerHeight === "number")
+  )
+}
+
+type SettingsState = Stored & {
+  /** Read from disk yet. The dialog waits on it rather than showing the
+   * default for a frame and correcting itself. */
+  loaded: boolean
+
+  /**
+   * Whether a chat that finishes, fails or stops to ask rings an OS
+   * notification while the window is unfocused.
+   *
+   * Outside `Stored` because the main process reads it — it is what rings the
+   * bell — and a bag only the renderer parses is not a thing both sides can
+   * name. **On by default**, which is the one
+   * default in this file that goes the other way from the switches around it;
+   * `CHAT_NOTIFICATIONS_KEY` says why.
+   */
+  chatNotifications: boolean
+
+  /**
+   * Whether the menu bar carries the standing count of what the chats are
+   * doing.
+   *
+   * Beside `chatNotifications` in every way — main's to read, main's to act on,
+   * and on by default for the same reason (`CHAT_TRAY_KEY`). The renderer keeps
+   * it only so the switch can be drawn from the same store as its neighbour.
+   */
+  chatTray: boolean
+
+  setGroupTabs: (group: boolean) => void
+  setChatNotifications: (on: boolean) => void
+  setChatTray: (on: boolean) => void
+  setDiffSideBySide: (sideBySide: boolean) => void
+  setDiffWhitespace: (show: boolean) => void
+  /** Sets the model and its effort together, the way a chat's `ModelMenu`
+   * hands them over. */
+  setReviewModel: (model: string | null, effort: ChatEffort | null) => void
+  setReviewProfileId: (profileId: string | null) => void
+  /** The appearance choices, applied to the document by `applyAppearance`
+   * (`lib/appearance.ts`) through a subscription rather than from here. */
+  setPalette: (palette: Appearance["palette"]) => void
+  setFontSans: (font: Appearance["fontSans"]) => void
+  setFontMono: (font: Appearance["fontMono"]) => void
+  setFontSize: (size: Appearance["fontSize"]) => void
+  setDensity: (density: Appearance["density"]) => void
+  setOnboarded: (onboarded: boolean) => void
+  setGitBlame: (on: boolean) => void
+  setComposerHeight: (height: number | null) => void
+  /** Reads the stored preferences. Called once, at launch. */
+  restore: () => Promise<void>
+}
+
+/**
+ * The preferences the Settings dialog edits.
+ *
+ * Separate from `lib/store.ts`, which holds what the workbench *is* doing —
+ * the pane on screen, the folders, the strip's order. What is here is what the
+ * user asked the studio to be like, which outlives any of that and is the list
+ * the dialog is built from.
+ */
+export const useSettings = create<SettingsState>((set, get) => {
+  /** Strict Mode mounts effects twice, so restoring has to be idempotent. */
+  let restorePromise: Promise<void> | null = null
+
+  /**
+   * Writes the whole bag, from whatever the store now holds.
+   *
+   * One writer rather than each setter naming its neighbours: they share a key,
+   * so a setter that listed two of the three fields would have written the
+   * third back as absent — and absent reads as the default, which is a
+   * preference silently undone by changing an unrelated one.
+   */
+  const save = () => {
+    const {
+      groupTabs,
+      diffSideBySide,
+      diffWhitespace,
+      reviewModel,
+      reviewEffort,
+      reviewProfileId,
+      palette,
+      fontSans,
+      fontMono,
+      fontSize,
+      density,
+      onboarded,
+      gitBlame,
+      composerHeight,
+    } = get()
+    remember(SETTINGS_KEY, {
+      groupTabs,
+      diffSideBySide,
+      diffWhitespace,
+      reviewModel,
+      reviewEffort,
+      reviewProfileId,
+      palette,
+      fontSans,
+      fontMono,
+      fontSize,
+      density,
+      onboarded,
+      gitBlame,
+      composerHeight,
+    })
+  }
+
+  return {
+    groupTabs: false,
+    // Side by side is what a diff is for — two columns to compare — and the
+    // toolbar is one click away for a pane too narrow to hold them.
+    diffSideBySide: true,
+    diffWhitespace: false,
+    reviewModel: null,
+    reviewEffort: null,
+    reviewProfileId: null,
+    ...DEFAULT_APPEARANCE,
+    // False until the tour has been seen: absent from anything written before
+    // the tour existed, which is read as "show it once" rather than as a
+    // preference somebody already made.
+    onboarded: false,
+    gitBlame: true,
+    composerHeight: null,
+    chatNotifications: true,
+    chatTray: true,
+    loaded: false,
+
+    setGroupTabs(groupTabs) {
+      set({ groupTabs })
+      save()
+    },
+
+    setChatNotifications(chatNotifications) {
+      set({ chatNotifications })
+      // Its own key rather than `save()`'s bag, because main reads it. Written
+      // as the two words main matches on, and only `"off"` means anything —
+      // see `CHAT_NOTIFICATIONS_KEY`.
+      void setSetting(CHAT_NOTIFICATIONS_KEY, chatNotifications ? "on" : "off")
+    },
+
+    setChatTray(chatTray) {
+      set({ chatTray })
+      // Its own key for the same reason as the switch above, and the write is
+      // what puts the icon in the menu bar: main acts on this key as it lands
+      // rather than at the next launch.
+      void setSetting(CHAT_TRAY_KEY, chatTray ? "on" : "off")
+    },
+
+    setDiffSideBySide(diffSideBySide) {
+      set({ diffSideBySide })
+      save()
+    },
+
+    setDiffWhitespace(diffWhitespace) {
+      set({ diffWhitespace })
+      save()
+    },
+
+    setReviewModel(reviewModel, reviewEffort) {
+      set({ reviewModel, reviewEffort })
+      save()
+    },
+
+    setReviewProfileId(reviewProfileId) {
+      set({ reviewProfileId })
+      save()
+    },
+
+    setPalette(palette) {
+      set({ palette })
+      save()
+    },
+
+    setFontSans(fontSans) {
+      set({ fontSans })
+      save()
+    },
+
+    setFontMono(fontMono) {
+      set({ fontMono })
+      save()
+    },
+
+    setFontSize(fontSize) {
+      set({ fontSize })
+      save()
+    },
+
+    setDensity(density) {
+      set({ density })
+      save()
+    },
+
+    setOnboarded(onboarded) {
+      set({ onboarded })
+      save()
+    },
+
+    setGitBlame(gitBlame) {
+      set({ gitBlame })
+      save()
+    },
+
+    setComposerHeight(composerHeight) {
+      set({ composerHeight })
+      save()
+    },
+
+    restore() {
+      restorePromise ??= (async () => {
+        const [stored, notifications, tray] = await Promise.all([
+          recall(SETTINGS_KEY, isStored),
+          getSetting(CHAT_NOTIFICATIONS_KEY).catch(() => null),
+          getSetting(CHAT_TRAY_KEY).catch(() => null),
+        ])
+        set({
+          // Nothing stored is the default, not a failure: the spread of a null
+          // leaves the initial state as it stands.
+          ...stored,
+          // Only `"off"` switches it off, so an unreadable or absent key is on
+          // — the same reading main does, and the two must agree or the switch
+          // would show one thing while the bell did another.
+          chatNotifications: notifications !== "off",
+          // The same reading, for the same reason: main puts the icon in the
+          // strip unless the key says `off`, and a switch drawn the other way
+          // would describe a menu bar the user is looking at.
+          chatTray: tray !== "off",
+          loaded: true,
+        })
+      })()
+      return restorePromise
+    },
+  }
+})

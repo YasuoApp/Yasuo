@@ -1,0 +1,124 @@
+name: Release
+
+# Installers are built here and nowhere else, so a release is a tag and
+# nothing more: `git tag v0.1.0 && git push --tags`. Running it by hand builds
+# the same three installers and leaves them as run artifacts without publishing
+# anything, which is how you find out a packaging change is broken before a tag
+# carries it.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    name: package (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # One platform failing should not hide whether the other two are fine —
+      # the point of a release run is to learn that in one pass.
+      fail-fast: false
+      matrix:
+        include:
+          # macOS builds both architectures: `mac.target` in package.json
+          # declares arm64 and x64, and install.sh picks between them by
+          # filename. Deliberately not a universal build, which would double
+          # every download so that nobody has to choose.
+          - os: macos-latest
+            name: macos
+            target: --mac
+          - os: ubuntu-latest
+            name: linux
+            target: --linux
+          - os: windows-latest
+            name: windows
+            target: --win
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: bun install --frozen-lockfile
+
+      # The version in package.json is what names every artifact. A tag that
+      # disagrees with it would publish v0.2.0 containing Visual-Studio-Claude-0.1.0-arm64.dmg,
+      # which is only ever noticed by whoever downloads it.
+      - name: Tag matches package.json
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          version=$(node -p "require('./package.json').version")
+          tag="${GITHUB_REF_NAME#v}"
+          if [ "$version" != "$tag" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match package.json version $version"
+            exit 1
+          fi
+
+      - run: bun run build
+
+      # Both are gitignored — the source art is committed and what is derived
+      # from it is not — so a fresh checkout has neither until this runs.
+      # electron-builder would otherwise fall back to a default icon and a
+      # default DMG background without failing.
+      - name: Generate icon and DMG background
+        run: |
+          bun scripts/app-icon.mjs
+          bun scripts/dmg-background.mjs
+
+      - name: Build installers
+        # Unsigned on every platform: signing macOS needs an Apple Developer
+        # membership and Windows a code-signing certificate, and neither is a
+        # secret this repository holds. CSC_IDENTITY_AUTO_DISCOVERY is what
+        # stops electron-builder failing on the macOS runner when it finds no
+        # identity in the keychain. See README for what unsigned costs the
+        # person installing it.
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+        run: npx electron-builder ${{ matrix.target }} --publish never
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ matrix.name }}
+          # electron-builder writes blockmaps, a builder-debug.yml and the
+          # unpacked tree next to the installers; only the installers are the
+          # release.
+          path: |
+            release/*.dmg
+            release/*.AppImage
+            release/*.exe
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: publish release
+    needs: package
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: installers
+          pattern: installers-*
+          merge-multiple: true
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ls -lh installers
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Visual Studio Claude ${GITHUB_REF_NAME#v}" \
+            --generate-notes \
+            installers/*

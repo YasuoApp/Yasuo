@@ -1,0 +1,297 @@
+/*
+ * Styles for markdown rendered to plain DOM by `lib/markdown/renderer.ts`.
+ *
+ * Written by hand rather than taken from Crepe's stylesheet, which the
+ * composer next door uses: Crepe's CSS targets `.milkdown` and the editor
+ * chrome around it (toolbar, block handles, placeholder, ProseMirror's own
+ * classes), none of which exists in this DOM — these are the bare `<p>`,
+ * `<ul>`, `<pre>` a serializer produces. Tailwind's preflight has already
+ * removed every default margin and list marker, so each one below is putting
+ * something back, not overriding a browser default.
+ */
+.markdown-prose {
+  /*
+   * A message is as wide as the bubble it is in and no wider. Without this a
+   * single unbreakable run — a percent-encoded URL is the usual one — lays
+   * itself out past the bubble's rounded edge and off the side of the pane,
+   * since nothing in it is a break opportunity. `break-word` only gives up and
+   * breaks mid-run for a run that would not fit on a line of its own, so
+   * ordinary prose still breaks between words as it should.
+   *
+   * `pre` is not affected, and deliberately: its `white-space: pre` means no
+   * line wrapping to break in the first place, and a code block that scrolls
+   * sideways (below) is more use than one with lines chopped at the margin.
+   */
+  overflow-wrap: break-word;
+
+  /*
+   * The same dedicated blue the composer scopes to `.milkdown`, for the same
+   * reason spelled out in `chat-composer.css`: this app's `--primary` is a
+   * neutral gray by design, and a link that is not a different color from the
+   * text around it does not read as a link. Kept identical to the composer's
+   * value so a link looks the same whether it was typed or received.
+   */
+  --markdown-link: oklch(0.55 0.22 260);
+}
+
+.dark .markdown-prose {
+  --markdown-link: oklch(0.72 0.17 260);
+}
+
+/* A message is a block in a gap-spaced column, so its own outer margins would
+ * double the spacing the transcript already applies between entries. */
+.markdown-prose > :first-child {
+  margin-top: 0;
+}
+
+.markdown-prose > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown-prose p,
+.markdown-prose blockquote,
+.markdown-prose pre,
+.markdown-prose ul,
+.markdown-prose ol,
+.markdown-prose table {
+  margin: 0 0 0.5rem;
+}
+
+.markdown-prose h1,
+.markdown-prose h2,
+.markdown-prose h3,
+.markdown-prose h4,
+.markdown-prose h5,
+.markdown-prose h6 {
+  margin: 0.75rem 0 0.375rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+/* Barely a scale: these are headings inside a chat message, not a document,
+ * and an agent reaching for `##` means "next section", not "twice as large". */
+.markdown-prose h1 {
+  font-size: 1.15em;
+}
+
+.markdown-prose h2 {
+  font-size: 1.08em;
+}
+
+.markdown-prose h3,
+.markdown-prose h4,
+.markdown-prose h5,
+.markdown-prose h6 {
+  font-size: 1em;
+}
+
+.markdown-prose strong {
+  font-weight: 600;
+}
+
+.markdown-prose em {
+  font-style: italic;
+}
+
+.markdown-prose del {
+  text-decoration: line-through;
+  color: var(--muted-foreground);
+}
+
+.markdown-prose a {
+  color: var(--markdown-link);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.markdown-prose ul {
+  list-style: disc;
+  padding-left: 1.25rem;
+}
+
+.markdown-prose ol {
+  list-style: decimal;
+  padding-left: 1.5rem;
+}
+
+.markdown-prose li {
+  margin: 0.125rem 0;
+}
+
+/* A nested list belongs to the item above it, not to the paragraph flow. */
+.markdown-prose li > ul,
+.markdown-prose li > ol {
+  margin: 0.125rem 0;
+}
+
+/* GFM task items carry their own marker; a bullet as well reads as two. */
+.markdown-prose li:has(> input[type="checkbox"]) {
+  list-style: none;
+  margin-left: -1rem;
+}
+
+.markdown-prose input[type="checkbox"] {
+  margin-right: 0.375rem;
+  vertical-align: baseline;
+}
+
+.markdown-prose code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  background: var(--muted);
+  border-radius: 0.25rem;
+  padding: 0.1em 0.3em;
+}
+
+.markdown-prose pre {
+  background: var(--muted);
+  border-radius: 0.375rem;
+  padding: 0.5rem 0.625rem;
+  overflow-x: auto;
+}
+
+/* The fence already carries the background and padding; the `<code>` inside it
+ * must not draw a second box around every line. */
+.markdown-prose pre code {
+  background: none;
+  border-radius: 0;
+  padding: 0;
+  font-size: 0.85em;
+}
+
+/*
+ * The spans `lib/markdown/highlight.ts` writes into a fence. The same ramp as
+ * the editor's `lightHighlighting` / `darkHighlighting` in `lib/editor.ts`,
+ * by hand, so a keyword in a reply is the keyword in the file beside it; the
+ * editor cannot lend its classes, since those are generated per `EditorView`.
+ */
+.markdown-prose .tok-comment {
+  color: #767a8a;
+}
+.markdown-prose .tok-keyword {
+  color: #8a3fb8;
+}
+.markdown-prose .tok-string {
+  color: #2e7d43;
+}
+.markdown-prose .tok-regexp {
+  color: #0f7183;
+}
+.markdown-prose .tok-number {
+  color: #b0561a;
+}
+.markdown-prose .tok-type {
+  color: #0f7183;
+}
+.markdown-prose .tok-function {
+  color: #2f5fd0;
+}
+.markdown-prose .tok-property {
+  color: #1a6a8c;
+}
+.markdown-prose .tok-variable {
+  color: #2b3245;
+}
+.markdown-prose .tok-tag {
+  color: #b03a5b;
+}
+.markdown-prose .tok-punctuation {
+  color: #767a8a;
+}
+.markdown-prose .tok-heading {
+  color: #2f5fd0;
+  font-weight: bold;
+}
+.markdown-prose .tok-link {
+  color: #2f5fd0;
+  text-decoration: underline;
+}
+.markdown-prose .tok-emphasis {
+  font-style: italic;
+}
+.markdown-prose .tok-strong {
+  font-weight: bold;
+}
+.markdown-prose .tok-invalid {
+  color: #c33d3d;
+}
+
+.dark .markdown-prose .tok-comment {
+  color: #6c7086;
+}
+.dark .markdown-prose .tok-keyword {
+  color: #c79bf0;
+}
+.dark .markdown-prose .tok-string {
+  color: #9ed7a8;
+}
+.dark .markdown-prose .tok-regexp {
+  color: #7fcfdb;
+}
+.dark .markdown-prose .tok-number {
+  color: #e8b17a;
+}
+.dark .markdown-prose .tok-type {
+  color: #7fcfdb;
+}
+.dark .markdown-prose .tok-function {
+  color: #8ba6f5;
+}
+.dark .markdown-prose .tok-property {
+  color: #a9d3ee;
+}
+.dark .markdown-prose .tok-variable {
+  color: #d7d9e4;
+}
+.dark .markdown-prose .tok-tag {
+  color: #f2909f;
+}
+.dark .markdown-prose .tok-punctuation {
+  color: #878b9e;
+}
+.dark .markdown-prose .tok-heading,
+.dark .markdown-prose .tok-link {
+  color: #8ba6f5;
+}
+.dark .markdown-prose .tok-invalid {
+  color: #f78a8a;
+}
+
+.markdown-prose blockquote {
+  border-left: 2px solid var(--border);
+  padding-left: 0.625rem;
+  color: var(--muted-foreground);
+}
+
+.markdown-prose hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 0.75rem 0;
+}
+
+/*
+ * `display: block` is what makes a wide table scrollable on its own: the
+ * serializer emits a bare `<table>` with no wrapper to put `overflow-x` on, and
+ * a table left as `display: table` would instead push the whole transcript
+ * sideways.
+ */
+.markdown-prose table {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: 0.95em;
+}
+
+.markdown-prose th,
+.markdown-prose td {
+  border: 1px solid var(--border);
+  padding: 0.25rem 0.5rem;
+  text-align: left;
+}
+
+.markdown-prose th {
+  font-weight: 600;
+  background: var(--muted);
+}
