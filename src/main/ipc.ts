@@ -68,8 +68,7 @@ import {
   worktreeRepo,
 } from "./worktrees"
 
-/** What `readImageDataUrl` will actually recognize — the same extensions
- * `pickImages`'s dialog filter offers. */
+/** What `imageDataUrl` recognises as a picture. */
 const IMAGE_MIME_TYPES: Record<string, string> = {
   ".png": "image/png",
   ".jpg": "image/jpeg",
@@ -102,12 +101,11 @@ const APP_DIR = "/Applications/Visual Studio Claude.app"
 /**
  * An image on disk as a data URL.
  *
- * Shared by the two handlers that need one — the composer's attachments, which
- * name a file anywhere, and the Spec panel's screenshots, which name one inside
- * a folder — so that "too large" and "which types are pictures" are answered
- * once. The renderer's origin is not `file://` and Chromium will not load a
- * `file://` subresource from any other origin, which is why either of them
- * needs bytes rather than a path.
+ * Shared by the two handlers that need one — an image file in the workspace
+ * and a picture next to a document — so that "too large" and "which types are
+ * pictures" are answered once. The renderer's origin is not `file://` and
+ * Chromium will not load a `file://` subresource from any other origin, which
+ * is why either of them needs bytes rather than a path.
  */
 async function imageDataUrl(filePath: string): Promise<string> {
   const stats = await stat(filePath)
@@ -132,11 +130,6 @@ async function imageDataUrl(filePath: string): Promise<string> {
  *
  * PNG whatever came in, because that is the one encoding `NativeImage` can be
  * asked for without knowing what the clipboard's own format was.
- *
- * The bytes come either from the host's own clipboard or, from a browser tab,
- * from the caller: a page can read the clipboard it was pasted into, and a
- * server on the same machine reading the system one behind its back would be
- * reading something nobody pasted.
  */
 async function clipboardImagePath(
   png: Uint8Array | null
@@ -148,20 +141,19 @@ async function clipboardImagePath(
   return file
 }
 
-/** One handler: the transport's own idea of the caller first (an Electron
- * `IpcMainInvokeEvent`, or nothing from the server), then the call's
- * arguments as the renderer passed them. */
+/** One handler: the caller first (an Electron `IpcMainInvokeEvent`, or
+ * nothing from a test), then the call's arguments as the renderer passed
+ * them. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type Handler = (caller: unknown, ...args: any[]) => unknown
 
 /**
  * Every renderer-callable method, as one table keyed by `IPC` channel.
  *
- * Built once for the whole app rather than per window, and handed to whichever
- * transport is carrying it: `electron-ipc.ts` puts each entry on `ipcMain`, and
- * `src/server/` answers the same entries over HTTP for the web build. What the
- * two hosts genuinely do differently — a dialog, a window, the menu bar — comes
- * in through `host` and is nowhere else in this file.
+ * Built once for the whole app rather than per window; `electron-ipc.ts` puts
+ * each entry on `ipcMain`. What needs Electron itself — a dialog, a window, the
+ * menu bar — comes in through `host` and is nowhere else in this file, which is
+ * what lets the tests import it without Electron.
  */
 export function createIpc(host: Host): {
   handlers: Map<string, Handler>
@@ -261,8 +253,8 @@ export function createIpc(host: Host): {
   /**
    * The count in the menu bar, off the same watcher the notifications are.
    *
-   * See `tray.ts` for what it is for. The host builds it — it is Electron's, and
-   * the web build has no menu bar to put it in — but it is fed from here,
+   * See `tray.ts` for what it is for. The host builds it — it is Electron's —
+   * but it is fed from here,
    * because this is where the events are. It cannot be *shown* until the app is
    * ready — a `Tray` before then throws — which is what `startTray` below is
    * for.
@@ -656,14 +648,9 @@ export function createIpc(host: Host): {
 
   handle(IPC.pickDirectory, () => host.pickDirectory())
 
-  handle(IPC.pickImages, () =>
-    host.pickFiles({ title: "Attach images", images: true })
-  )
-
   handle(IPC.pickFiles, (_event, directory?: string) =>
     host.pickFiles({
       title: "Attach files",
-      images: false,
       // Where it opens, not what it may return: the paths come back from the
       // user's own click, and reading one is still an ordinary `files:*` call
       // through `insideAny`.
@@ -671,12 +658,8 @@ export function createIpc(host: Host): {
     })
   )
 
-  handle(IPC.readImageDataUrl, (_event, filePath: string) =>
-    imageDataUrl(filePath)
-  )
-
-  handle(IPC.clipboardImagePath, async (_event, png?: Uint8Array | null) =>
-    clipboardImagePath(png ?? (await host.clipboardImage()))
+  handle(IPC.clipboardImagePath, async () =>
+    clipboardImagePath(await host.clipboardImage())
   )
 
   handle(IPC.addFolder, (_event, input: { path: string; name: string }) =>
@@ -1032,8 +1015,7 @@ export function createIpc(host: Host): {
   })
 
   handle(IPC.readImageFile, async (_event, filePath: string) =>
-    // The same reader the composer's attachments use — including its size
-    // ceiling, which is what keeps a 40MP photograph from being turned into a
+    // Under `imageDataUrl`'s size ceiling, which is what keeps a 40MP photograph from being turned into a
     // base64 string and posted across the bridge.
     imageDataUrl(await inWorkspace(filePath))
   )

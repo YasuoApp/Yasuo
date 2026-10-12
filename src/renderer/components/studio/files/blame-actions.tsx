@@ -116,7 +116,7 @@ function Actions({
   }
 
   // `window.open`, which `setWindowOpenHandler` in `main.ts` sends to the
-  // system browser — and which the browser build opens as a tab.
+  // system browser.
   const open = (href: string) => window.open(href, "_blank", "noreferrer")
 
   return (

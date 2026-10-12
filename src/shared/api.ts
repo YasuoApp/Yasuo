@@ -1876,57 +1876,6 @@ export type ChatSpend = {
   at: string
 }
 
-/**
- * The working tree as it stood at one moment of a chat — a git commit this app
- * made in `refs/vsclaude/snapshots/`, parented on the folder's previous snapshot,
- * never on a branch. See `main/snapshots.ts`.
- *
- * `before` is taken as a turn starts and `turn` as it ends, so "back to before
- * turn 7" and "back to after turn 6" are both on the timeline; `rewind` is the
- * safety copy taken as a restore begins, which is what makes a restore itself
- * undoable. A snapshot whose tree equals the previous one is still recorded
- * (`changed: false`) so the timeline has a tick per turn.
- */
-export type Snapshot = {
-  /** The commit, which is also what the blame names. */
-  id: string
-  folderId: string
-  chatId: string
-  kind: "before" | "turn" | "rewind"
-  /** 1-based turn number within the chat; 0 for `before` the first. */
-  turn: number
-  /** The message that started the turn, shortened — what a blame hover shows. */
-  prompt: string | null
-  /** That message's line id, so a click can land the chat on it. */
-  lineId: string | null
-  tree: string
-  changed: boolean
-  at: string
-}
-
-/** What restoring a snapshot would do to the working tree as it stands. */
-export type SnapshotDiff = {
-  files: {
-    path: string
-    status: "added" | "modified" | "deleted"
-    added: number
-    removed: number
-  }[]
-}
-
-/**
- * Which chat wrote each line of a file, read off the snapshot chain with
- * `git blame`. `lines[i]` is the snapshot id for line `i` of the text that was
- * handed over, or null for a line no snapshot introduced — written by hand, or
- * older than the first snapshot of the folder.
- */
-export type ChatBlame = {
-  lines: (string | null)[]
-  snapshots: Record<string, Snapshot>
-  /** Titles for the chats named, so the gutter can label a line. */
-  chats: Record<string, { title: string }>
-}
-
 /*
  * Searching what was *said* in a chat is not in this contract, and that is the
  * shape of the feature rather than an omission: it is asked of the conversation
@@ -2019,19 +1968,6 @@ export type DesktopApi = {
   /** The host platform, for the few places the shell has to differ — the
    * window's title bar being one. */
   platform: "darwin" | "win32" | "linux"
-  /**
-   * Which shell this renderer is loaded in: the Electron app, or a browser tab
-   * on the localhost server (`src/server/`). For the handful of things a tab
-   * cannot do at all — a window pinned on top — and nothing else: every call
-   * below answers the same in both.
-   */
-  runtime: "electron" | "web"
-  /**
-   * What an `img` should load for a `note-file://` URL. The URL itself under
-   * Electron, which serves that scheme (`main/protocol.ts`); an HTTP route on
-   * the server for a tab, where an unknown scheme is a broken image.
-   */
-  resolveNoteFileUrl: (url: string) => Promise<string>
 
   /** The workspace and the folders in it. Always resolves: a first run gets
    * an empty default workspace rather than nothing. */
@@ -2107,10 +2043,6 @@ export type DesktopApi = {
   /** Opens a folder picker and resolves with the chosen path, or null. */
   pickDirectory: () => Promise<string | null>
 
-  /** Opens a file picker scoped to images and resolves with the chosen
-   * paths — empty when the user cancels. For the agent chat composer's
-   * attach button. */
-  pickImages: () => Promise<string[]>
   /**
    * Files, chosen in the OS picker and handed back as absolute paths.
    *
@@ -2127,14 +2059,6 @@ export type DesktopApi = {
    * which is where Electron's `webUtils.getPathForFile` must be called from.
    */
   getPathForFile: (file: File) => string
-  /**
-   * An image's bytes as a data URL, for the same composer's thumbnails.
-   * The renderer's own origin (`app://studio`, or the dev server) is not
-   * `file://`, and Chromium refuses to load a `file://` subresource from any
-   * other origin — so the only way to preview a dropped/picked image is to
-   * read it here and hand back bytes the `<img>` tag can use directly.
-   */
-  readImageDataUrl: (path: string) => Promise<string>
   /**
    * The image on the system clipboard, written to a temp file, as a path —
    * or null when the clipboard holds no image.
@@ -2289,10 +2213,7 @@ export type DesktopApi = {
    *
    * Bytes rather than a path because the renderer is not on a `file://` origin
    * and Chromium will not load a `file://` subresource from any other one —
-   * the same reason the chat composer's attachments are read this way. This is
-   * the checked twin of `readImageDataUrl`: that one takes a path from a
-   * system picker, this one takes a path from the tree and so is held to the
-   * workspace's folders like every other `files:*` call.
+   * held to the workspace's folders like every other `files:*` call.
    */
   readImageFile: (filePath: string) => Promise<string>
   /**
@@ -2573,28 +2494,6 @@ export type DesktopApi = {
   setAlwaysOnTop: (on: boolean) => Promise<void>
   /** Whether the calling window is pinned. */
   isAlwaysOnTop: () => Promise<boolean>
-  /** One chat's snapshots, oldest first — the timeline. Empty for a chat
-   * whose project is not a git repository. */
-  listSnapshots: (chatId: string) => Promise<Snapshot[]>
-  /** What restoring `snapshotId` would change, against the working tree now. */
-  snapshotDiff: (folderId: string, snapshotId: string) => Promise<SnapshotDiff>
-  /**
-   * Puts the working tree back to a snapshot. A `rewind` snapshot of the tree
-   * as it stood is taken first and returned, so the restore can be undone from
-   * the same timeline. Ignored files are left alone either way. Resolves null
-   * when nothing could be restored.
-   */
-  restoreSnapshot: (
-    chatId: string,
-    snapshotId: string
-  ) => Promise<Snapshot | null>
-  /** Which chat wrote each line of `text`, the file's current buffer — see
-   * `ChatBlame`. Null for a file outside a git repository or one with no
-   * snapshots behind it. */
-  chatBlame: (filePath: string, text: string) => Promise<ChatBlame | null>
-  /** A folder's snapshots changed — a turn ended, a restore ran. Returns an
-   * unsubscribe. */
-  onSnapshotsChanged: (listener: (folderId: string) => void) => () => void
   /**
    * The left column's Search: `query` across every file in the workspace and
    * everything said in every chat — see `WorkspaceSearch`.
@@ -2880,9 +2779,7 @@ export const IPC = {
   removeWorktree: "workspace:remove-worktree",
   nameWorktree: "workspace:name-worktree",
   pickDirectory: "workspace:pick-directory",
-  pickImages: "workspace:pick-images",
   pickFiles: "workspace:pick-files",
-  readImageDataUrl: "files:read-image-data-url",
   clipboardImagePath: "files:clipboard-image-path",
   menuCommand: "menu:command",
   gitBranch: "git:branch",
@@ -2942,11 +2839,6 @@ export const IPC = {
   openChatWindow: "window:open-chat",
   setAlwaysOnTop: "window:set-always-on-top",
   isAlwaysOnTop: "window:is-always-on-top",
-  listSnapshots: "snapshots:list",
-  snapshotDiff: "snapshots:diff",
-  restoreSnapshot: "snapshots:restore",
-  chatBlame: "snapshots:blame",
-  snapshotsChanged: "snapshots:changed",
   searchWorkspace: "search:workspace",
   deleteWorktreeChat: "worktree-chats:delete",
   clearWorktreeChat: "worktree-chats:clear",

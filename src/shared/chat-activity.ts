@@ -31,8 +31,6 @@ export type ChatActivity = {
   waiting: number
 }
 
-export const NOTHING_RUNNING: ChatActivity = { working: 0, waiting: 0 }
-
 /** Whether there is anything to draw at all. A row that says `0 running` is a
  * row saying nothing, and this list is mostly idle. */
 export function isRunning(activity: ChatActivity): boolean {

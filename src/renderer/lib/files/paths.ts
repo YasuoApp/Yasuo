@@ -1,10 +1,8 @@
 /**
  * Absolute paths, as the renderer has to handle them.
  *
- * `lib/runtime/tree.ts` splits on `/` and is right to: the paths it is about are
- * the ones this app made up. These are the operating system's, handed over by
- * the main process exactly as `node:path` produced them — which on Windows
- * means `C:\project\src\main.ts`, backslashes and all. A renderer that assumed
+ * These are the operating system's, handed over by the main process exactly as
+ * `node:path` produced them — which on Windows means `C:\project\src\main.ts`, backslashes and all. A renderer that assumed
  * one separator would put the whole tree under a single row named
  * `C:\project\src\main.ts` there, and quietly: nothing would throw.
  *

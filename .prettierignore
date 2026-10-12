@@ -6,7 +6,6 @@ coverage/
 
 # Build output: the renderer's bundle, the main process' bundle, the installers.
 dist-electron/
-dist-web/
 dist-renderer/
 release/
 

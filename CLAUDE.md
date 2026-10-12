@@ -25,9 +25,9 @@ cwd, a branch name. Sign-in will bring a second workspace; until then
 
 One package, no monorepo workspaces. `src/main/` is the Electron main process,
 `src/preload/` the one bridge script, `src/renderer/` the React app, and
-`src/shared/` the contract between the two. `src/server/` is the **browser
-build**: the same handlers over HTTP on `127.0.0.1`, for the same renderer in a
-tab — `docs/design.md` § The browser build.
+`src/shared/` the contract between the two. There is **no browser build** any
+more — the app is the only way to run it (`docs/design.md` § The browser build,
+removed).
 
 ## Commands
 
@@ -39,8 +39,6 @@ bun run lint
 bun run typecheck
 bun run build    # bundle main/preload/daemon + vite build the renderer
 bun run format   # prettier over the whole repo; format:check is what CI runs
-bun run dev:web  # the browser build: Vite + src/server on 127.0.0.1 (prints a URL with a token)
-bun run build:web && bun run web   # the same, built, on one port
 ```
 
 `typecheck` runs three TypeScript projects, because the three environments do
@@ -80,23 +78,16 @@ Adding or changing a call means touching all four. That is deliberate — the
 alternative is two sides that disagree about what a call returns. The renderer
 reaches the contract through the `@shared/*` alias; `@/*` is `src/renderer`.
 
-The browser build reads the same four: `src/renderer/web/channels.ts` generates
-its `window.desktop` from the `IPC` map by the preload's naming rule (a method
-is its channel's key, a subscription is `on` + the key — keep to it),
-`test/web-desktop.ts` checks it against the preload, and the handler is the same
-entry in `createIpc`.
-
 ## Main process (`src/main/`)
 
 `main.ts` creates the window and calls `registerIpc()` (`electron-ipc.ts`);
 `ipc.ts` owns every handler and the long-lived managers (`Store`,
 `TerminalManager`, `WorktreeChats`) as **`createIpc(host)`**, a table keyed by
-channel that **does not import `electron`**. What Electron and the server
-genuinely do differently — dialogs, windows, the tray, the trash,
-notifications — is `main/host.ts`, implemented by `electron-ipc.ts` and
-`server/web-host.ts`. A handler that needs one of those asks `host`; nothing
-under `src/main/` that `ipc.ts` imports may reach `electron`, and
-`scripts/build-web.mjs` leaves it unresolvable so a slip is a build error.
+channel that **does not import `electron`**, so the tests can import it.
+What needs Electron itself — dialogs, windows, the tray, the trash,
+notifications — is `main/host.ts`, implemented by `electron-ipc.ts`. A handler
+that needs one of those asks `host`; nothing under `src/main/` that `ipc.ts`
+imports may reach `electron`.
 
 - **`store.ts`** — all state on disk under `~/.vsclaude`: `manifest.json` for the
   workspace and its settings, `workspace/` for the panels' own files. A
@@ -537,7 +528,7 @@ app minted, only while `isUntitledBranch` still holds, never one the user named.
   `shownRootOf` is what the tree draws, `fileRootsOf` is every root there is —
   what may be read, which tabs survive, which project a path belongs to.
 - **`lib/files/paths.ts` is the one place a file path is split.** It accepts both
-  separators, unlike `lib/runtime/tree.ts`, which is for paths this app made up.
+  separators.
 - **`@shared/tree`** holds `descendantFolderIds` and `isDescendant`. They are
   shared because main used to delete a request folder too (through the MCP server
   that is now gone); the renderer is the only reader left, through

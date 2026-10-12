@@ -19,10 +19,6 @@ import { createIpc } from "./ipc"
 import { clampPercent, kilobytes } from "./system-usage"
 import { ChatTray } from "./tray"
 
-/** What `pickImages`'s dialog offers — the extensions `readImageDataUrl`
- * recognises. */
-const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp"]
-
 /** The installer, shipped in the bundle (`extraResources`) rather than fetched:
  * a button that runs a script downloaded at the moment it is pressed is a
  * different thing to agree to than one that runs the app's own. */
@@ -139,13 +135,10 @@ export function registerIpc(
       return result.canceled ? null : (result.filePaths[0] ?? null)
     },
 
-    async pickFiles({ title, images, directory }) {
+    async pickFiles({ title, directory }) {
       const result = await showOpenDialog({
         title,
         properties: ["openFile", "multiSelections"],
-        ...(images
-          ? { filters: [{ name: "Images", extensions: IMAGE_EXTENSIONS }] }
-          : {}),
         ...(directory ? { defaultPath: directory } : {}),
       })
       return result.canceled ? [] : result.filePaths

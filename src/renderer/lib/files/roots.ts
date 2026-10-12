@@ -1,6 +1,5 @@
 import type { WorkspaceFolder } from "@shared/api"
 
-import { useProjects } from "../projects"
 import { useStudio } from "../store"
 import { isInside } from "./paths"
 
@@ -96,14 +95,6 @@ export function shownRootOf(
  * rendering and so have nothing to subscribe with. */
 export function fileRoots(): FileRoot[] {
   return fileRootsOf(useStudio.getState().folders)
-}
-
-/** What the tree is drawing right now, read through the stores. */
-export function shownRoot(): FileRoot | null {
-  return shownRootOf(
-    useStudio.getState().folders,
-    useProjects.getState().activeFolderId
-  )
 }
 
 /** The root a path is in, read through the stores. */
