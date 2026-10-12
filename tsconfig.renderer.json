@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx"
+  },
+  // `src/shared` is in both projects on purpose: it is the IPC contract, and
+  // each side has to agree with it independently.
+  "include": ["src/renderer", "src/shared", "vite.config.ts"]
+}

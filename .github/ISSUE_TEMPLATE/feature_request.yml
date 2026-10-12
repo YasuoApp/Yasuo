@@ -1,0 +1,35 @@
+name: Feature request
+description: Something Visual Studio Claude should do and doesn't
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do
+      description: >
+        The situation, not the solution — what you were doing when you wanted
+        this. A described problem gets a better answer than a described feature.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you have in mind
+      description: Optional. If you already have a shape for it, describe it here.
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you do instead today
+      description: >
+        The other application you switch to, or the workaround. Visual Studio Claude exists to
+        remove those switches, so this is the most useful box on the form.
+
+  - type: checkboxes
+    id: contribute
+    attributes:
+      label: Would you be willing to work on this?
+      options:
+        - label: I'd be up for opening a pull request
+          required: false

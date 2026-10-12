@@ -1,0 +1,80 @@
+name: Bug report
+description: Something in Visual Studio Claude behaves wrongly
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please don't report a security issue here — see
+        [SECURITY.md](../blob/main/SECURITY.md) instead.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what happened, and what you expected instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open a project with …
+        2. Go to the Database panel
+        3. …
+    validations:
+      required: true
+
+  - type: dropdown
+    id: panel
+    attributes:
+      label: Which part
+      options:
+        - Database
+        - API
+        - Mail / Webhooks
+        - Specs
+        - Terminal / agent sessions
+        - Something else / not sure
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: OS
+      description: Visual Studio Claude is developed on macOS; Linux and Windows are far less travelled.
+      options:
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Linux
+        - Windows
+    validations:
+      required: true
+
+  - type: dropdown
+    id: how
+    attributes:
+      label: How are you running it
+      options:
+        - A packaged build (.dmg / AppImage / installer)
+        - From source (bun dev)
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: "0.0.1, or the commit you built from"
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Console output
+      description: >
+        Anything the terminal or the developer console printed. For a database
+        problem, please also say which engine and version.
+      render: shell

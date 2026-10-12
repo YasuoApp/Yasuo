@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    // The main process, the preload and the build scripts are Node. The
+    // renderer is deliberately *not* in here: giving it `types: ["node"]` would
+    // let a `process.env` or a `Buffer` typecheck in a page that has neither.
+    "types": ["node"]
+  },
+  "include": ["src/main", "src/preload", "src/server", "src/shared", "scripts"]
+}

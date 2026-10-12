@@ -1,0 +1,155 @@
+/*
+ * The studio's own motion, which is now the launch screen's and nothing else.
+ * The chat's loading indicator used to be the other half of this file — an SVG
+ * choreographed in five keyframe blocks, then a spritesheet stepped through with
+ * `steps()`. It is an animated GIF now and animates itself, so it has no CSS at
+ * all; `components/studio/mascot-loader.tsx` is the whole of it.
+ *
+ * The rest of the studio animates through what shadcn's components bring with
+ * them and nothing else. It is a file of its own rather than a block in
+ * `globals.css` because a keyframe is not a token, and because the next thing to
+ * animate should extend this list instead of writing a second one somewhere else.
+ *
+ * Everything here is a `--animate-*` token, read as a Tailwind `animate-*`
+ * utility. There was a block of plain classes below them for as long as the
+ * loader lived here; with it gone the file is back to one shape, which is the
+ * shape this header originally described.
+ *
+ * Three rules it is written to. A movement says where the thing came from, so
+ * nothing travels in a direction the layout does not already imply. Nothing a
+ * click waits on runs longer than 250ms — the launch sequence is slower only
+ * because nothing else is waiting on it. And every keyframe below moves opacity
+ * and transform alone, which are the two the compositor can run without laying
+ * the page out again.
+ *
+ * The distances are small on purpose: a third of a line, half a character. At
+ * that size the movement is not read as movement, only as the thing having
+ * arrived rather than appeared, which is the whole of what it is for.
+ */
+
+@theme {
+  /*
+   * Decelerating harder than a stock ease-out: things should cover most of
+   * their distance immediately and settle, which is what separates "arrived"
+   * from "was pushed".
+   */
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  /* A single overshoot, no bounce back — only for the few things that appear
+     out of nothing rather than moving from somewhere they already were. */
+  --ease-overshoot: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* `backwards` throughout: these are entrances, and a staggered one has to
+     hold at its first frame instead of sitting at full opacity until its delay
+     runs out. */
+  --animate-rise: rise 240ms var(--ease-out-quint) backwards;
+  --animate-glide: glide 220ms var(--ease-out-quint) backwards;
+  --animate-fade: fade 200ms ease-out backwards;
+  --animate-pop: pop 240ms var(--ease-overshoot) backwards;
+  --animate-settle: settle 420ms var(--ease-out-quint) backwards;
+
+  /* The two that loop: a launch screen that is still while the app is still
+     starting reads as one that is stuck. */
+  --animate-breathe: breathe 2.6s ease-in-out infinite;
+  --animate-sweep: sweep 1.8s ease-in-out infinite;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(0.375rem);
+  }
+}
+
+@keyframes glide {
+  from {
+    opacity: 0;
+    transform: translateX(-0.5rem);
+  }
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+}
+
+@keyframes settle {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+}
+
+@keyframes breathe {
+  50% {
+    opacity: 0.4;
+  }
+}
+
+@keyframes sweep {
+  from {
+    transform: translateX(-110%);
+  }
+  to {
+    transform: translateX(260%);
+  }
+}
+
+/*
+ * The onboarding tour's spotlight (`onboarding-tour.tsx`) sliding from one
+ * target to the next. A transition rather than a keyframe because the
+ * destination is measured off the page, not known in advance; it is here with
+ * the keyframes because it is the studio's own motion and this is the list.
+ * It moves the box's edges, which lays out — but the box is one `fixed`
+ * element with nothing inside it, so there is nothing else to lay out.
+ */
+.tour-spot {
+  transition:
+    top 220ms var(--ease-out-quint),
+    left 220ms var(--ease-out-quint),
+    width 220ms var(--ease-out-quint),
+    height 220ms var(--ease-out-quint);
+}
+
+/*
+ * The entrances are decoration — they say a thing arrived, never what the
+ * thing is — so all of them go, and the launch screen assembles in one frame.
+ *
+ * The two loops are deliberately left running: they are the only thing on
+ * screen saying the launch has not stalled, and a spinner that does not spin
+ * is not a calmer app, it is one that looks hung. Both are opacity in place,
+ * which is the kind of motion this setting is least aimed at.
+ */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --animate-rise: none;
+    --animate-glide: none;
+    --animate-fade: none;
+    --animate-pop: none;
+    --animate-settle: none;
+  }
+
+  /* Scoped to the launch screen's own crossfade rather than left to a blanket
+     rule over every transition in the app. */
+  [data-splash],
+  .tour-spot {
+    transition-duration: 1ms !important;
+  }
+
+  /*
+   * The chat's loading indicator is **not** here, and cannot be: it is an
+   * animated GIF now, whose clock belongs to the image decoder rather than to
+   * the compositor, so there is no declaration that reaches it. It was an SVG
+   * that dropped its choreography and kept its wind under this setting, then a
+   * spritesheet that could at least be slowed to a third. Switching it off would
+   * mean shipping a still frame as a second asset — see
+   * `components/studio/mascot-loader.tsx`.
+   */
+}
