@@ -43,7 +43,6 @@ export type OneTurnResult =
   | { error: string }
 
 /**
- * One read-only turn, opened for a question and closed on the answer./**
  * One read-only turn, opened for a question and closed on the answer.
  *
  * Split from `draftCommitMessage` so that what is particular to a draft — what
@@ -64,12 +63,13 @@ async function oneTurn(request: {
   effort?: string | null
   configDir?: string | null
   disabledTools?: string[]
+  signal?: AbortSignal
 }): Promise<OneTurnResult> {
   const said: string[] = []
 
   return new Promise<OneTurnResult>((resolve) => {
-    /** Settled once, whichever of the four ways below gets there first: the turn
-     * ending, the process dying, the timeout, or a failure to start. */
+    /** Settled once, whichever of the five ways below gets there first: the turn
+     * ending, the process dying, the timeout, a failure to start, or Stop. */
     let done = false
     let session: { close: () => void } | null = null
 
@@ -77,6 +77,7 @@ async function oneTurn(request: {
       if (done) return
       done = true
       clearTimeout(timer)
+      request.signal?.removeEventListener("abort", stop)
       // The session is closed on the way out rather than left to the caller:
       // there is nothing to send a second message to, and a `claude` per
       // resident per question is what this whole shape exists to avoid.
@@ -93,6 +94,12 @@ async function oneTurn(request: {
     )
     // Nothing here is a reason for Electron to stay up at quitting time.
     timer.unref?.()
+
+    // Stopped before the CLI's first message, `session` is still null and the
+    // `then` below closes what arrives, since `done` is already set.
+    const stop = () => finish({ error: "Stopped." })
+    if (request.signal?.aborted) return stop()
+    request.signal?.addEventListener("abort", stop)
 
     void startAgentSession(
       {
@@ -209,6 +216,9 @@ export type DraftCommitRequest = {
   effort?: string | null
   configDir?: string | null
   disabledTools?: string[]
+  /** `Stop` in the commit box — the session is closed and the answer is an
+   * error nobody draws. */
+  signal?: AbortSignal
 }
 
 /**
@@ -270,5 +280,6 @@ export async function draftCommitMessage(
     effort: request.effort,
     configDir: request.configDir,
     disabledTools: request.disabledTools,
+    signal: request.signal,
   })
 }

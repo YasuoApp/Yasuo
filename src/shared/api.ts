@@ -2050,6 +2050,12 @@ export type DesktopApi = {
     effort: ChatEffort | null,
     profileId: string | null
   ) => Promise<AgentTurnAnswer>
+  /**
+   * Stops the folder's running draft, if there is one. Its pending
+   * `draftCommitMessage` answers with an error the box ignores, since the
+   * person who pressed Stop already knows.
+   */
+  cancelCommitDraft: (folderId: string) => Promise<void>
 
   /**
    * The committed side of a diff and git's own patch for it — see `FileDiff`.
@@ -2702,6 +2708,7 @@ export const IPC = {
   gitDiscardAll: "git:discard-all",
   gitCommit: "git:commit",
   draftCommitMessage: "git:draft-message",
+  cancelCommitDraft: "git:draft-cancel",
   fileDiff: "git:file-diff",
   imageAtHead: "git:image-at-head",
   gitBlame: "git:blame",
