@@ -578,7 +578,7 @@ const hunkHeaders = ViewPlugin.fromClass(
  *
  * Light is Primer's own hex; dark is `rgba` over whatever the pane's ground is,
  * which is how Primer specifies it and is what keeps the tint honest over this
- * app's `#111218` rather than over GitHub's `#0d1117`.
+ * app's `#1b1c1f` rather than over GitHub's `#0d1117`.
  *
  * **The two number columns are not tinted and the sign column is**, which is
  * GitHub's own reading of where the row starts: the numbers are a margin, and
@@ -592,13 +592,13 @@ export function githubDiffTheme(isDark: boolean): Extension {
    * and the row came out two shades: the `+`/`-` column is painted by a gutter
    * marker and the code by a line decoration, so an alpha tint composites over
    * whatever each of those happens to sit on. Flattened against the studio's
-   * dark ground — `--background`, `#111218` (`styles/globals.css`) — so the two
+   * dark ground — `--background`, `#1b1c1f` (`styles/globals.css`) — so the two
    * halves of a row are the same colour because they are literally the same
    * colour. That also means these two follow the ground: they were flattened
    * against `#1e1e1e` and had to be recomputed when it moved.
    */
   const line = isDark
-    ? { add: "#15271e", del: "#281819" }
+    ? { add: "#1e3024", del: "#312123" }
     : { add: "#e6ffec", del: "#ffebe9" }
   const sign = isDark
     ? { add: "#3fb950", del: "#f85149" }
