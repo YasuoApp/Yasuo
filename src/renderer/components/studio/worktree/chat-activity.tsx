@@ -11,6 +11,7 @@ import {
   type ChatBlock,
 } from "@/lib/worktree-chat/activity"
 import {
+  distinctFiles,
   groupOutcome,
   rowsOf,
   type ToolLine,
@@ -150,7 +151,7 @@ function ToolGroup({
         {/* Shrinks as one: a row of chips that each gave way would show the
             first file whole and the last as a sliver. */}
         <span className="flex min-w-0 shrink items-center gap-1 overflow-hidden">
-          {lines.map((line) => (
+          {distinctFiles(lines).map((line) => (
             <ObjectChip key={line.id} of={line} />
           ))}
         </span>

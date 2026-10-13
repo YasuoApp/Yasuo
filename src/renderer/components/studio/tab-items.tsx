@@ -140,18 +140,23 @@ export function useTabItems(): Map<string, TabStripItem> {
 
     const waiting = chatAsks[id] !== undefined
     const unread = chatUnread[id] === true
+    const sending = chatSending.includes(id)
     const title = where ? `${chat.title} — ${where}` : chat.title
 
     add({
       id: PREFIX.worktree + id,
       label: chat.title,
+      // The transcript's `Working…` light, run over the title too, so a chat
+      // working in a tab nobody is looking at says so in words and not only
+      // in a 14px mark. Not while it waits: that is held, not working.
+      tone: sending && !waiting ? "text-shimmer" : undefined,
       // Waiting wins over working: both are true while an ask is up — the turn
       // is held rather than finished — and only one of them is something to do.
       // Unread comes last of the three and can never be true beside the
       // spinner: what marks a chat unread is it having stopped.
       icon: waiting ? (
         <ShieldQuestion className="size-3.5 shrink-0 animate-pulse text-primary" />
-      ) : chatSending.includes(id) ? (
+      ) : sending ? (
         <Spinner className="size-3.5 shrink-0 text-muted-foreground" />
       ) : unread ? (
         // In the icon's own slot rather than beside it, so the label starts on

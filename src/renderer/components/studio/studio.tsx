@@ -668,13 +668,21 @@ function Workbench() {
 const CARD =
   "h-full overflow-hidden rounded-xl bg-background outline -outline-offset-1 outline-border"
 
-/** A resize handle drawn as the canvas between two cards rather than as a
- * line — the gap is the handle. */
+/**
+ * A resize handle drawn as the canvas between two cards rather than as a
+ * line — the gap is the handle. A line is drawn down its middle only while it
+ * is hovered or dragged, the way the chat's `SideColumn` handle shows, so every
+ * edge that moves in this window says so the same way. Double-clicking puts
+ * the panel back to its `defaultSize`, which is the library's own behaviour.
+ */
 function Gap({ className }: { className?: string }) {
   return (
     <ResizableHandle
+      title="Drag to resize, double-click to reset"
       className={cn(
         "w-1.5 bg-transparent aria-[orientation=horizontal]:h-1.5",
+        "after:w-0.5 after:rounded-full after:transition-colors aria-[orientation=horizontal]:after:top-1/2 aria-[orientation=horizontal]:after:h-0.5",
+        "data-[separator=active]:after:bg-ring/60 data-[separator=hover]:after:bg-ring/60",
         className
       )}
     />

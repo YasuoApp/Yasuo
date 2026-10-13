@@ -681,22 +681,23 @@ export const TOOL_ROW = cn(
   "text-[0.7rem] text-muted-foreground"
 )
 
-/** The verb: shrinks a fraction as readily as anything after it, because it
- * is the row, and gives way only once the object and the outcome have nothing
- * left to give. */
-export const TOOL_VERB = "shrink-[0.05] truncate font-medium text-foreground/80"
+/** The verb never gives way: it is one short word, and a row that read
+ * `R…` beside a long command said nothing. It used to shrink a fraction with
+ * the rest, and a command chip's width is what squeezed it. */
+export const TOOL_VERB = "shrink-0 font-medium text-foreground/80"
 
 /**
  * The outcome, at the far right: `89 lines`, `+3 −1`, `3 files`. Pushed
  * there with `ml-auto` so the column of outcomes lines up down an open fold
  * whatever the objects beside them were, which is what makes it a column.
  *
- * Truncating rather than `shrink-0`, because this is not always a count:
- * main caps a result at 120 characters, and a fetch whose whole reply is one
- * line of prose arrives as all 120 of them. Unshrinkable, that one row set the
+ * Unshrinkable but capped, because this is not always a count: main caps a
+ * result at 120 characters, and a fetch whose whole reply is one line of
+ * prose arrives as all 120 of them. With no cap, that one row set the
  * transcript's scroll width and put a horizontal scrollbar under the whole
- * conversation. Capped at a share of the row so a long outcome cannot take
- * the object's place either.
+ * conversation; shrinking with the row instead, `140 lines` was `140…` beside
+ * any long command. So it keeps its width up to a share of the row, and it is
+ * the object's chip that gives way first.
  */
 export function Outcome({
   text,
@@ -735,7 +736,7 @@ export function Outcome({
 }
 
 export const TOOL_OUTCOME =
-  "ml-auto max-w-[45%] min-w-0 shrink truncate pl-2 text-right tabular-nums"
+  "ml-auto max-w-[45%] min-w-0 shrink-0 truncate pl-2 text-right tabular-nums"
 
 /** The chevron's width, kept on a row that has none. */
 const CHEVRON_GAP = "size-3 shrink-0"

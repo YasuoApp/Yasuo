@@ -807,18 +807,20 @@ export function ChatComposer({
           role="separator"
           aria-orientation="horizontal"
           aria-label="Resize the composer"
-          title="Drag to resize · double-click to reset"
+          title="Drag to resize, double-click to reset"
           onPointerDown={onResizeStart}
           onPointerMove={onResizeMove}
           onPointerUp={onResizeEnd}
           onPointerCancel={onResizeEnd}
           onDoubleClick={() => setComposerHeight(null)}
-          className="group absolute inset-x-3 -top-1.5 z-10 flex h-3 cursor-ns-resize items-center justify-center"
+          className="group absolute inset-x-3 -top-1.5 z-10 flex h-3 cursor-ns-resize items-center"
         >
+          {/* The line every resizable edge in the window draws — `Gap`,
+              `SideColumn` — rather than a grip of its own. */}
           <span
             className={cn(
-              "h-1 w-8 rounded-full bg-border opacity-0 transition-opacity group-hover:opacity-100",
-              dragHeight !== null && "opacity-100"
+              "h-0.5 w-full rounded-full transition-colors group-hover:bg-ring/60",
+              dragHeight !== null && "bg-ring/60"
             )}
           />
         </div>

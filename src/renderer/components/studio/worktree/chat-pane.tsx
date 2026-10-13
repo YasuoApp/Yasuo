@@ -7,7 +7,13 @@ import {
   useState,
   type DragEvent,
 } from "react"
-import { Archive, ListTree, PictureInPicture2, Search } from "lucide-react"
+import {
+  Archive,
+  Images,
+  ListTree,
+  PictureInPicture2,
+  Search,
+} from "lucide-react"
 
 import {
   chatOptions,
@@ -28,6 +34,7 @@ import { editedAfter } from "@/lib/worktree-chat/edit"
 import { useComposerBus } from "@/lib/worktree-chat/composer-bus"
 import { clearFind, paintFind, rectOfHit } from "@/lib/worktree-chat/find-marks"
 import { readImage } from "@/lib/worktree-chat/images"
+import { mediaOf } from "@/lib/worktree-chat/media"
 import { currentEntry, outlineOf } from "@/lib/worktree-chat/outline"
 import { quoteOf } from "@/lib/worktree-chat/reply"
 import { hitAt, hitsIn } from "@/lib/worktree-chat/search"
@@ -37,6 +44,7 @@ import { chatLine, totalOf, usageDetail } from "@/lib/worktree-chat/usage"
 import { IconButton } from "../icon-button"
 import { ChatAsk } from "./chat-ask"
 import { ChatFind } from "./chat-find"
+import { ChatMediaColumn } from "./chat-media"
 import { ChatOutline } from "./chat-outline"
 import { ReplyToSelection } from "./chat-reply"
 import { ChatComposer, type ChatComposerHandle } from "./chat-composer"
@@ -179,12 +187,14 @@ const RESTORE_MS = 400
 const FOUND_MARGIN = 48
 
 /**
- * Whether the table of contents is open. One answer for every chat rather than
- * one per chat: it is a way of reading, and somebody who opened it in one
+ * Which column is open beside the transcript — the table of contents, the
+ * shared media, or neither. One at a time: they share a slot (`SideColumn`),
+ * and two would take a narrow pane's transcript down to nothing. One answer for every chat rather
+ * than one per chat: it is a way of reading, and somebody who opened it in one
  * conversation wants it in the next. Module level because the pane remounts
  * per chat (see `key` above); in memory and per run, like `places`.
  */
-let outlineShown = false
+let sideShown: "outline" | "media" | null = null
 
 /** When a position written down now stops being re-applied. Its own function
  * because both writers of `restore` want the same window, and because reading
@@ -558,16 +568,19 @@ function Conversation({
    * off where the entries are drawn, on scroll and whenever the transcript
    * changes, and only while the column is open: nobody is looking otherwise.
    */
-  const [outlineOpen, setOutlineOpen] = useState(outlineShown)
-  const toggleOutline = () => {
-    outlineShown = !outlineOpen
-    setOutlineOpen(outlineShown)
+  const [side, setSide] = useState(sideShown)
+  const toggleSide = (column: "outline" | "media") => {
+    sideShown = side === column ? null : column
+    setSide(sideShown)
   }
+  const outlineOpen = side === "outline"
+  const toggleOutline = () => toggleSide("outline")
+  const media = useMemo(() => mediaOf(lines), [lines])
   const outline = useMemo(() => outlineOf(lines), [lines])
   const [outlineAt, setOutlineAt] = useState(-1)
   const measureOutline = useCallback(() => {
     const element = box.current
-    if (!element || !outlineShown) return
+    if (!element || sideShown !== "outline") return
     const view = element.getBoundingClientRect().top
     const tops = outline.map((entry) => {
       const node = element.querySelector(
@@ -768,6 +781,14 @@ function Conversation({
           className={cn("size-6", outlineOpen && "bg-accent")}
         >
           <ListTree className="size-3.5" />
+        </IconButton>
+        <IconButton
+          label={side === "media" ? "Hide media" : "Show media"}
+          side="bottom"
+          onClick={() => toggleSide("media")}
+          className={cn("size-6", side === "media" && "bg-accent")}
+        >
+          <Images className="size-3.5" />
         </IconButton>
         <IconButton
           label="Find in chat"
@@ -1004,6 +1025,16 @@ function Conversation({
             current={outlineAt}
             onPick={goToEntry}
             onClose={toggleOutline}
+          />
+        )}
+        {side === "media" && !empty && !reading && (
+          <ChatMediaColumn
+            media={media}
+            onPick={(lineId) => {
+              const block = blockOf(blocks, lineId)
+              if (block) goToEntry(block)
+            }}
+            onClose={() => toggleSide("media")}
           />
         )}
       </div>

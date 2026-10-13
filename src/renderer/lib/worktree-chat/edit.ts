@@ -28,4 +28,4 @@ export function editedAfter(
 }
 
 /** The CLI's tools that write a file. `stat` covers an edit by another name. */
-const WRITES = new Set(["Edit", "MultiEdit", "Write", "NotebookEdit"])
+export const WRITES = new Set(["Edit", "MultiEdit", "Write", "NotebookEdit"])
