@@ -1,11 +1,4 @@
-import {
-  ChevronDown,
-  ChevronUp,
-  Plus,
-  RotateCw,
-  SquareTerminal,
-  X,
-} from "lucide-react"
+import { ChevronDown, Plus, RotateCw, SquareTerminal, X } from "lucide-react"
 
 import {
   DropdownMenu,
@@ -35,17 +28,17 @@ import { DockTerminal } from "./dock-terminal"
  * halves the pane's column is split into, and collapsing it gives the editor
  * the whole column back.
  *
- * **The strip itself never goes.** Closing the dock collapses the panel to
- * `DOCK_STRIP_HEIGHT`, so what is left on screen is this row — the chevron
- * pointing the other way, and tabs that each open the dock on themselves. The
- * row that closed it is the obvious place to reopen it.
+ * **The strip goes with it.** It used to stay on screen as a 36px row — the
+ * chevron pointing the other way, and tabs that each reopened the dock — and
+ * that was height the pane gave up for a way back the rail's Terminal button
+ * and `⌃\`` already are.
  *
  * There was a `Preview` tab past the `+` — the project's dev server in a
  * `<webview>` — and it is gone (`docs/design.md` § Preview, removed).
  */
 export function Dock() {
   const open = useDock((state) => state.open)
-  const toggle = useDock((state) => state.toggle)
+  const hide = useDock((state) => state.close)
   const show = useDock((state) => state.show)
 
   const shells = useShells((state) => state.shells)
@@ -74,8 +67,6 @@ export function Dock() {
       <div
         role="tablist"
         aria-label="Terminals"
-        // The height is the panel's `collapsedSize`, so this row is exactly what
-        // is left when the dock is shut.
         style={{ height: DOCK_STRIP_HEIGHT }}
         // The top border belongs to *this row* rather than to the wrapper, and
         // that is the whole of it: a border on the wrapper is 1px the row does
@@ -85,15 +76,11 @@ export function Dock() {
         className="flex shrink-0 items-center gap-0.5 border-t border-b px-1.5"
       >
         <IconButton
-          label={open ? "Hide the panel" : "Show the panel"}
-          onClick={toggle}
+          label="Hide the panel"
+          onClick={hide}
           className="size-6 shrink-0"
         >
-          {open ? (
-            <ChevronDown className="size-3.5" />
-          ) : (
-            <ChevronUp className="size-3.5" />
-          )}
+          <ChevronDown className="size-3.5" />
         </IconButton>
 
         <div className="flex min-w-0 [scrollbar-width:none] items-center gap-0.5 overflow-x-auto">
@@ -114,9 +101,6 @@ export function Dock() {
               // shell is every tab there was before there was a menu.
               kind={shellName(shell.shellId)}
               title={shell.cwd ?? undefined}
-              // Nothing is "selected" while the dock is shut: the strip is all
-              // there is, and a lit tab would be pointing at a panel that is
-              // not on screen.
               selected={open && shell.id === activeId}
               exited={shell.exited}
               onSelect={() => select(shell.id)}

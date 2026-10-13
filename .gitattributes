@@ -1,0 +1,3 @@
+# Prettier enforces `endOfLine: "lf"`, and Git for Windows ships with
+# core.autocrlf=true, which checks every file out as CRLF and fails format:check.
+* text=auto eol=lf

@@ -20,7 +20,7 @@ import {
 } from "@/lib/shortcuts"
 import { applyAppearance } from "@/lib/appearance"
 import { useSettings } from "@/lib/settings"
-import { useDock, DOCK_STRIP_HEIGHT } from "@/lib/dock"
+import { useDock } from "@/lib/dock"
 import { useStudio, RAIL_WIDTH, type Pane } from "@/lib/store"
 import { useProjects } from "@/lib/projects"
 import { useWorkspaceSearch } from "@/lib/workspace-search"
@@ -509,31 +509,31 @@ function Workbench() {
                     </div>
                   </ResizablePanel>
 
-                  {/* Left on screen when the dock is shut, like the
-                      Explorer's: what is left is the strip, so dragging the gap
-                      is a second way back beside the strip's chevron. */}
-                  <Gap />
+                  {/* Hidden with the dock, as the projects column's is: a shut
+                      dock is nothing at all, and a handle left under the pane
+                      would be a strip of canvas with no card below it. */}
+                  <Gap className={cn(!dockOpen && "hidden")} />
 
                   {/* Collapsed rather than unmounted, and that is not tidiness:
                       `ShellView`'s cleanup kills the pty, so a dock taken out of
                       the tree takes the shell's running command with it.
 
-                      Collapsed to its tab strip rather than to nothing, so that
-                      shutting the dock leaves the row that reopens it — see
-                      `DOCK_STRIP_HEIGHT`. */}
+                      Collapsed to nothing, as the projects column is: the way
+                      back is the rail's Terminal button and `⌃\``, which are on
+                      screen whatever the dock is doing. It used to collapse to
+                      its tab strip, which kept 36px of the pane's height for a
+                      row that only reopened it. */}
                   <ResizablePanel
                     defaultSize={320}
                     minSize={160}
                     collapsible
-                    collapsedSize={DOCK_STRIP_HEIGHT}
+                    collapsedSize={0}
                     panelRef={dockPanel}
                     // `Panel` wraps its children in a scroll container, and
                     // this panel has nothing to scroll — the dock's own panes
-                    // are `absolute inset-0`. Left as `auto` it showed a
-                    // scrollbar over the shut dock's strip, because a collapse
-                    // to exactly `DOCK_STRIP_HEIGHT` lands on a fractional
+                    // are `absolute inset-0`. A collapse lands on a fractional
                     // pixel once the layout has been through the library's
-                    // percentages, and the strip is that height to the pixel.
+                    // percentages, which showed up as a scrollbar.
                     style={{ overflow: "hidden" }}
                     // Dragging the dock shut past its minimum collapses the
                     // panel, and without this the store would still say open —
@@ -542,13 +542,21 @@ function Workbench() {
                     onResize={(size, _id, previous) => {
                       if (previous === undefined) return
 
-                      const shown = size.inPixels > DOCK_STRIP_HEIGHT
+                      const shown = size.inPixels > 0
                       if (shown !== useDock.getState().open) {
                         useDock.getState().toggle()
                       }
                     }}
                   >
-                    <div className={CARD}>
+                    {/* Hidden rather than unmounted while shut, for the ptys —
+                        and hidden rather than left to clip, or a fractional
+                        collapse shows a sliver of the strip's edge. */}
+                    <div
+                      className={cn(
+                        CARD,
+                        !dockOpen && "pointer-events-none opacity-0"
+                      )}
+                    >
                       <Dock />
                     </div>
                   </ResizablePanel>
@@ -657,10 +665,9 @@ function Workbench() {
  *
  * The edge is an **outline drawn inward**, not a border, and the difference is
  * pixels the panels already count: a border takes 2px out of the box, and the
- * dock collapses to exactly `DOCK_STRIP_HEIGHT` and the Explorer to exactly
- * `RAIL_WIDTH`, so a bordered card clipped the last pixel of the strip and the
- * rail. An outline is painted over the content and takes no room; the strips'
- * own edge lines land under it.
+ * Explorer collapses to exactly `RAIL_WIDTH`, so a bordered card clipped the
+ * last pixel of the rail. An outline is painted over the content and takes no
+ * room; the rail's own edge line lands under it.
  */
 const CARD =
   "h-full overflow-hidden rounded-xl bg-background outline -outline-offset-1 outline-border"

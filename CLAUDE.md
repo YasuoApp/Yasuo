@@ -417,10 +417,9 @@ unmounted. The **dock** — a tab per shell, and a `+` — is under
 the **pane**, spanning its width, collapsed rather than unmounted because a pty
 taken out of the tree ends. It used to be the lower half of the Explorer column,
 where a 520px cap left the shell ~60 columns wide; `docs/design.md` has the
-argument. It collapses to its own tab row rather than to nothing — that row is
-the way back, which is why no dock button is left in the title bar — so the row's
-height and the panel's `collapsedSize` are one exported `DOCK_STRIP_HEIGHT`
-rather than an `h-9` beside a `36`. `⌃\`` toggles the Terminal tab
+argument. It collapses to **nothing**, like the projects column — the rail's
+Terminal button is the way back; it used to keep its tab row
+(`DOCK_STRIP_HEIGHT`) on screen for that. `⌃\`` toggles the Terminal tab
 (`isTerminalShortcut`), and it is the one shortcut deliberately _not_ refused
 inside a pty. A project's rows are its **chats**.
 The `Changes` list's **per-chat chips are deleted** (`docs/design.md` § Whose

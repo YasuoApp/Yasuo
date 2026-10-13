@@ -13,10 +13,11 @@ const STRIP_KEY = "workbench.strip"
  * panels as their `collapsedSize`, so closing a column leaves its rail against
  * the window's edge instead of taking the column away entirely.
  *
- * The dock's own `DOCK_STRIP_HEIGHT` is the same argument turned on its side,
- * and for the same failure: a panel that collapses to nothing has nowhere left
+ * The failure it answers: a panel that collapses to nothing has nowhere left
  * to hold the way back, so a column dragged shut could only be reopened by
- * knowing the shortcut. The rail is where the question is asked.
+ * knowing the shortcut. The rail is where the question is asked. (The projects
+ * column and the dock do collapse to nothing, because the `NavRail` holds
+ * their way back.)
  *
  * One number for both, and not one per column: they sit at either edge of the
  * same window, and two rails a few pixels apart in width would read as a

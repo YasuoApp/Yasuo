@@ -16,8 +16,9 @@ function DropLine({ side }: { side: "left" | "right" }) {
     <span
       aria-hidden
       className={cn(
-        "pointer-events-none absolute inset-y-0 z-10 w-0.5 bg-primary",
-        side === "left" ? "left-0" : "right-0"
+        "pointer-events-none absolute inset-y-0.5 z-10 w-0.5 rounded-full bg-primary",
+        // Centred on the gap between two tabs rather than inside either one.
+        side === "left" ? "-left-[3px]" : "-right-[3px]"
       )}
     />
   )
@@ -239,11 +240,13 @@ export function TabStrip({
           // The horizontal one is hidden outright — the thumb below stands in
           // for it, which also gives the tabs back the row of height it was
           // taking.
-          className="flex h-(--density-tab) scrollbar-none items-stretch overflow-x-auto overflow-y-hidden border-b bg-sidebar"
+          className="flex h-(--density-tab) scrollbar-none items-center overflow-x-auto overflow-y-hidden border-b bg-sidebar px-1"
         >
           {/* The trigger covers the tabs only: a right-click on the empty strip
             past the last one belongs to no tab. */}
-          <ContextMenuTrigger render={<div className="flex items-stretch" />}>
+          <ContextMenuTrigger
+            render={<div className="flex h-full items-center gap-1 py-1" />}
+          >
             {items.map((item, index) => {
               const active = item.id === activeId
 
@@ -299,10 +302,13 @@ export function TabStrip({
                   }}
                   onContextMenu={() => setMenuTarget(item)}
                   className={cn(
-                    "group relative flex max-w-52 shrink-0 cursor-default items-center gap-1.5 border-r px-2.5 text-xs outline-none",
+                    // A raised card on the strip rather than a cell of a
+                    // ruled row: the full-height dividers and the 2px top
+                    // accent met the pane card's rounded corner at an angle.
+                    "group relative flex h-full max-w-56 shrink-0 cursor-default items-center gap-1.5 rounded-md border px-2.5 text-xs transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
                     active
-                      ? "border-t-2 border-t-primary bg-background pb-0.5 text-foreground"
-                      : "text-muted-foreground hover:bg-background/50 hover:text-foreground",
+                      ? "border-border bg-background text-foreground shadow-xs"
+                      : "border-transparent text-muted-foreground hover:bg-background/60 hover:text-foreground",
                     dragId === item.id && "opacity-60"
                   )}
                 >
@@ -315,7 +321,7 @@ export function TabStrip({
                   {item.icon}
                   <span
                     className={cn(
-                      "truncate font-mono",
+                      "truncate",
                       item.italic && "italic",
                       item.tone
                     )}
@@ -349,7 +355,7 @@ export function TabStrip({
                       onClose(item.id)
                     }}
                     className={cn(
-                      "-mr-1 inline-flex size-4 shrink-0 items-center justify-center rounded-sm hover:bg-accent hover:text-accent-foreground",
+                      "-mr-1 inline-flex size-4.5 shrink-0 items-center justify-center rounded-sm transition-opacity hover:bg-accent hover:text-accent-foreground",
                       item.dirty
                         ? "hidden group-hover:inline-flex"
                         : active

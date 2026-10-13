@@ -355,9 +355,12 @@ composer as a `>` quote, unsent (`quoteOf`, tested).
 ## The dock
 
 A tab per shell and a `+`, under the pane. **Collapsed, not unmounted** — a pty
-taken out of the tree ends — and it collapses to its own tab row
-(`DOCK_STRIP_HEIGHT`), which is the way back. Dragging it shut is the same as the
-chevron. `⌃\`` toggles it, even from inside a pty.
+taken out of the tree ends — and it collapses to **nothing**, the way the
+projects column does. It used to collapse to its own tab row
+(`DOCK_STRIP_HEIGHT`) as the way back, which kept 36px of the pane's height for
+a row that only reopened the dock; the rail's Terminal button and `⌃\`` already
+are the way back. Dragging it shut is the same as the chevron. `⌃\`` toggles it,
+even from inside a pty.
 
 ### Terminal
 
