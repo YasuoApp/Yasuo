@@ -11,8 +11,12 @@ export type Host = {
    * `send` in `ipc.ts` for why it is everyone rather than the caller. */
   send: (channel: string, payload: unknown) => void
 
-  /** A native folder picker. */
-  pickDirectory: () => Promise<string | null>
+  /** A native folder picker — titled for adding a project unless told
+   * otherwise. */
+  pickDirectory: (options?: {
+    title: string
+    buttonLabel: string
+  }) => Promise<string | null>
   /** A native file picker. Empty when cancelled. */
   pickFiles: (options: {
     title: string
@@ -60,6 +64,9 @@ export type Host = {
   /** `install.sh`, or null where this host cannot run it — see
    * `installUpdate` in `ipc.ts`. */
   installerScript: string | null
+  /** The built-in plugins this build carries, or null for none — see
+   * `main/plugins.ts`. */
+  bundledPluginsDir: string | null
 
   /** This app's own share of the machine, for `systemUsage`: every process
    * Chromium runs, added up. */

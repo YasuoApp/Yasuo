@@ -19,6 +19,7 @@ import {
   isTerminalShortcut,
 } from "@/lib/shortcuts"
 import { applyAppearance } from "@/lib/appearance"
+import { usePlugins } from "@/lib/plugins/store"
 import { useSettings } from "@/lib/settings"
 import { useDock } from "@/lib/dock"
 import { useStudio, RAIL_WIDTH, type Pane } from "@/lib/store"
@@ -37,7 +38,7 @@ import { FileWorkspace } from "./files/file-workspace"
 import { AddFolderDialog } from "./add-folder-dialog"
 import { ClaudeSetup, useClaudeSetup } from "./claude-setup"
 import { CommandPalette } from "./command-palette"
-import { CostDashboard } from "./cost-dashboard"
+import { PluginNotices } from "./plugin-notices"
 import { NothingOpen } from "./nothing-open"
 import { OnboardingTour } from "./onboarding-tour"
 import { SettingsDialog } from "./settings-dialog"
@@ -92,6 +93,9 @@ export function Studio() {
     void useProjects.getState().restore()
     void useWorktreeChats.getState().restore()
     void useClaudeProfiles.getState().refresh()
+    // The studio's window only: a popped-out chat is a second page, and a
+    // plugin started in both would answer every event twice.
+    void usePlugins.getState().restore()
   }, [])
 
   // A chat's turn runs in the main process and outlives the
@@ -198,8 +202,6 @@ function Workbench() {
   /** The Settings dialog — the application menu's ⌘, and nothing else, since
    * a preference is not a thing the workspace holds a row for. */
   const [settingsOpen, setSettingsOpen] = useState(false)
-  /** The usage dashboard — the rail's `Usage` button. */
-  const [costsOpen, setCostsOpen] = useState(false)
   /** Whether the dock's terminals are on screen: the rail's button, `⌃\``, and
    * the chevron in the dock's own strip. */
   const dockOpen = useDock((state) => state.open)
@@ -440,10 +442,7 @@ function Workbench() {
       <WindowTitleBar />
 
       <div className="flex min-h-0 flex-1 gap-1.5 px-1.5">
-        <NavRail
-          onOpenSettings={() => setSettingsOpen(true)}
-          onOpenCosts={() => setCostsOpen(true)}
-        />
+        <NavRail onOpenSettings={() => setSettingsOpen(true)} />
 
         <ResizablePanelGroup
           orientation="horizontal"
@@ -671,14 +670,13 @@ function Workbench() {
       {/* Mounted rather than opened from anywhere: the palette is a shortcut
           (⌘P) and owns it, so nothing here has to hold a piece of it. */}
       <CommandPalette />
+      <PluginNotices />
 
       {adding && <AddFolderDialog onClose={() => setAdding(false)} />}
 
       {settingsOpen && (
         <SettingsDialog onClose={() => setSettingsOpen(false)} />
       )}
-
-      {costsOpen && <CostDashboard onClose={() => setCostsOpen(false)} />}
     </div>
   )
 }

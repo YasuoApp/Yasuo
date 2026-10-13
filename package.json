@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "//build": "Vite is run through node with an explicit heap size rather than through its bin shim: rolling up the renderer — mermaid, katex, Excalidraw, and a Lezer parser per language — peaks over 2GB, and V8 sizes the default old space from physical memory, so a 7GB machine (a macOS CI runner, a smaller laptop) caps it at ~2GB and the build dies with CALL_AND_RETRY_LAST while a 16GB one never notices.",
-    "build": "node scripts/build-electron.mjs --minify && node --max-old-space-size=4096 node_modules/vite/bin/vite.js build",
+    "build": "node scripts/build-electron.mjs --minify && node scripts/build-plugins.mjs --minify && node --max-old-space-size=4096 node_modules/vite/bin/vite.js build",
     "package": "bun run build && electron-builder",
     "test": "node scripts/test.mjs",
     "lint": "eslint --max-warnings 0",
@@ -60,6 +60,7 @@
     "eslint-plugin-only-warn": "^1.2.1",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.1.1",
+    "fflate": "^0.8.3",
     "globals": "^17.6.0",
     "lucide-react": "^1.27.0",
     "next-themes": "^0.4.6",
@@ -98,7 +99,11 @@
       "dist-electron/daemon.cjs"
     ],
     "extraResources": [
-      "install.sh"
+      "install.sh",
+      {
+        "from": "dist-plugins",
+        "to": "plugins"
+      }
     ],
     "directories": {
       "output": "release",

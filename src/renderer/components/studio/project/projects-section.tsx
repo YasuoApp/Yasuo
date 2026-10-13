@@ -3,8 +3,6 @@ import {
   ChevronRight,
   ClipboardCopy,
   ExternalLink,
-  FileCode,
-  FileDown,
   Folder,
   FolderOpen,
   GitBranch,
@@ -57,13 +55,10 @@ import {
   ungroupedChats,
   useWorktreeChats,
 } from "@/lib/worktree-chat/store"
-import type {
-  AssistantMessage,
-  WorkspaceFolder,
-  WorktreeChat,
-} from "@shared/api"
-import { chatToMarkdown, fileNameOf } from "@/lib/worktree-chat/export"
-import { chatToHtml } from "@/lib/worktree-chat/export-html"
+import type { WorkspaceFolder, WorktreeChat } from "@shared/api"
+import { PLUGIN_ICON_COMPONENTS } from "@/lib/plugins/icons"
+import type { PluginChatMenuItem } from "@/lib/plugins/registry"
+import { usePlugins } from "@/lib/plugins/store"
 import { since } from "@/lib/worktree-chat/since"
 import {
   activityLabel,
@@ -75,27 +70,24 @@ import {
 import { unreadIn } from "@/lib/worktree-chat/unread"
 
 /**
- * A chat's lines and its project's name, for the export items.
- *
- * The store holds the lines of a chat somebody has opened this run and nothing
- * else — reading every transcript into memory to list them is what `digests`
- * refuses — so a chat exported straight from the column is read off disk here,
- * the same call the pane makes when it is selected.
+ * One plugin's chat menu item. A throw is reported in the plugin's name rather
+ * than left to the console: the menu has closed by then, and the click would
+ * otherwise have done nothing visible.
  */
-async function withLines(
-  chat: WorktreeChat,
-  then: (lines: AssistantMessage[], project?: string) => Promise<void>
+async function runChatMenuItem(
+  item: PluginChatMenuItem,
+  chatId: string
 ): Promise<void> {
-  const lines =
-    useWorktreeChats.getState().messages[chat.id] ??
-    (await window.desktop.readWorktreeChat(chat.id))
-  const project = useStudio
-    .getState()
-    .folders.find((folder) => folder.id === chat.folderId)?.name
   try {
-    await then(lines, project)
+    await item.run(chatId)
   } catch (error) {
-    console.error("Could not export chat", error)
+    console.error(`[plugin ${item.pluginId}]`, error)
+    usePlugins
+      .getState()
+      .notify(
+        item.pluginId,
+        `${item.name} failed: ${error instanceof Error ? error.message : String(error)}`
+      )
   }
 }
 
@@ -894,6 +886,7 @@ function ProjectChats({
   const select = useWorktreeChats((state) => state.select)
   const remove = useWorktreeChats((state) => state.remove)
   const rename = useWorktreeChats((state) => state.rename)
+  const chatMenuItems = usePlugins((state) => state.chatMenuItems)
 
   /** Which chat's name is a field right now. In place, the way every other
    * sidebar in the studio renames — see `RenameRow`. */
@@ -1045,51 +1038,25 @@ function ProjectChats({
                 Rename
               </ContextMenuItem>
               <ContextMenuSeparator />
-              {/* The transcript as a document — see `lib/worktree-chat/export.ts`.
-                  Three items rather than one dialog with a format picker: the
-                  clipboard and a `.md` are the same bytes, and a save dialog
-                  already asks the one question left. */}
-              <ContextMenuItem
-                onClick={() =>
-                  void withLines(chat, (lines, project) =>
-                    navigator.clipboard.writeText(
-                      chatToMarkdown(chat, lines, { project })
+              {/* What plugins add — the transcript as a document is the
+                  built-in `chat-export` plugin's (`plugins/chat-export/`). */}
+              {chatMenuItems.length > 0 && (
+                <>
+                  {chatMenuItems.map((item) => {
+                    const Icon = PLUGIN_ICON_COMPONENTS[item.icon]
+                    return (
+                      <ContextMenuItem
+                        key={item.id}
+                        onClick={() => void runChatMenuItem(item, chat.id)}
+                      >
+                        <Icon />
+                        {item.name}
+                      </ContextMenuItem>
                     )
-                  )
-                }
-              >
-                <ClipboardCopy />
-                Copy as Markdown
-              </ContextMenuItem>
-              <ContextMenuItem
-                onClick={() =>
-                  void withLines(chat, async (lines, project) => {
-                    await window.desktop.saveTextFile({
-                      defaultName: fileNameOf(chat.title, "md"),
-                      text: chatToMarkdown(chat, lines, { project }),
-                      filters: [{ name: "Markdown", extensions: ["md"] }],
-                    })
-                  })
-                }
-              >
-                <FileDown />
-                Export as Markdown…
-              </ContextMenuItem>
-              <ContextMenuItem
-                onClick={() =>
-                  void withLines(chat, async (lines, project) => {
-                    await window.desktop.saveTextFile({
-                      defaultName: fileNameOf(chat.title, "html"),
-                      text: await chatToHtml(chat, lines, { project }),
-                      filters: [{ name: "HTML", extensions: ["html"] }],
-                    })
-                  })
-                }
-              >
-                <FileCode />
-                Export as HTML…
-              </ContextMenuItem>
-              <ContextMenuSeparator />
+                  })}
+                  <ContextMenuSeparator />
+                </>
+              )}
               {/* The conversation is on disk, so this is the one way it goes —
                   and there is no undo, which is why it asks. */}
               <ContextMenuItem

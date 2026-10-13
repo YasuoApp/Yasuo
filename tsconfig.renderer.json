@@ -5,5 +5,7 @@
   },
   // `src/shared` is in both projects on purpose: it is the IPC contract, and
   // each side has to agree with it independently.
-  "include": ["src/renderer", "src/shared", "vite.config.ts"]
+  // `plugins` too: a built-in plugin runs in this page and is written against
+  // the renderer's own types — see `scripts/build-plugins.mjs`.
+  "include": ["src/renderer", "src/shared", "plugins", "vite.config.ts"]
 }

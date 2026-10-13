@@ -197,6 +197,13 @@ const api: DesktopApi = {
   installUpdate: (version) => ipcRenderer.invoke(IPC.installUpdate, version),
   onUpdateProgress: (listener) =>
     subscribe<UpdateProgress>(IPC.updateProgress, listener),
+
+  listPlugins: () => ipcRenderer.invoke(IPC.listPlugins),
+  readPluginData: (id) => ipcRenderer.invoke(IPC.readPluginData, id),
+  writePluginData: (id, data) =>
+    ipcRenderer.invoke(IPC.writePluginData, id, data),
+  installPlugin: (source) => ipcRenderer.invoke(IPC.installPlugin, source),
+  removePlugin: (id) => ipcRenderer.invoke(IPC.removePlugin, id),
 }
 
 contextBridge.exposeInMainWorld("desktop", api)

@@ -1,0 +1,7 @@
+{
+  "id": "usage",
+  "name": "Usage",
+  "version": "1.0.0",
+  "description": "The tokens every chat has used, by day, model, project and chat.",
+  "author": "Visual Studio Claude"
+}

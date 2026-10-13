@@ -192,7 +192,9 @@ the composer is live mid-answer; the CLI queues what is sent. `Stop` is an
 - **Busy is main's to say**, from `session_state_changed` — which only arrives
   with `CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS` set. Without it a turn that
   starts background subagents looks idle while they work. Subagents' heartbeat
-  (`task_*`) is kept as a set and drawn as `Working · 3 agents…`. The tool is
+  (`task_*`) is kept as a set and drawn as a `3 agents running` chip above the
+  composer (`chat-agents.tsx`), its list in a popover — not under `Working…`,
+  where the rows pushed the turn's last line up. The tool is
   both `Task` and `Agent` depending on the CLI (`AGENT_TOOLS`).
 - Model and effort move under a running session; cwd, profile and switched-off
   MCP tools cannot, so a change closes the session (`signatureOf`).
@@ -426,7 +428,7 @@ strip.
 ## Settings
 
 A dialog (⌘,), applied as picked — no Save. Sections: **Appearance**, **Tabs &
-editor**, **Chats**, **Claude**, **Updates**.
+editor**, **Chats**, **Claude**, **Plugins**, **Updates**.
 
 **Claude** holds named profiles, each a `CLAUDE_CONFIG_DIR`. Adding one is a
 name, a click and a login: the app names the directory
@@ -436,6 +438,122 @@ set — on the command line too, since a `.zshrc` export would otherwise win.
 Every row says whether it is signed in and as whom, **asked of the CLI**
 (`claude auth status --json`); a missing directory is never spawned into, since
 the CLI would create it. The composer's account menu shows each profile's email.
+
+## Plugins
+
+Obsidian's model, not VS Code's. A plugin is a directory — `manifest.json`,
+`main.js`, optionally `styles.css` — in one of two folders. The **built-in** one
+ships inside the app: `plugins/<id>/src/main.ts` in this repository, bundled by
+`scripts/build-plugins.mjs` into `dist-plugins/` and carried as an
+`extraResources` entry; a plugin there is **on until switched off**
+(`plugins.disabled`), since it is a feature the app always had. The **user's**
+is `workspace/plugins/<id>/`, and a plugin there is **off until switched on**
+(`plugins.enabled`). Two lists rather than one of everything on, so a built-in
+plugin a later update adds starts on without anybody's saved list naming it. A
+user's folder cannot take a built-in id (`listAllPlugins`). A built-in plugin
+carries an **official** badge (`OfficialBadge`) in Settings and the palette —
+read off which folder main found it in, never off the manifest's `author`,
+which any plugin could fill in.
+
+**A plugin made outside the app is installed, not dropped in.** Settings ›
+Plugins has `Install from folder…` and `Install from .zip…`
+(`main/plugin-install.ts`), and the marketplace, when there is one, will
+download an archive and hand it to the same `installPlugin`. An install
+**copies three files** — `manifest.json`, `main.js`, `styles.css`, the ones
+that are served — under the id the manifest gives, so a plugin's repository
+brings none of its `src/` or `node_modules/`, and no path inside a zip ever
+becomes a path on disk. A zip may hold the plugin at its root or inside one
+folder, as GitHub's downloads do. The same id again is an **update**, swapped in
+by rename so a failed one leaves the old copy, and a running plugin is reloaded
+onto it. A new install arrives **off**: choosing a folder is not the decision to
+run it. `Remove` sends a user's plugin to the trash and leaves its saved data;
+a built-in one is switched off, never removed. There is no "open the plugins
+folder" any more — it taught dropping files into a hidden directory as the way
+to install, which is the thing this replaces. `fflate` reads the zips: no
+dependency of its own, and the alternative was shelling out to a different
+unzip on each OS.
+
+Its `main.js` is an ES module the renderer `import()`s off this app's
+`vsc-plugin://` scheme (`main/protocol.ts`), and its default export's `onload`
+is handed a `PluginApp` (`lib/plugins/app.ts`): palette commands, chat-row menu
+items, a corner notice, saved data, a save dialog, the clipboard, the
+transcript's own Markdown renderer, the folders, and the chats — listed, read
+and subscribed to. What a plugin saves goes to `workspace/plugin-data/<id>.json`
+rather than beside its files, because a built-in plugin's folder is inside the
+bundle, read-only and replaced by every update.
+
+**Why not VS Code's.** An extension host is a process of its own, an API
+surface measured in thousands of calls and an activation model — months of work
+and a contract this app would then owe its extensions forever. And the half of
+"extending" people mostly want here is already done without this app: every
+chat runs the user's own `claude` with no `--mcp-config`, so their MCP servers,
+skills, plugins and hooks reach a turn as they would in a shell. What was left
+is the studio's own surface, and Obsidian shows that a directory and an
+`onload` cover it.
+
+**Not a sandbox, and it does not pretend to be.** `main.js` runs in this page,
+so it can reach `window.desktop` — terminals included — whatever `PluginApp`
+leaves out. The narrow API buys stability and registrations that undo
+themselves (`lib/plugins/registry.ts`: everything added through `PluginApp`
+is taken back, newest first, when the plugin is switched off or its `onload`
+throws), not containment. Settings says so in a standing line rather than a
+confirm clicked through once. Real isolation — a sandboxed `iframe` per plugin
+on its own origin, talking `postMessage` — is the next step if plugins are ever
+installed from somewhere other than the user's own hands.
+
+**The palette gained a `Commands` group** for them, which reverses its own
+"opens things and nothing more": the studio's actions still live beside what
+they act on, but a plugin has no header to put a button in, so the palette is
+its one place — that, and a chat row's menu, which is where the first built-in
+plugin's items already were. A plugin's menu item names one of a few marks
+(`PLUGIN_ICONS`) rather than handing over a component. The rest of what a
+plugin might want — a tab, a rail button, a settings page of its own — is
+deliberately not in this cut.
+
+**A built-in plugin may import the renderer's pure modules** — they are bundled
+into its `main.js` as a copy — and nothing that holds state or that the app
+already loads: a second copy of a store is a second store, and a second
+Milkdown or CodeMirror is weight and, for CodeMirror, the trap CLAUDE.md warns
+about. That is why the transcript's renderer is on `PluginApp` as
+`renderMarkdown` rather than imported.
+
+### Chat export, the first built-in plugin
+
+`Copy as Markdown`, `Export as Markdown…` and `Export as HTML…` were three items
+on a chat row's menu with their logic in `lib/worktree-chat/export*.ts`. They are
+now `plugins/chat-export/`: the same three items in the same menu, contributed
+through `addChatMenuItem`, plus the same three in the palette for the chat on
+screen. Chosen first because it was already a self-contained errand — read a
+chat, write a file — and so needed only API every plugin will want
+(`chats.read`, `saveTextFile`, `renderMarkdown`). Switching it off in Settings
+removes the items, which is the point of its being a plugin.
+
+### Usage, the second
+
+The rail's `Usage` dialog is `plugins/usage/`: its button is an
+`addRailButton` under Search, the same dialog is `Show usage` in the palette, and
+what it reads is `chats.spend()` — the `chatSpend` channel, which stays in main
+because the transcripts are main's to read. `dashboard.tsx` and `spend.ts` moved
+with it; `test/chat-spend.ts` follows them.
+
+It is the first plugin that draws **React**, which needed two things from the
+platform. The app's own React, not a copy: `exposeSharedModules`
+(`lib/plugins/shared-modules.ts`) puts `react`, `react/jsx-runtime`, `react-dom`
+and `react-dom/client` on a global, and `scripts/build-plugins.mjs` rewrites a
+plugin's imports of exactly those into reads of it — two Reacts in one page are
+two sets of hooks, and base-ui reaches for `react-dom`'s `createPortal`, so that
+one is shared too. And the app's **Tailwind**: `globals.css` scans `plugins/`, so
+a built-in plugin's classes exist; a user's plugin is not scanned and brings its
+own `styles.css`. What is not shared is copied — the shadcn `Dialog` and `Button`
+and the base-ui under them, about 60 KB of the plugin's 118 KB — because a
+stateless copy costs bytes and nothing else, and sharing it would make the
+app's component internals a contract.
+
+What main serves is `main.js` and `styles.css` and nothing else under a
+plugin's directory (`pluginFileOf`). Plugins load in the studio's window only; a
+popped-out chat is a second page and a plugin started in both would answer every
+event twice. An example of a user's plugin, in plain JavaScript, is
+`examples/plugins/chat-counter/`.
 
 ## MCP: what the user's own `claude` has
 
@@ -598,9 +716,9 @@ CPU is a share of all cores. The dock's shells are not counted as the app's.
 
 ### The usage dashboard counts tokens, not dollars
 
-The rail's `Usage` dialog groups **tokens** (prompt on both sides of the cache,
-plus output) by day, project, model and chat (`spendRows`,
-`lib/worktree-chat/spend.ts`). On a subscription, a dollar estimate is a price
+The rail's `Usage` dialog — the built-in `usage` plugin, § Plugins — groups
+**tokens** (prompt on both sides of the cache, plus output) by day, project,
+model and chat (`spendRows`, `plugins/usage/src/spend.ts`). On a subscription, a dollar estimate is a price
 nobody pays.
 
 ## Updating

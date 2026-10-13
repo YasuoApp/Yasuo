@@ -6,6 +6,8 @@
  * frontend reaches it through the `@shared` alias.
  */
 
+import type { PluginInfo, PluginInstall, PluginSource } from "./plugins"
+
 /**
  * One folder the workspace has been pointed at — a repository on this machine,
  * edited and run where it already is.
@@ -2592,6 +2594,26 @@ export type DesktopApi = {
   /** Subscribes to how far `installUpdate` has got. Returns an unsubscribe
    * function. */
   onUpdateProgress: (listener: (event: UpdateProgress) => void) => () => void
+
+  /**
+   * Every directory under `workspace/plugins/`, each with its manifest or the
+   * reason it has none. Which are switched on is a setting, not part of this —
+   * see `lib/plugins/store.ts`.
+   */
+  listPlugins: () => Promise<PluginInfo[]>
+  /** What a plugin last saved with `saveData`, or null. */
+  readPluginData: (id: string) => Promise<unknown>
+  /** A plugin's `data.json`, replaced. Capped at 1 MB. */
+  writePluginData: (id: string, data: unknown) => Promise<void>
+  /**
+   * Asks for a plugin's folder or `.zip` and installs it into
+   * `workspace/plugins/` — or updates it, when that id is already there. Null
+   * when the picker was cancelled; a refusal (no manifest, a built-in plugin's
+   * id) throws with the reason.
+   */
+  installPlugin: (source: PluginSource) => Promise<PluginInstall | null>
+  /** Moves an installed plugin to the trash. A built-in one is refused. */
+  removePlugin: (id: string) => Promise<void>
 }
 
 /**
@@ -2754,4 +2776,9 @@ export const IPC = {
   checkForUpdate: "update:check",
   installUpdate: "update:install",
   updateProgress: "update:progress",
+  listPlugins: "plugins:list",
+  readPluginData: "plugins:read-data",
+  writePluginData: "plugins:write-data",
+  installPlugin: "plugins:install",
+  removePlugin: "plugins:remove",
 } as const

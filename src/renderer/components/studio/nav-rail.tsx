@@ -1,11 +1,5 @@
 import type { ReactNode } from "react"
-import {
-  ChartColumn,
-  MessageSquare,
-  Search,
-  Settings,
-  SquareTerminal,
-} from "lucide-react"
+import { MessageSquare, Search, Settings, SquareTerminal } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { useDock } from "@/lib/dock"
@@ -18,6 +12,9 @@ import {
   isRunning,
 } from "@/lib/worktree-chat/running"
 import { unreadIn } from "@/lib/worktree-chat/unread"
+import { PLUGIN_ICON_COMPONENTS } from "@/lib/plugins/icons"
+import type { PluginRailButton } from "@/lib/plugins/registry"
+import { usePlugins } from "@/lib/plugins/store"
 import { IconButton } from "./icon-button"
 
 /**
@@ -32,13 +29,7 @@ import { IconButton } from "./icon-button"
  * Its own card rather than part of the column's, because it is not about the
  * workspace's projects — Search, the dock and Settings are the window's.
  */
-export function NavRail({
-  onOpenSettings,
-  onOpenCosts,
-}: {
-  onOpenSettings: () => void
-  onOpenCosts: () => void
-}) {
+export function NavRail({ onOpenSettings }: { onOpenSettings: () => void }) {
   // "Showing" is the column open *on that view*: Search open hides the
   // projects as surely as a shut column does.
   const column = useProjects((state) => state.sidebar)
@@ -47,6 +38,7 @@ export function NavRail({
   const sidebar = column && view === "projects"
   const searching = column && view === "search"
   const dockOpen = useDock((state) => state.open)
+  const pluginButtons = usePlugins((state) => state.railButtons)
   const toggleDock = useDock((state) => state.toggle)
 
   /*
@@ -111,10 +103,20 @@ export function NavRail({
       >
         <Search />
       </RailButton>
-      {/* The tokens every chat has used, as a dialog — see `CostDashboard`. */}
-      <RailButton label="Usage" onClick={onOpenCosts}>
-        <ChartColumn />
-      </RailButton>
+      {/* What plugins add, under Search — the built-in `usage` plugin's
+          dashboard is one (`plugins/usage/`). */}
+      {pluginButtons.map((button) => {
+        const Icon = PLUGIN_ICON_COMPONENTS[button.icon]
+        return (
+          <RailButton
+            key={button.id}
+            label={button.label}
+            onClick={() => void runRailButton(button)}
+          >
+            <Icon />
+          </RailButton>
+        )
+      })}
 
       <div className="flex-1" />
 
@@ -131,6 +133,22 @@ export function NavRail({
       </RailButton>
     </nav>
   )
+}
+
+/** One plugin's rail button, a throw reported in the plugin's name — the
+ * button has nothing of its own on screen to show it in. */
+async function runRailButton(button: PluginRailButton): Promise<void> {
+  try {
+    await button.run()
+  } catch (error) {
+    console.error(`[plugin ${button.pluginId}]`, error)
+    usePlugins
+      .getState()
+      .notify(
+        button.pluginId,
+        `${button.label} failed: ${error instanceof Error ? error.message : String(error)}`
+      )
+  }
 }
 
 function RailButton({

@@ -99,6 +99,13 @@ export const NOTE_FILES_DIR = "note-files"
 /** The pictures chosen for projects' rows — see `Store.projectIconPath`. */
 export const PROJECT_ICONS_DIR = "project-icons"
 
+/** One directory per plugin, put there by hand — see `main/plugins.ts`. */
+export const PLUGINS_DIR = "plugins"
+
+/** Every plugin's `saveData`, built-in and user alike — `dataFileOf` in
+ * `main/plugins.ts` says why it is not beside the plugin. */
+export const PLUGIN_DATA_DIR = "plugin-data"
+
 /**
  * A note file's name, checked before it becomes a filename.
  *

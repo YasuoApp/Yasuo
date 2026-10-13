@@ -57,3 +57,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+
+# Built from plugins/ by scripts/build-plugins.mjs.
+dist-plugins

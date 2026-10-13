@@ -28,6 +28,14 @@ function installerScript(): string {
     : path.join(app.getAppPath(), "install.sh")
 }
 
+/** The built-in plugins: an `extraResources` entry in a packaged app, and what
+ * `scripts/build-plugins.mjs` left in `dist-plugins/` while developing. */
+function bundledPluginsDir(): string {
+  return app.isPackaged
+    ? path.join(process.resourcesPath, "plugins")
+    : path.join(app.getAppPath(), "dist-plugins")
+}
+
 /** The window an IPC call came from, if it is still there. */
 function ownerOf(caller: unknown): BrowserWindow | null {
   const sender = (caller as IpcMainInvokeEvent | undefined)?.sender
@@ -126,11 +134,11 @@ export function registerIpc(
       }
     },
 
-    async pickDirectory() {
+    async pickDirectory(options) {
       const result = await showOpenDialog({
-        title: "Add a folder",
+        title: options?.title ?? "Add a folder",
         properties: ["openDirectory", "createDirectory"],
-        buttonLabel: "Add",
+        buttonLabel: options?.buttonLabel ?? "Add",
       })
       return result.canceled ? null : (result.filePaths[0] ?? null)
     },
@@ -199,6 +207,7 @@ export function registerIpc(
     tray,
     version: app.getVersion(),
     installerScript: installerScript(),
+    bundledPluginsDir: bundledPluginsDir(),
     appShare: electronShare,
   }
 

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react"
 import { defaultFilter } from "cmdk"
-import { MessageSquare } from "lucide-react"
+import { BadgeCheck, MessageSquare, Puzzle } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import {
@@ -22,6 +22,11 @@ import { isStudioShortcut } from "@/lib/shortcuts"
 import { useStudio } from "@/lib/store"
 import { PREFIX } from "@/lib/tabs"
 import { useWorktreeChats } from "@/lib/worktree-chat/store"
+import { usePlugins } from "@/lib/plugins/store"
+
+/** Keeps a plugin command's cmdk value apart from the tab prefixes in `PREFIX`,
+ * which name things that open as tabs and this does not. */
+const PLUGIN_COMMAND_PREFIX = "plugin-command:"
 
 /**
  * One thing the palette can open.
@@ -84,10 +89,12 @@ type Notice = { text: string }
  * It listed tables and saved requests too, until the Database and API panels
  * were deleted; see `docs/design.md` § Database and API, removed.
  *
- * It opens things and nothing more. There is no "commands" half — a palette
- * that also ran actions would be the second place every action is spelled out,
- * and the actions here already sit in the header or the context menu of the
- * panel they belong to, where the thing they act on is on screen.
+ * The studio's own actions are still not here — a palette that also ran them
+ * would be the second place every action is spelled out, and they already sit
+ * in the header or the context menu of the panel they belong to, where the
+ * thing they act on is on screen. The `Commands` group is the plugins' alone:
+ * a plugin has no header of its own to put a button in, so this is its one
+ * place (`docs/design.md` § Plugins).
  */
 export function CommandPalette() {
   // On a store, so the left column's Search row opens the same dialog this
@@ -337,6 +344,8 @@ function useEntries(query: string): Group[] {
 
   const chats = useWorktreeChats((state) => state.chats)
   const folders = useStudio((state) => state.folders)
+  const commands = usePlugins((state) => state.commands)
+  const plugins = usePlugins((state) => state.plugins)
 
   return useMemo(() => {
     const fileEntries: Entry[] = shortlist(files, query).map((entry) => {
@@ -393,6 +402,41 @@ function useEntries(query: string): Group[] {
       }
     })
 
+    const commandEntries: Entry[] = commands.map((command) => {
+      const info = plugins.find(
+        (candidate) => candidate.id === command.pluginId
+      )
+      const plugin = info?.manifest?.name ?? command.pluginId
+      return {
+        value: PLUGIN_COMMAND_PREFIX + command.id,
+        label: command.name,
+        hint: plugin,
+        keywords: [command.name, plugin],
+        // The official mark where the plugin ships with the app — see
+        // `OfficialBadge` for why that is read off `bundled` alone.
+        icon: info?.bundled ? (
+          <BadgeCheck className="size-3.5 shrink-0 text-primary" />
+        ) : (
+          <Puzzle className="size-3.5 shrink-0" />
+        ),
+        open: async () => {
+          // A plugin's failure is reported as the plugin's, and the palette
+          // still closes — it is not the palette that went wrong.
+          try {
+            await command.run()
+          } catch (error) {
+            console.error(`[plugin ${command.pluginId}]`, error)
+            usePlugins
+              .getState()
+              .notify(
+                command.pluginId,
+                `${command.name} failed: ${error instanceof Error ? error.message : String(error)}`
+              )
+          }
+        },
+      }
+    })
+
     /*
      * Every kind, empty ones included — the tab row is drawn from this list and
      * has to know a kind exists before a query has matched any of it. What
@@ -417,8 +461,14 @@ function useEntries(query: string): Group[] {
         entries: chatEntries,
         available: chatEntries.length > 0,
       },
+      {
+        kind: "commands",
+        heading: "Commands",
+        entries: commandEntries,
+        available: commandEntries.length > 0,
+      },
     ]
 
     return all
-  }, [files, query, chats, folders])
+  }, [files, query, chats, folders, commands, plugins])
 }

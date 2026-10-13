@@ -10,6 +10,7 @@ import {
   registerAppScheme,
   serveApp,
   serveNoteFiles,
+  servePlugins,
 } from "./protocol"
 
 /** Set by scripts/dev.mjs; absent in a packaged app. */
@@ -141,6 +142,7 @@ const {
   tray,
   startTray,
   noteFilePath,
+  pluginFilePath,
 } = registerIpc(
   () => mainWindow,
   (chatId) => openChatWindow(chatId)
@@ -284,6 +286,7 @@ void app.whenReady().then(() => {
   // Both builds: a note's pictures are served the same way whether the renderer
   // came from Vite or from `app://`.
   serveNoteFiles(noteFilePath)
+  servePlugins(pluginFilePath)
   // Before the window, so the menu bar is never Electron's default one.
   installMenu(() => mainWindow)
   createWindow()
