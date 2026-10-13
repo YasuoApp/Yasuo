@@ -172,7 +172,7 @@ function openChatWindow(chatId: string): void {
     height: 720,
     minWidth: 360,
     minHeight: 400,
-    backgroundColor: "#111218",
+    backgroundColor: "#1b1c1f",
     show: false,
     ...(DEV_SERVER_URL && process.platform !== "darwin"
       ? { icon: DEV_ICON }
@@ -210,9 +210,9 @@ function createWindow(): void {
     minWidth: 860,
     minHeight: 600,
     // The studio defaults to its dark theme; matching it here keeps the first
-    // paint from flashing white. `#111218` is the dark `--background` in
+    // paint from flashing white. `#1b1c1f` is the dark `--background` in
     // `styles/globals.css` — the one number in this file that has to follow it.
-    backgroundColor: "#111218",
+    backgroundColor: "#1b1c1f",
     show: false,
     // Windows and Linux draw the window/taskbar icon from here. macOS ignores
     // it — the dock is handled below — and a packaged build has the icon in

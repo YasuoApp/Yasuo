@@ -28,7 +28,7 @@ import "@xterm/xterm/css/xterm.css"
 
 /*
  * xterm takes hex, not the theme's CSS variables, so these are the palette's
- * own values written out — `#111218` is the dark `--background`, `#2c2d36` its
+ * own values written out — `#1b1c1f` is the dark `--background`, `#34353a` its
  * `--accent`. A terminal filling a pane must be the pane's own colour: at
  * anything else it reads as a window floating in the studio rather than part
  * of it. Kept in step by hand, which is the price of a canvas renderer.
@@ -42,12 +42,12 @@ import "@xterm/xterm/css/xterm.css"
  * it is what most CLIs dim their secondary text to.
  */
 const darkTheme = {
-  background: "#111218",
-  foreground: "#f3f3f6",
+  background: "#1b1c1f",
+  foreground: "#e7e8eb",
   cursor: "#a5a8f0",
-  cursorAccent: "#111218",
-  selectionBackground: "#2c2d36",
-  black: "#2c2d36",
+  cursorAccent: "#1b1c1f",
+  selectionBackground: "#34353a",
+  black: "#34353a",
   red: "#f78a8a",
   green: "#86d99b",
   yellow: "#e8c17a",

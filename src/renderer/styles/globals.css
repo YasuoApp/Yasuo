@@ -315,40 +315,45 @@
  * or the hue disappears into the black, and the accents move lighter so they
  * clear the surface they sit on.
  *
- * Six neutral steps carry the whole studio — sidebar `0.165`, background
- * `0.185`, card `0.215`, muted `0.26`, accent `0.30`, and the hairline borders,
+ * Six neutral steps carry the whole studio — sidebar `0.205`, background
+ * `0.225`, card `0.25`, muted `0.29`, accent `0.33`, and the hairline borders,
  * which are a **white at low alpha** rather than a lighter grey. That is the
  * distinction worth keeping: an alpha border is the same line over every one of
  * those six surfaces, where a fixed grey is a line that disappears on two of
  * them and glows on a third.
  *
- * `--background` is no longer `#1e1e1e`, so the two places that hold it as a
- * literal have to follow: the terminal's xterm palette (`terminal-view.tsx`,
- * which takes hex and not variables) and the window's own first-paint colour
- * (`main/main.ts`). Both say so where they are.
+ * The ground was `0.185` under `0.965` text — near-white on near-black, which
+ * haloes and tires the eye over a long transcript — so the surfaces moved up,
+ * their tint halved, the text came down to `0.93`, and muted text rose to
+ * `0.77` so secondary lines still read.
+ *
+ * `--background` is held as a literal in three places that have to follow it:
+ * the terminal's xterm palette (`terminal-view.tsx`, which takes hex and not
+ * variables), the diff's flattened row tints (`lib/files/diff-chrome.ts`) and
+ * the window's own first-paint colour (`main/main.ts`). Each says so.
  */
 .dark {
-  --background: oklch(0.185 calc(0.012 * var(--brand-tint)) var(--brand-hue));
-  --foreground: oklch(0.965 calc(0.004 * var(--brand-tint)) var(--brand-hue));
-  --card: oklch(0.215 calc(0.013 * var(--brand-tint)) var(--brand-hue));
+  --background: oklch(0.225 calc(0.006 * var(--brand-tint)) var(--brand-hue));
+  --foreground: oklch(0.93 calc(0.004 * var(--brand-tint)) var(--brand-hue));
+  --card: oklch(0.25 calc(0.007 * var(--brand-tint)) var(--brand-hue));
   --card-foreground: oklch(
-    0.965 calc(0.004 * var(--brand-tint)) var(--brand-hue)
+    0.93 calc(0.004 * var(--brand-tint)) var(--brand-hue)
   );
-  --popover: oklch(0.225 calc(0.014 * var(--brand-tint)) var(--brand-hue));
+  --popover: oklch(0.26 calc(0.008 * var(--brand-tint)) var(--brand-hue));
   --popover-foreground: oklch(
-    0.965 calc(0.004 * var(--brand-tint)) var(--brand-hue)
+    0.93 calc(0.004 * var(--brand-tint)) var(--brand-hue)
   );
   --primary: oklch(0.66 0.17 277);
   --primary-foreground: oklch(0.99 0.01 277);
-  --secondary: oklch(0.26 calc(0.012 * var(--brand-tint)) var(--brand-hue));
+  --secondary: oklch(0.29 calc(0.007 * var(--brand-tint)) var(--brand-hue));
   --secondary-foreground: oklch(
-    0.965 calc(0.004 * var(--brand-tint)) var(--brand-hue)
+    0.93 calc(0.004 * var(--brand-tint)) var(--brand-hue)
   );
-  --muted: oklch(0.26 calc(0.012 * var(--brand-tint)) var(--brand-hue));
+  --muted: oklch(0.29 calc(0.007 * var(--brand-tint)) var(--brand-hue));
   --muted-foreground: oklch(
-    0.7 calc(0.018 * var(--brand-tint)) var(--brand-hue)
+    0.77 calc(0.012 * var(--brand-tint)) var(--brand-hue)
   );
-  --accent: oklch(0.3 calc(0.016 * var(--brand-tint)) var(--brand-hue));
+  --accent: oklch(0.33 calc(0.008 * var(--brand-tint)) var(--brand-hue));
   --accent-foreground: oklch(
     0.95 calc(0.02 * var(--brand-tint)) var(--brand-hue)
   );
@@ -388,17 +393,17 @@
   --elevation-lg: 0 1px 3px oklch(0 0 0 / 0.45), 0 8px 24px oklch(0 0 0 / 0.5);
   --elevation-xl: 0 2px 4px oklch(0 0 0 / 0.5), 0 16px 48px oklch(0 0 0 / 0.6);
 
-  --sidebar: oklch(0.165 calc(0.012 * var(--brand-tint)) var(--brand-hue));
+  --sidebar: oklch(0.205 calc(0.006 * var(--brand-tint)) var(--brand-hue));
   --sidebar-foreground: oklch(
-    0.965 calc(0.004 * var(--brand-tint)) var(--brand-hue)
+    0.93 calc(0.004 * var(--brand-tint)) var(--brand-hue)
   );
   --sidebar-primary: oklch(0.66 0.17 277);
   --sidebar-primary-foreground: oklch(0.99 0.01 277);
   --sidebar-accent: oklch(
-    0.29 calc(0.016 * var(--brand-tint)) var(--brand-hue)
+    0.32 calc(0.008 * var(--brand-tint)) var(--brand-hue)
   );
   --sidebar-accent-foreground: oklch(
-    0.965 calc(0.004 * var(--brand-tint)) var(--brand-hue)
+    0.93 calc(0.004 * var(--brand-tint)) var(--brand-hue)
   );
   --sidebar-border: oklch(1 0 0 / 8%);
   --sidebar-ring: oklch(0.66 0.17 277);

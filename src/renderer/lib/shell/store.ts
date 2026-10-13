@@ -14,10 +14,11 @@ import { useStudio } from "../store"
  * place, so that clicking a project pointed the dock at *its* shell — but a dev
  * server left running in a shell is a shell nobody can type `git log` into, and
  * the answer was a second dock tab. Clicking a project still follows it: the
- * dock switches to one of that project's shells, or starts one. A pty's cwd is
- * fixed when it starts, so following can only mean another pty and not a `cd`
- * sent into the first — which would land in whatever is half-typed at the
- * prompt and do nothing while a command is running.
+ * dock switches to one of that project's shells when it has one, and the `+`
+ * opens there. A pty's cwd is fixed when it starts, so following can only mean
+ * another pty and not a `cd` sent into the first — which would land in
+ * whatever is half-typed at the prompt and do nothing while a command is
+ * running.
  *
  * Not remembered across a launch. A shell here is ad-hoc — something opened
  * beside the work for one command — and replaying five of them on every launch
@@ -63,8 +64,12 @@ type ShellState = {
    * one, and otherwise only records where the next one goes. */
   showFor: (folderId: string) => void
   /**
-   * Makes sure the dock is showing a shell in the target project, starting one
-   * there if it has none.
+   * Starts a shell in the target project when the dock has none at all.
+   *
+   * Only then: it used to start one in every project clicked while the dock
+   * was open, which left a pty per project nobody had typed into. A project
+   * with no shell of its own now keeps the one on screen, and the `+` is what
+   * opens one there.
    *
    * Called by the panel while it is on screen, which is what keeps a pty from
    * being started for a dock nobody opened. With nothing clicked yet it falls
@@ -189,16 +194,9 @@ export const useShells = create<ShellState>((set, get) => {
     },
 
     ensure() {
+      if (get().shells.length > 0) return
       const folderId = place()
-      if (!folderId) return
-
-      const { shells, activeId } = get()
-      if (shells.find((shell) => shell.id === activeId)?.folderId === folderId)
-        return
-
-      const own = shells.find((shell) => shell.folderId === folderId)
-      if (own) set({ activeId: own.id })
-      else start(folderId)
+      if (folderId) start(folderId)
     },
 
     add(shellId) {

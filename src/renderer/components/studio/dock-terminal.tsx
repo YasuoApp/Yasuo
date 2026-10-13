@@ -23,12 +23,10 @@ import { TerminalView, type TerminalHandle } from "./terminal-view"
 export function DockTerminal() {
   const shells = useShells((state) => state.shells)
   const activeId = useShells((state) => state.activeId)
-  const target = useShells((state) => state.target)
 
   // The one place a shell is started unasked-for, and only while the dock is
-  // on screen: a pty is a process, and clicking a project in the column must
-  // not start one behind a dock nobody has opened. Following `target` is what
-  // makes a project clicked *while* this is showing switch straight away.
+  // on screen and empty: a pty is a process, and clicking a project in the
+  // column must not start one — whether or not the dock is open.
   const showing = useDock((state) => state.open)
   // Whether there are folders at all, rather than the list: with nothing
   // clicked yet `ensure` guesses from them, and a dock opened before the
@@ -38,7 +36,7 @@ export function DockTerminal() {
   const anyFolder = useStudio((state) => state.folders.length > 0)
   useEffect(() => {
     if (showing) useShells.getState().ensure()
-  }, [showing, target, anyFolder])
+  }, [showing, anyFolder])
 
   if (shells.length === 0) {
     return (
