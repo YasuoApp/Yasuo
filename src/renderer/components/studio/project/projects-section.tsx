@@ -46,6 +46,7 @@ import {
 } from "@/lib/project-icon"
 import { useStudio } from "@/lib/store"
 import { IconButton } from "../icon-button"
+import { RenameDialog } from "../rename-dialog"
 import { RenameRow, useMenuFocusHandoff } from "../rename-row"
 import { SideRow } from "../side-row"
 import { NewWorktreeDialog } from "./new-worktree-dialog"
@@ -164,6 +165,9 @@ export function ProjectsSection() {
    * a row is unmounted by the very removal it asked about.
    */
   const [removing, setRemoving] = useState<WorkspaceFolder | null>(null)
+  /** Which project is being renamed. One dialog for the whole list, for the
+   * reason above. */
+  const [renaming, setRenaming] = useState<WorkspaceFolder | null>(null)
   /** Which project is being checked out again, and which checkout is being
    * taken off the disk. One of each for the whole list, for the reason above. */
   const [branching, setBranching] = useState<WorkspaceFolder | null>(null)
@@ -232,6 +236,7 @@ export function ProjectsSection() {
               }
         }
         onResetIcon={indent > 0 ? null : () => void resetProjectIcon(folder.id)}
+        onRename={() => setRenaming(folder)}
         onRemove={() => setRemoving(folder)}
         // Only for a project that is one: an ordinary folder has no checkout to
         // remove, and a menu item that explained that would be a menu item
@@ -337,6 +342,7 @@ export function ProjectsSection() {
               onNewWorktree={null}
               onChangeIcon={null}
               onResetIcon={null}
+              onRename={null}
               onRemove={null}
               onRemoveWorktree={null}
               onToggle={() => toggleFolder(UNGROUPED_ID)}
@@ -385,6 +391,25 @@ export function ProjectsSection() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {renaming && (
+        <RenameDialog
+          title="Rename project"
+          label="Project name"
+          currentName={renaming.name}
+          onRename={async (name) => {
+            try {
+              await useStudio.getState().renameFolder(renaming.id, name)
+              return null
+            } catch (error) {
+              return error instanceof Error
+                ? error.message
+                : "Could not rename that project."
+            }
+          }}
+          onClose={() => setRenaming(null)}
+        />
+      )}
 
       {branching && (
         <NewWorktreeDialog
@@ -515,6 +540,7 @@ function ProjectRow({
   onNewWorktree,
   onChangeIcon,
   onResetIcon,
+  onRename,
   onRemove,
   onRemoveWorktree,
 }: {
@@ -561,6 +587,9 @@ function ProjectRow({
    * forgets it again. Null on the rows with no icon to change. */
   onChangeIcon: (() => void) | null
   onResetIcon: (() => void) | null
+  /** Asks for a new name — the dialog is the section's, like `onRemove`'s.
+   * Null for `Ungrouped`, whose name is not anybody's to change. */
+  onRename: (() => void) | null
   /**
    * Asks to take this project out of the workspace. It only asks — the
    * confirmation and the call itself are the section's, since a dialog owned by
@@ -752,6 +781,12 @@ function ProjectRow({
           <ContextMenuItem onClick={onNewWorktree}>
             <GitBranchPlus className="text-muted-foreground" />
             New worktree…
+          </ContextMenuItem>
+        )}
+        {onRename && (
+          <ContextMenuItem onClick={onRename}>
+            <Pencil className="text-muted-foreground" />
+            Rename…
           </ContextMenuItem>
         )}
         {path && (

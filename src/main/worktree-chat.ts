@@ -744,6 +744,18 @@ export class WorktreeChats {
     this.setBusy(id, false)
 
     await this.source.writeChat(id, [])
+    await this.forgetWindow(id)
+  }
+
+  /** Drops the kept `window` — the conversation it measured is gone. */
+  private forgetWindow(id: string): Promise<void> {
+    return this.editChats((chats) =>
+      chats.some((chat) => chat.id === id && chat.window)
+        ? chats.map((chat) =>
+            chat.id === id ? { ...chat, window: undefined } : chat
+          )
+        : null
+    )
   }
 
   async delete(id: string): Promise<void> {
@@ -931,6 +943,7 @@ export class WorktreeChats {
     const kept = messages.slice(0, target.index)
     this.messages.set(id, kept)
     await this.source.writeChat(id, kept)
+    await this.forgetWindow(id)
 
     await this.send(id, prompt, images)
   }
@@ -1415,12 +1428,21 @@ export class WorktreeChats {
         onContext: (tokens) => {
           if (current()) this.emit({ chatId: id, type: "context", tokens })
         },
-        // Forwarded and not kept, for the same reason as `busy` rather than as
-        // `context`: this is the state of a live process. A chat read back off
-        // disk has no session to have asked, so a stored copy would be a meter
-        // describing a window that no longer exists.
+        // Forwarded, and kept on the record too: without it a restarted app
+        // drew no meter until the next turn ended. `updatedAt` is left alone —
+        // a measurement is not activity and must not reorder the list.
         onWindow: (window) => {
-          if (current()) this.emit({ chatId: id, type: "window", window })
+          if (!current()) return
+          this.emit({ chatId: id, type: "window", window })
+          void this.editChats((chats) =>
+            chats.some((chat) => chat.id === id)
+              ? chats.map((chat) =>
+                  chat.id === id ? { ...chat, window } : chat
+                )
+              : null
+          ).catch((error: unknown) =>
+            console.error("Could not keep the chat's window", error)
+          )
         },
         onCompacting: (compacting, error) => {
           if (current())
