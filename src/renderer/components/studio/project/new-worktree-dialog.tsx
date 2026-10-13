@@ -32,9 +32,7 @@ import type { WorkspaceFolder } from "@shared/api"
  * There is
  * **no path field**, unlike `AddFolderDialog` — the directory is this app's to
  * name, under its own data folder (`main/worktrees.ts` says why not beside the
- * repository), and the renderer cannot see that path to show it. So the
- * description says where it goes in words, which is the same bargain a Claude
- * profile's directory makes.
+ * repository), and the renderer cannot see that path to show it.
  *
  * A branch that already exists is checked out rather than refused, so this is
  * also how somebody comes back to work started last week. A failure — a branch
@@ -111,11 +109,7 @@ export function NewWorktreeDialog({
         <DialogHeader>
           <DialogTitle>New worktree</DialogTitle>
           <DialogDescription>
-            A second checkout of “{folder.name}” on a branch of its own, sharing
-            the same history — so work can run here without touching the files,
-            index or branch of the project itself. It is created inside Visual
-            Studio Claude’s own data folder and added to the workspace as a
-            project.
+            A separate checkout of “{folder.name}” on its own branch.
           </DialogDescription>
         </DialogHeader>
 
@@ -138,9 +132,7 @@ export function NewWorktreeDialog({
               className="mt-1.5 font-mono text-xs"
             />
             <p className="mt-1.5 text-xs text-muted-foreground">
-              Created off the current HEAD; a branch that already exists is
-              checked out instead. Leave it empty and the first chat here names
-              both the branch and the project, the way a chat names itself.
+              Leave empty to name it after the first chat.
             </p>
           </div>
 

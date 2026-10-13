@@ -1,85 +1,147 @@
+import { useState, type ReactNode } from "react"
 import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty"
+  MessageSquarePlus,
+  Search,
+  SquareTerminal,
+  TextSearch,
+} from "lucide-react"
 
-import { SECTIONS, SECTION_ACCENT } from "./section-marks"
-import { isSection } from "@/lib/sections"
-import type { Pane } from "@/lib/store"
-
-/**
- * Where the thing this pane last held is picked from — which is not one place
- * any more, and saying so is the whole job of these lines.
- *
- * The Explorer is the panel on the **right** and the projects are the column on
- * the **left**, so a hint saying "the sidebar" would be pointing at whichever of
- * the two the reader was not looking at.
- *
- * There were two more, for the Database and API panels, naming the window each
- * opened in. Both panels are gone; see `docs/design.md` § Database and API,
- * removed.
- */
-const HINTS: Record<Pane, string> = {
-  files: "Pick a file from the Explorer on the right.",
-  changes:
-    "Pick a file under Changes in the Explorer to read what this project has changed.",
-  worktree:
-    "Pick a chat under a project on the left, or start one from its row.",
-}
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { IS_MAC } from "./title-bar"
+import { useDock } from "@/lib/dock"
+import { usePalette } from "@/lib/palette"
+import { useProjects } from "@/lib/projects"
+import { useShells } from "@/lib/shell/store"
+import { useStudio } from "@/lib/store"
+import { useWorkspaceSearch } from "@/lib/workspace-search"
+import { useWorktreeChats } from "@/lib/worktree-chat/store"
 
 /**
  * The pane with nothing in it: one notice for the whole workbench rather than
- * whichever panel happens to be showing.
+ * whichever panel happens to be showing — the strip belongs to the workbench,
+ * so "nothing is on screen" is a fact about the workbench.
  *
- * The tab strip belongs to the workbench and not to a panel, so "nothing is on
- * screen" is a fact about the workbench. Each panel answering it separately
- * meant the Database panel's "No table selected" spoke for all of them —
- * telling somebody who had come to read a request to pick a table, because
- * `database` is the pane a fresh launch starts on.
- *
- * Two things to say, and which one depends on the strip rather than on the
- * panel. With tabs in it, they are what to pick and the notice points up at
- * them; with none, there is nothing above to point at, so it points at the
- * sidebar on screen — which follows the rail, not the pane, because the pane
- * is where the last tab was and there is no last one.
+ * A few ways in, each with its key, rather than a paragraph saying where things
+ * are picked from: the keys are what somebody needs to stop reading this page
+ * the next time, and every row does what it says when clicked.
  */
-export function NothingOpen({
-  pane,
-  hasOpenTabs,
-}: {
-  pane: Pane
-  hasOpenTabs: boolean
-}) {
-  // A chat has no section of its own — it is not one of the four kinds
-  // the workspace holds — so the pane it draws in borrows the Explorer's mark
-  // rather than inventing a fifth for an empty state.
-  const mark = isSection(pane) ? pane : "files"
-  const { Icon } = SECTIONS.find((entry) => entry.id === mark)!
+export function NothingOpen() {
+  const activeFolderId = useProjects((state) => state.activeFolderId)
+  const folders = useStudio((state) => state.folders)
+  /** A project picked here; otherwise the active one. */
+  const [picked, setPicked] = useState<string | null>(null)
+  const project =
+    folders.find((folder) => folder.id === picked) ??
+    folders.find((folder) => folder.id === activeFolderId) ??
+    folders[0]
+  const mod = IS_MAC ? "⌘" : "Ctrl+"
 
   return (
-    <Empty className="size-full border-0">
-      <EmptyHeader>
-        <EmptyMedia variant="icon" style={{ color: SECTION_ACCENT[mark] }}>
-          <Icon />
-        </EmptyMedia>
-        <EmptyTitle>{hasOpenTabs ? "No tab open" : "Nothing open"}</EmptyTitle>
-        <EmptyDescription>
-          {hasOpenTabs ? (
-            <>
-              Pick one from the strip above — a table, a request, a chat and a
-              note sit side by side there, whichever panel they belong to.
-            </>
-          ) : (
-            <>
-              {HINTS[pane]} Whatever you open joins the strip above, and stays
-              there while you work in another panel.
-            </>
-          )}
-        </EmptyDescription>
-      </EmptyHeader>
-    </Empty>
+    <div className="flex size-full items-center justify-center p-6">
+      <div className="flex w-full max-w-xs flex-col gap-0.5">
+        {/* Only with a project to start it in, and the project picked on
+            the row: the active one is whatever row was last clicked, which is
+            not always the one somebody has in mind. */}
+        {project && (
+          <div className="flex items-center gap-1">
+            <Action
+              icon={<MessageSquarePlus />}
+              label="New chat"
+              onClick={() => {
+                // Into that project first, the way its own row's click moves
+                // the tree and the shell: the tab is in the strip only while
+                // its project is the active one.
+                useProjects.getState().setActive(project.id)
+                useShells.getState().showFor(project.id)
+                void useWorktreeChats
+                  .getState()
+                  .create({ folderId: project.id })
+              }}
+            />
+            <Select
+              value={project.id}
+              items={Object.fromEntries(
+                folders.map((folder) => [folder.id, folder.name])
+              )}
+              onValueChange={(next) => {
+                if (typeof next === "string") setPicked(next)
+              }}
+            >
+              <SelectTrigger
+                size="sm"
+                aria-label="Project"
+                className="h-7 max-w-40 min-w-0 border-0 bg-transparent text-xs text-muted-foreground shadow-none hover:text-foreground dark:bg-transparent"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent align="end">
+                {folders.map((folder) => (
+                  <SelectItem
+                    key={folder.id}
+                    value={folder.id}
+                    className="text-xs"
+                  >
+                    {folder.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+        <Action
+          icon={<Search />}
+          label="Go to file or chat"
+          keys={`${mod}P`}
+          onClick={() => usePalette.getState().setOpen(true)}
+        />
+        <Action
+          icon={<TextSearch />}
+          label="Find in files"
+          keys={IS_MAC ? "⇧⌘F" : "Ctrl+Shift+F"}
+          onClick={() => {
+            useProjects.getState().showView("search")
+            useWorkspaceSearch.getState().focus()
+          }}
+        />
+        <Action
+          icon={<SquareTerminal />}
+          label="Terminal"
+          keys={IS_MAC ? "⌃`" : "Ctrl+`"}
+          onClick={() => useDock.getState().toggle()}
+        />
+      </div>
+    </div>
+  )
+}
+
+function Action({
+  icon,
+  label,
+  keys,
+  onClick,
+}: {
+  icon: ReactNode
+  label: string
+  keys?: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex flex-1 items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-sm text-muted-foreground outline-none hover:bg-accent/50 hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:size-4 [&_svg]:shrink-0"
+    >
+      {icon}
+      <span className="flex-1 truncate">{label}</span>
+      {keys && (
+        <kbd className="font-sans text-xs text-muted-foreground/70">{keys}</kbd>
+      )}
+    </button>
   )
 }

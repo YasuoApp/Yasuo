@@ -766,9 +766,7 @@ export function useShownGroup(pane: Pane) {
  * Whether anything at all is in the strip.
  *
  * In the strip, not open: a project whose only tabs belong to another one
- * has an empty strip, and the pane says `Nothing open` rather than
- * `No tab open` — which is the truthful pair of words for it, since there is
- * nothing above to pick from.
+ * has an empty strip, and the pane draws `NothingOpen` for it.
  *
  * `openInScope` per pane rather than a boolean selector each, which is what this
  * was: scope is not a fact any one panel's store holds, so the cheap version

@@ -5,6 +5,7 @@ import path from "node:path"
 import {
   CHAT_NOTIFICATIONS_KEY,
   CHAT_TRAY_KEY,
+  chatRootId,
   IPC,
   type ChatImage,
   type ChatPlace,
@@ -59,6 +60,7 @@ import { DirectoryWatchers, RootWatchers } from "./watch"
 import {
   addWorktree,
   branchFromTitle,
+  deleteBranch,
   isUntitledBranch,
   removeWorktree,
   renameBranch,
@@ -690,19 +692,31 @@ export function createIpc(host: Host): {
   })
 
   /*
-   * And back out: the checkout removed, then the project dropped.
+   * And back out, all of it: the checkout, its branch, the chats run in it,
+   * then the project. A worktree row has no `Remove project`, so this is the
+   * one way out, and anything it left behind would have no row to reach it.
    *
-   * In that order, so a `git worktree remove` that refuses leaves the project
-   * where it is rather than hiding a directory somebody now has to find. The
-   * repository is asked for rather than remembered — see `worktreeRepo`.
+   * The checkout goes first, so a `git worktree remove` that refuses leaves
+   * the project where it is rather than hiding a directory somebody now has
+   * to find. The repository is asked for rather than remembered — see
+   * `worktreeRepo`.
    */
   handle(IPC.removeWorktree, async (_event, folderId: string) => {
     const dir = await store.resolveFolderDir(folderId)
     const repo = await worktreeRepo(dir)
     if (!repo) throw new Error(`${dir} is not a git worktree checkout.`)
+    const branch = await currentBranch(dir)
 
     const failed = await removeWorktree(repo, dir)
     if (failed) throw new Error(failed.error)
+    if (branch) await deleteBranch(repo, branch)
+
+    for (const chat of await worktreeChats.list()) {
+      if (chatRootId(chat) !== folderId) continue
+      notices.forget(chat.id)
+      await worktreeChats.delete(chat.id)
+    }
+    void refreshTray()
 
     return store.removeFolder(folderId)
   })

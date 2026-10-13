@@ -19,6 +19,29 @@ import { marksUnread } from "./unread"
 import { useProjects } from "../projects"
 import { useShells } from "../shell/store"
 import { useStudio } from "../store"
+import { isRememberedTabs, recall, remember } from "../tab-memory"
+
+/** Which chats had a tab open, and which one was on screen. */
+const OPEN_TABS_KEY = "worktree-chats.tabs"
+
+/**
+ * Whether this window's tabs are the ones to write down.
+ *
+ * Only once `restore` has run, which only the studio calls: a popped-out chat
+ * window starts with an empty strip and selects its one chat, and writing that
+ * would replace the studio's tabs with a single one. Also what keeps a click
+ * landing before the read from being overwritten by it — see `restore`.
+ */
+let restored = false
+let restorePromise: Promise<void> | null = null
+
+function rememberTabs(state: { openIds: string[]; selectedId: string | null }) {
+  if (!restored) return
+  remember(OPEN_TABS_KEY, {
+    openIds: state.openIds,
+    selectedId: state.selectedId,
+  })
+}
 
 /**
  * The chats held in the workspace's projects.
@@ -181,6 +204,12 @@ type WorktreeChatState = {
   unsaved: string[]
 
   refresh: () => Promise<void>
+  /**
+   * The listing, then the tabs the studio was shut with — those whose chat
+   * still exists. Leaves the pane alone: which pane was showing is the strip's
+   * to restore (`lib/store.ts`), and `select` would force it onto the chat.
+   */
+  restore: () => Promise<void>
   /** Puts a chat on screen, reading its lines the first time. */
   select: (id: string) => void
   /**
@@ -339,7 +368,7 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
   },
 
   select(id) {
-    const { openIds, messages, chats } = get()
+    const { openIds, chats } = get()
     const chat = chats.find((entry) => entry.id === id)
     set({
       openIds: openIds.includes(id) ? openIds : [...openIds, id],
@@ -376,26 +405,36 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
       useShells.getState().showFor(place.folderId)
     }
 
-    // Read once per run. The main process holds the lines and appends to them,
-    // so a re-read on every tab switch would be a file read for an answer we
-    // already have.
-    if (!messages[id]) {
-      set({ reading: [...get().reading, id] })
-      void window.desktop
-        .readWorktreeChat(id)
-        .then((lines) => {
-          set({ messages: { ...get().messages, [id]: lines } })
-        })
-        .catch((error: unknown) => {
-          console.error("Could not read that chat", error)
-        })
-        .finally(() => {
-          // In `finally` rather than beside the `set` above: a read that failed
-          // leaves no lines, and a chat left marked as reading would sit under
-          // a skeleton that never resolves.
-          set({ reading: get().reading.filter((entry) => entry !== id) })
-        })
-    }
+    readLines(id)
+    rememberTabs(get())
+  },
+
+  restore() {
+    restorePromise ??= (async () => {
+      const [stored] = await Promise.all([
+        recall(OPEN_TABS_KEY, isRememberedTabs),
+        get().refresh(),
+      ])
+      // From here on every change is written, whether or not there was
+      // anything to put back.
+      restored = true
+      // A tab opened while this was reading wins over the remembered ones.
+      if (!stored || get().openIds.length > 0) return
+
+      // A chat deleted since, or one that was never spoken into, is an id the
+      // listing no longer names.
+      const known = new Set(get().chats.map((chat) => chat.id))
+      const openIds = stored.openIds.filter((id) => known.has(id))
+      if (openIds.length === 0) return
+
+      const selectedId =
+        stored.selectedId && openIds.includes(stored.selectedId)
+          ? stored.selectedId
+          : (openIds.at(-1) ?? null)
+      set({ openIds, selectedId })
+      if (selectedId) readLines(selectedId)
+    })()
+    return restorePromise
   },
 
   markRead(id) {
@@ -412,14 +451,17 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
       selectedId:
         get().selectedId === id ? (openIds.at(-1) ?? null) : get().selectedId,
     })
+    rememberTabs(get())
   },
 
   closeOthers(id) {
     set({ openIds: [id], selectedId: id })
+    rememberTabs(get())
   },
 
   closeAll() {
     set({ openIds: [], selectedId: null })
+    rememberTabs(get())
   },
 
   reorder(ids) {
@@ -427,6 +469,7 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
     // never conjure or drop one.
     const open = new Set(get().openIds)
     set({ openIds: ids.filter((id) => open.has(id)) })
+    rememberTabs(get())
   },
 
   async create(place, options) {
@@ -1170,6 +1213,32 @@ export function placeOfRoot(
 ): ChatPlace | null {
   const folder = folders.find((entry) => entry.id === rootId)
   return folder ? { folderId: folder.id } : null
+}
+
+/**
+ * A chat's lines, read once per run. The main process holds the lines and
+ * appends to them, so a re-read on every tab switch would be a file read for an
+ * answer we already have.
+ */
+function readLines(id: string): void {
+  const { getState, setState } = useWorktreeChats
+  if (getState().messages[id] || getState().reading.includes(id)) return
+
+  setState({ reading: [...getState().reading, id] })
+  void window.desktop
+    .readWorktreeChat(id)
+    .then((lines) => {
+      setState({ messages: { ...getState().messages, [id]: lines } })
+    })
+    .catch((error: unknown) => {
+      console.error("Could not read that chat", error)
+    })
+    .finally(() => {
+      // In `finally` rather than beside the `set` above: a read that failed
+      // leaves no lines, and a chat left marked as reading would sit under a
+      // skeleton that never resolves.
+      setState({ reading: getState().reading.filter((entry) => entry !== id) })
+    })
 }
 
 /** One key dropped from a record. Written out because the destructuring form

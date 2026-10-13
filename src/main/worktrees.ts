@@ -229,14 +229,12 @@ export async function addWorktree(input: {
 }
 
 /**
- * Removes a checkout, and does **not** touch its branch.
+ * Removes a checkout. Its branch is `deleteBranch`'s, below.
  *
- * The branch is the work — the whole reason the checkout was made — so deleting
- * it with the directory would throw away the thing somebody asked for. `--force`
- * because a checkout somebody has been working in is dirty by definition, and a
- * refusal "because there are changes" would strand every directory this app
- * ever made under its own data folder. What that costs is stated in the dialog
- * that asks.
+ * `--force` because a checkout somebody has been working in is dirty by
+ * definition, and a refusal "because there are changes" would strand every
+ * directory this app ever made under its own data folder. What that costs is
+ * stated in the dialog that asks.
  */
 export async function removeWorktree(
   repo: string,
@@ -250,6 +248,22 @@ export async function removeWorktree(
     return null
   } catch (error) {
     return { error: gitSaid(error) || "git worktree remove failed." }
+  }
+}
+
+/**
+ * Deletes the branch a removed checkout was on — `-D`, since the work on it is
+ * usually unmerged and removing the worktree is meant to take all of it.
+ *
+ * Best effort: the checkout is already gone by now, and a branch git will not
+ * drop (checked out in another worktree, say) is left rather than turned into
+ * an error about a removal that succeeded.
+ */
+export async function deleteBranch(repo: string, branch: string) {
+  try {
+    await run("git", ["branch", "-D", branch], { cwd: repo, windowsHide: true })
+  } catch {
+    // Kept — see above.
   }
 }
 
