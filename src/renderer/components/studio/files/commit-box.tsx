@@ -68,7 +68,7 @@ export function CommitBox({ root }: { root: FileRoot }) {
     setDrafting(true)
     setError(null)
     const settings = useSettings.getState()
-    // Settings › `Helper turns`, because this is the one read-only `claude`
+    // Settings › `Commit message drafts`, because this is the one read-only `claude`
     // with one place to be configured.
     const answer = await window.desktop
       .draftCommitMessage(

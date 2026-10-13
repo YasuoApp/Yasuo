@@ -659,8 +659,8 @@ function ClaudeSection() {
             `main/one-turn-agent.ts`; the `review*` field names are what is
             already on disk. */}
         <Row
-          title="Helper turns"
-          description="Model and account for drafted commit messages."
+          title="Commit message drafts"
+          description="Model and account the Git tab's Draft button runs on."
         >
           <div className="flex items-center gap-1.5">
             <ModelMenu

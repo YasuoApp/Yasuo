@@ -235,6 +235,7 @@ export function modelLabel(model: string | null): string | null {
 
 /** `41.2k`, because the row is scanned rather than added up. */
 export function compact(tokens: number): string {
+  if (tokens >= 1_000_000_000) return `${round(tokens / 1_000_000_000)}B`
   if (tokens >= 1_000_000) return `${round(tokens / 1_000_000)}M`
   if (tokens >= 1_000) return `${round(tokens / 1_000)}k`
   return `${tokens}`

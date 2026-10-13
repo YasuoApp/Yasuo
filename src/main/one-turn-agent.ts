@@ -101,7 +101,7 @@ async function oneTurn(request: {
         // session has no past and will have no future.
         sessionId: randomUUID(),
         resume: false,
-        // Settings › Helper turns' own three, the same aliases a chat's toolbar
+        // Settings › Commit message drafts' own three, the same aliases a chat's toolbar
         // hands over. Null still means "leave it alone".
         model: request.model ?? null,
         effort: request.effort ?? null,
