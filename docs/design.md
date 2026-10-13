@@ -119,11 +119,13 @@ destroys it at once. The icon is a template image from `scripts/tray-icon.mjs`.
 
 ### The chat's loading indicator
 
-While a turn runs the pane draws a GIF swordsman beside `Hasaging…` and a
-running clock (`mascot-loader.gif`). It replaced a hand-drawn SVG and then a
-spritesheet. The costs are known: `prefers-reduced-motion` cannot reach a GIF,
-it does not follow the theme, and the figure is fan art of somebody else's
-character, bundled at the user's request. Its empty margin is cropped in CSS.
+While a turn runs the pane draws three `primary` dots hopping in turn, then
+`Working…` with a light passing over it, then a running clock — all CSS in
+`styles/motion.css`, so it follows the theme and `prefers-reduced-motion` (the
+dots fall back to breathing, the shimmer stops). It was a hand-drawn SVG, then a
+spritesheet, then a GIF swordsman beside `Hasaging…`, removed at the user's
+request: `prefers-reduced-motion` could not reach it, it did not follow the
+theme, and it was fan art of somebody else's character.
 
 ### Worktrees, as projects
 
@@ -404,7 +406,7 @@ strip.
 ## Settings
 
 A dialog (⌘,), applied as picked — no Save. Sections: **Appearance**, **Tabs &
-editor**, **Chats**, **Claude**, **Claude config**, **Updates**.
+editor**, **Chats**, **Claude**, **Updates**.
 
 **Claude** holds named profiles, each a `CLAUDE_CONFIG_DIR`. Adding one is a
 name, a click and a login: the app names the directory
@@ -436,24 +438,6 @@ Trouble sorts first; headers are never drawn.
 - **Remove** runs `claude mcp remove`, only where a scope allows it.
 - A **`needs-auth`** claude.ai connector links to its settings page; any other
   points at `/mcp` in a terminal.
-
-## Claude config, read-only
-
-Settings › Claude config lists what the user's `claude` has written down —
-`.claude.json`, `settings.json` and the org's `remote-settings.json` (shown
-first, since it wins) — for the default account or a profile
-(`main/claude-config.ts`, tested). It **reads the files**, the one exception to
-asking the CLI, because the question is what the files say. **Nothing is
-written**, no secret is read into the answer (env values, server env and
-headers), every field is narrowed, and unknown keys are listed under _Other
-keys_.
-
-### Effective settings
-
-Per project, what a session there **starts with**: user, project, local and the
-managed sources folded by the CLI's documented precedence, each value naming its
-level (`main/effective-settings.ts`, tested). It is an account of the rules, not
-the CLI's answer — `/status` is the authority.
 
 ## Explorer
 
@@ -732,6 +716,13 @@ naming which chat wrote each line. Never wired: no handler was registered.
 ### Pipelines, removed
 
 Chats chained into stages. Never wired into the UI.
+
+### Claude config, removed
+
+A read-only listing of `.claude.json`, `settings.json` and `remote-settings.json`
+in Settings, with the user / project / local / managed levels folded into
+effective settings. The one place this app read the CLI's files instead of
+asking it, for an answer `/status` and `/config` already give.
 
 ### The browser build, removed
 

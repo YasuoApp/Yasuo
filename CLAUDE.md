@@ -163,17 +163,6 @@ imports may reach `electron`.
   may call — **per chat**, `WorktreeChatOptions.disabledTools`, handed over as
   `disallowedTools`.
 
-- **`claude-config.ts`** — Settings › Claude config: `.claude.json`,
-  `settings.json` and the org's `remote-settings.json` (default or a
-  profile's), **read off disk and never
-  written**, secrets (env values, server env/headers) never read into the
-  answer. The one exception to asking the CLI, argued in `docs/design.md`
-  § Claude config, read-only (`test/claude-config.ts`).
-  **`effective-settings.ts`** folds user / project / local / managed into the
-  values a session in one project starts with, by the CLI's documented
-  precedence. It is an account of those rules, and `/status` stays the
-  authority (`test/effective-settings.ts`, § Effective settings).
-
 - **`plan-usage.ts`** — how much of the claude.ai plan's five-hour and
   seven-day windows an account has used, for the composer's usage meter
   (`worktree/chat-plan-usage.tsx`). Asked the way the MCP listing is — a

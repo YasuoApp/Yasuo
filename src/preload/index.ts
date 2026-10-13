@@ -95,9 +95,15 @@ const api: DesktopApi = {
     ipcRenderer.invoke(IPC.renamePath, target, name),
   trashPath: (target) => ipcRenderer.invoke(IPC.trashPath, target),
   revealPath: (target) => ipcRenderer.invoke(IPC.revealPath, target),
+  startDragPath: (target) => ipcRenderer.invoke(IPC.startDragPath, target),
   readImageFile: (filePath) => ipcRenderer.invoke(IPC.readImageFile, filePath),
   readImageRelative: (dir, relative) =>
     ipcRenderer.invoke(IPC.readImageRelative, dir, relative),
+  projectIcon: (folderId) => ipcRenderer.invoke(IPC.projectIcon, folderId),
+  pickProjectIcon: (folderId) =>
+    ipcRenderer.invoke(IPC.pickProjectIcon, folderId),
+  resetProjectIcon: (folderId) =>
+    ipcRenderer.invoke(IPC.resetProjectIcon, folderId),
   resolveRelativePath: (dir, relative) =>
     ipcRenderer.invoke(IPC.resolveRelativePath, dir, relative),
   listWorkspaceFiles: () => ipcRenderer.invoke(IPC.listWorkspaceFiles),
@@ -131,11 +137,6 @@ const api: DesktopApi = {
   claudeAccount: (configDir) =>
     ipcRenderer.invoke(IPC.claudeAccount, configDir),
   claudeVersions: () => ipcRenderer.invoke(IPC.claudeVersions),
-  claudeConfig: (profileId) => ipcRenderer.invoke(IPC.claudeConfig, profileId),
-  claudeEffectiveSettings: (profileId, folderId) =>
-    ipcRenderer.invoke(IPC.claudeEffectiveSettings, profileId, folderId),
-  revealClaudeConfig: (profileId, file) =>
-    ipcRenderer.invoke(IPC.revealClaudeConfig, profileId, file),
   claudeLogin: (configDir, cols, rows) =>
     ipcRenderer.invoke(IPC.claudeLogin, configDir, cols, rows),
   listWorktreeChats: () => ipcRenderer.invoke(IPC.listWorktreeChats),

@@ -1,4 +1,10 @@
-import { useEffect, useRef, type MouseEvent, type ReactNode } from "react"
+import {
+  useEffect,
+  useRef,
+  type DragEvent,
+  type MouseEvent,
+  type ReactNode,
+} from "react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
@@ -50,6 +56,7 @@ export function SideRow({
   onClick,
   onDoubleClick,
   onContextMenu,
+  onDragStart,
   className,
   children,
 }: {
@@ -63,6 +70,8 @@ export function SideRow({
   onDoubleClick?: () => void
   /** For a row that carries its own right-click menu. */
   onContextMenu?: (event: MouseEvent) => void
+  /** Makes the row draggable; a row without one is not. */
+  onDragStart?: (event: DragEvent) => void
   className?: string
   children: ReactNode
 }) {
@@ -82,6 +91,8 @@ export function SideRow({
       onClick={onClick}
       onDoubleClick={onDoubleClick}
       onContextMenu={onContextMenu}
+      draggable={onDragStart ? true : undefined}
+      onDragStart={onDragStart}
       title={title}
       aria-current={active ? "true" : undefined}
       style={sideRowIndent(indent)}

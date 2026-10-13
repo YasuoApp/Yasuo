@@ -867,16 +867,8 @@ function Directory({
     )
   }
 
-  if (entries.length === 0) {
-    return (
-      <p
-        style={{ paddingLeft: `${depth * 0.75 + 0.75}rem` }}
-        className="py-1 pr-2 text-xs text-muted-foreground/70"
-      >
-        Empty
-      </p>
-    )
-  }
+  // An open folder with no rows under it already says it is empty.
+  if (entries.length === 0) return null
 
   return (
     <ul>
@@ -1013,6 +1005,12 @@ function Row({
           directory ? undefined : () => useFiles.getState().keep(entry.path)
         }
         onContextMenu={() => onMenu(entry)}
+        // Out of the app, as the file itself: Chromium's own drag would carry
+        // the row's text, and only main can hand the OS a path.
+        onDragStart={(event) => {
+          event.preventDefault()
+          void window.desktop.startDragPath(entry.path)
+        }}
       >
         {lead}
         <span

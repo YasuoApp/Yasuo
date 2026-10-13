@@ -8,6 +8,8 @@ import {
   FolderOpen,
   GitBranch,
   GitBranchPlus,
+  Image as ImageIcon,
+  ImageOff,
   Loader2,
   MessageSquare,
   Pencil,
@@ -36,6 +38,11 @@ import {
 import { cn } from "@/lib/utils"
 import { useProjects } from "@/lib/projects"
 import { projectTree } from "@/lib/project-tree"
+import {
+  chooseProjectIcon,
+  resetProjectIcon,
+  useProjectIcon,
+} from "@/lib/project-icon"
 import { useStudio } from "@/lib/store"
 import { IconButton } from "../icon-button"
 import { RenameRow, useMenuFocusHandoff } from "../rename-row"
@@ -192,6 +199,7 @@ export function ProjectsSection() {
     return (
       <ProjectRow
         name={folder.name}
+        folderId={folder.id}
         path={folder.path}
         indent={indent}
         shut={collapsed.includes(folder.id)}
@@ -208,6 +216,21 @@ export function ProjectsSection() {
           void useWorktreeChats.getState().create({ folderId: folder.id })
         }
         onNewWorktree={() => setBranching(folder)}
+        // Not on a checkout, whose branch mark is saying something a picture
+        // would not.
+        onChangeIcon={
+          indent > 0
+            ? null
+            : () => {
+                setFailure(null)
+                void chooseProjectIcon(folder.id).catch((error: unknown) =>
+                  setFailure(
+                    error instanceof Error ? error.message : String(error)
+                  )
+                )
+              }
+        }
+        onResetIcon={indent > 0 ? null : () => void resetProjectIcon(folder.id)}
         onRemove={() => setRemoving(folder)}
         // Only for a project that is one: an ordinary folder has no checkout to
         // remove, and a menu item that explained that would be a menu item
@@ -300,6 +323,7 @@ export function ProjectsSection() {
           <div>
             <ProjectRow
               name="Ungrouped"
+              folderId={null}
               path={null}
               shut={ungroupedShut}
               // A chat here has nowhere to run its next turn, so it is never
@@ -310,6 +334,8 @@ export function ProjectsSection() {
               // one.
               onNewChat={null}
               onNewWorktree={null}
+              onChangeIcon={null}
+              onResetIcon={null}
               onRemove={null}
               onRemoveWorktree={null}
               onToggle={() => toggleFolder(UNGROUPED_ID)}
@@ -477,6 +503,7 @@ const PILL_ACTIVE = "shadow-none"
  */
 function ProjectRow({
   name,
+  folderId,
   path,
   indent = 0,
   shut,
@@ -485,10 +512,14 @@ function ProjectRow({
   onToggle,
   onNewChat,
   onNewWorktree,
+  onChangeIcon,
+  onResetIcon,
   onRemove,
   onRemoveWorktree,
 }: {
   name: string
+  /** Whose icon this row draws. Null for `Ungrouped`, which has none. */
+  folderId: string | null
   /** The project's directory, for `Copy path` and `Reveal` — which used to be
    * the title bar crumb's menu, and belong on the row that names the project.
    * Null for `Ungrouped`, which is no directory. */
@@ -525,6 +556,10 @@ function ProjectRow({
   /** Asks for a second checkout of this project — the dialog is the section's,
    * for the reason `onRemove`'s is. Nullable for the same row. */
   onNewWorktree: (() => void) | null
+  /** Asks for a picture to draw instead of the favicon or the folder, and
+   * forgets it again. Null on the rows with no icon to change. */
+  onChangeIcon: (() => void) | null
+  onResetIcon: (() => void) | null
   /**
    * Asks to take this project out of the workspace. It only asks — the
    * confirmation and the call itself are the section's, since a dialog owned by
@@ -551,6 +586,10 @@ function ProjectRow({
   // and "a folder inside this project" is the wrong answer badly enough to be
   // worth one glyph, since the directory is not in the project at all.
   const Mark = indent > 0 ? GitBranch : shut ? Folder : FolderOpen
+  // The project's own icon — the one chosen for it, or its source's favicon —
+  // says which project this is faster than its name does. Not for a checkout,
+  // whose branch mark is saying something a picture would not.
+  const favicon = useProjectIcon(indent > 0 ? null : folderId)
 
   const running = activity !== null && isRunning(activity)
   // Only where the row has nothing more immediate to say. A project with a turn
@@ -571,15 +610,29 @@ function ProjectRow({
         }
         className={cn(PILL, "font-medium text-foreground")}
       >
-        <Mark
-          className={cn(
-            "size-4 shrink-0",
-            // The open folder takes the section's own hue, which is what marks
-            // the project being worked in from the ones merely listed. A shut
-            // one is furniture and drawn as furniture.
-            shut ? "text-muted-foreground" : "text-primary"
-          )}
-        />
+        {favicon ? (
+          <img
+            src={favicon}
+            alt=""
+            draggable={false}
+            // Dimmed while shut, the one part of the folder's open-and-shut
+            // that a picture can still carry.
+            className={cn(
+              "size-4 shrink-0 rounded-sm object-contain",
+              shut && "opacity-60"
+            )}
+          />
+        ) : (
+          <Mark
+            className={cn(
+              "size-4 shrink-0",
+              // The open folder takes the section's own hue, which is what marks
+              // the project being worked in from the ones merely listed. A shut
+              // one is furniture and drawn as furniture.
+              shut ? "text-muted-foreground" : "text-primary"
+            )}
+          />
+        )}
         <span className="min-w-0 flex-1 truncate text-left">{name}</span>
 
         {/*
@@ -703,6 +756,19 @@ function ProjectRow({
             >
               <ExternalLink className="text-muted-foreground" />
               Reveal in file manager
+            </ContextMenuItem>
+          </>
+        )}
+        {onChangeIcon && onResetIcon && (
+          <>
+            <ContextMenuSeparator />
+            <ContextMenuItem onClick={onChangeIcon}>
+              <ImageIcon className="text-muted-foreground" />
+              Change icon…
+            </ContextMenuItem>
+            <ContextMenuItem onClick={onResetIcon}>
+              <ImageOff className="text-muted-foreground" />
+              Reset icon
             </ContextMenuItem>
           </>
         )}

@@ -150,6 +150,42 @@
   overflow-x: auto;
 }
 
+/* A file's fence and its Copy (`addCopyButtons` in `markdown-view.tsx`): the
+ * button sits on the frame, not in the `<pre>`, which scrolls sideways. */
+.markdown-prose .markdown-code {
+  position: relative;
+}
+
+.markdown-prose .markdown-code-copy {
+  position: absolute;
+  top: 0.375rem;
+  right: 0.375rem;
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 0.25rem;
+  color: var(--muted-foreground);
+  background: var(--muted);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.markdown-prose .markdown-code-copy svg {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+.markdown-prose .markdown-code:hover .markdown-code-copy,
+.markdown-prose .markdown-code-copy:focus-visible {
+  opacity: 1;
+}
+
+.markdown-prose .markdown-code-copy:hover {
+  color: var(--foreground);
+  background: var(--accent);
+}
+
 /* The fence already carries the background and padding; the `<code>` inside it
  * must not draw a second box around every line. */
 .markdown-prose pre code {

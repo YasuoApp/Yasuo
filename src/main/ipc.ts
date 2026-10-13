@@ -20,12 +20,11 @@ import {
 import { agentCommands } from "./agent-commands"
 import { agentModels } from "./agent-models"
 import { claudeAccount } from "./claude-auth"
-import { claudeConfig, configPaths } from "./claude-config"
-import { readEffectiveSettings } from "./effective-settings"
 import { claudeVersions } from "./claude-version"
 import { claudeBinary } from "./claude-bin"
 import { migrateLegacyDataDir } from "./data-dir"
 import { WorktreeChats } from "./worktree-chat"
+import { findFavicon, MAX_FAVICON_BYTES } from "./favicon"
 import * as files from "./files"
 import { MAX_INDEXED_FILES } from "./files"
 import { matcherOf, MAX_SEARCH_MATCHES, searchFiles } from "./content-search"
@@ -77,6 +76,7 @@ const IMAGE_MIME_TYPES: Record<string, string> = {
   ".webp": "image/webp",
   ".svg": "image/svg+xml",
   ".bmp": "image/bmp",
+  ".ico": "image/x-icon",
 }
 
 /** A thumbnail is all this is for — never worth holding a huge image whole
@@ -418,54 +418,6 @@ export function createIpc(host: Host): {
   )
 
   handle(IPC.claudeVersions, () => claudeVersions())
-
-  // The profile resolved through `configDirOf` rather than a path from the
-  // renderer, and the reveal takes a key: neither is a way to name a file.
-  handle(IPC.claudeConfig, async (_event, profileId: string | null) =>
-    claudeConfig(
-      await configDirOf(profileId),
-      (await fileRoots()).map((root) => root.path)
-    )
-  )
-
-  // A project's directory through the store, like every other `folderId`; the
-  // local file is the main checkout's for a worktree, which is where the CLI
-  // writes "don't ask again".
-  handle(
-    IPC.claudeEffectiveSettings,
-    async (_event, profileId: string | null, folderId: string | null) => {
-      const paths = configPaths(await configDirOf(profileId))
-      const projectDir = await folderDirOf(folderId)
-      return readEffectiveSettings({
-        settingsPath: paths.settingsPath,
-        remotePath: paths.remotePath,
-        projectDir,
-        localDir: projectDir
-          ? ((await worktreeRepo(projectDir)) ?? projectDir)
-          : null,
-      })
-    }
-  )
-
-  handle(
-    IPC.revealClaudeConfig,
-    async (_event, profileId: string | null, file: unknown) => {
-      const paths = configPaths(await configDirOf(profileId))
-      const target =
-        file === "settings"
-          ? paths.settingsPath
-          : file === "remote"
-            ? paths.remotePath
-            : paths.statePath
-      // A `settings.json` nobody has written yet is still worth pointing at:
-      // its directory is where it would go.
-      const exists = await stat(target).then(
-        () => true,
-        () => false
-      )
-      await host.reveal(exists ? target : path.dirname(target))
-    }
-  )
 
   /**
    * `claude auth login` for one profile's directory, in a pty of its own.
@@ -1014,6 +966,10 @@ export function createIpc(host: Host): {
     await host.reveal(await inWorkspace(target))
   })
 
+  handle(IPC.startDragPath, async (caller, target: string) => {
+    await host.startDrag(caller, await inWorkspace(target))
+  })
+
   handle(IPC.readImageFile, async (_event, filePath: string) =>
     // Under `imageDataUrl`'s size ceiling, which is what keeps a 40MP photograph from being turned into a
     // base64 string and posted across the bridge.
@@ -1026,6 +982,41 @@ export function createIpc(host: Host): {
     // read under the same ceiling and the same folders' gate as any other
     // file the studio shows.
     imageDataUrl(await inWorkspace(path.resolve(dir, relative)))
+  )
+
+  handle(IPC.projectIcon, async (_event, folderId: string) => {
+    // The chosen picture outranks the project's own: choosing one is how
+    // somebody says the favicon found was the wrong one.
+    const found =
+      (await store.projectIconPath(folderId)) ??
+      (await findFavicon(await store.resolveFolderDir(folderId)))
+    return found ? imageDataUrl(found) : null
+  })
+
+  handle(IPC.pickProjectIcon, async (_event, folderId: string) => {
+    const [picked] = await host.pickFiles({
+      title: "Choose an icon",
+      directory: await store.resolveFolderDir(folderId),
+      single: true,
+      filters: [
+        {
+          name: "Images",
+          extensions: Object.keys(IMAGE_MIME_TYPES).map((ext) => ext.slice(1)),
+        },
+      ],
+    })
+    if (!picked) return false
+    // The same ceiling `findFavicon` holds a found one to: this is drawn at
+    // 16px and posted across the bridge on every launch.
+    if ((await stat(picked)).size > MAX_FAVICON_BYTES) {
+      throw new Error(`${path.basename(picked)} is too large for an icon.`)
+    }
+    await store.setProjectIcon(folderId, picked)
+    return true
+  })
+
+  handle(IPC.resetProjectIcon, (_event, folderId: string) =>
+    store.clearProjectIcon(folderId)
   )
 
   handle(

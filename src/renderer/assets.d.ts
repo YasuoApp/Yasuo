@@ -18,18 +18,3 @@ interface ImportMeta {
     options: { eager: true; query: "?url"; import: "default" }
   ): Record<string, string>
 }
-
-/**
- * A picture imported for its URL — Vite emits the file and the import is the
- * hashed path to it. There is one, `components/studio/mascot-loader.gif`, and it
- * is an import rather than a `public/` string so that a missing file is a build
- * error instead of a broken box at runtime. Declared here for the same reason as
- * the glob above: narrower than taking all of `vite/client`, and narrower still
- * than that — only the extension actually imported, so a second picture in a
- * second format is a compile error asking to be declared rather than a silent
- * `any`.
- */
-declare module "*.gif" {
-  const url: string
-  export default url
-}

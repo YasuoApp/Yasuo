@@ -993,126 +993,6 @@ export type McpListing = {
   error: string | null
 }
 
-/** One of the two files Settings › Claude config lists, and whether it is
- * there to be read. */
-export type ClaudeConfigFile = {
-  path: string
-  exists: boolean
-  bytes: number | null
-  /** ISO. */
-  modifiedAt: string | null
-  /** Set when it is there and could not be parsed — usually caught mid-write. */
-  error: string | null
-}
-
-/** An MCP server as a config file names it — not whether it connects, which
- * is the composer's MCP menu's question. Env and headers are never read. */
-export type ClaudeConfigServer = {
-  name: string
-  transport: string
-  /** The URL, or the command and its arguments. */
-  address: string | null
-}
-
-/** One entry of `.claude.json`'s `projects`: a directory `claude` was started
- * in, and what it remembered about it. */
-export type ClaudeConfigProject = {
-  path: string
-  /** Whether the directory is still on disk. */
-  exists: boolean
-  /** Whether it is one of this workspace's folders. */
-  inWorkspace: boolean
-  allowedTools: string[]
-  /** `local`-scope servers. */
-  servers: ClaudeConfigServer[]
-  disabledServers: string[]
-  enabledMcpjsonServers: string[]
-  disabledMcpjsonServers: string[]
-}
-
-/** What `settings.json` sets, in names — an env entry is its key alone. */
-export type ClaudeSettingsSummary = {
-  model: string | null
-  defaultMode: string | null
-  allow: string[]
-  ask: string[]
-  deny: string[]
-  env: string[]
-  hooks: string[]
-  plugins: string[]
-  /** Every other key the file sets, by name — `permissions.*` ones prefixed. */
-  other: string[]
-}
-
-/** Settings › Claude config — see `main/claude-config.ts`. Read-only. */
-export type ClaudeConfig = {
-  /** The profile's `CLAUDE_CONFIG_DIR`, null for the default login. */
-  configDir: string | null
-  /** `.claude.json`. */
-  state: ClaudeConfigFile
-  /** `settings.json`. */
-  settings: ClaudeConfigFile
-  /** `user`-scope servers. */
-  servers: ClaudeConfigServer[]
-  projects: ClaudeConfigProject[]
-  /** Null when `settings.json` is missing or unreadable. */
-  summary: ClaudeSettingsSummary | null
-  /** `remote-settings.json` — the organization's managed settings. */
-  remote: ClaudeConfigFile
-  /** Null when there is no policy, which is most accounts. */
-  policy: ClaudeManagedPolicy | null
-}
-
-/** One level of the CLI's settings stack, highest last in `ORDER`. */
-export type SettingsSource = "managed" | "local" | "project" | "user"
-
-/** Which managed source supplied the policy — remote (claude.ai), an MDM
- * profile, or the files in the system directory. */
-export type ManagedSource = "remote" | "mdm" | "file"
-
-/** A file the effective view read, or looked for. */
-export type SettingsLayer = {
-  source: SettingsSource
-  /** `remote`, `mdm`, `file`, `local`, `project` or `user`. */
-  label: string
-  path: string
-  exists: boolean
-  error: string | null
-}
-
-/**
- * Every settings file a session in one directory would read, folded by the
- * CLI's documented precedence — see `main/effective-settings.ts` for what is
- * and is not modelled. `env` values are redacted to `•••`.
- */
-export type EffectiveSettings = {
-  settings: Record<string, unknown>
-  /** One row per value, dotted (`permissions.allow`, `env.DEBUG`), with every
-   * level that contributed to it, highest first. */
-  origins: { key: string; value: string; sources: SettingsSource[] }[]
-  managedSource: ManagedSource | null
-  /** Each rule that changed the result: a key ignored, a lock, a stricter
-   * value winning. */
-  notes: string[]
-}
-
-/** What an organization's managed settings set: the settings shape, plus the
- * keys only a policy carries. */
-export type ClaudeManagedPolicy = {
-  summary: ClaudeSettingsSummary
-  /** `requiredMinimumVersion`. */
-  minimumVersion: string | null
-  /** `permissions.disableBypassPermissionsMode` — `"disable"` when set. */
-  bypassPermissions: string | null
-  /** `allowManagedMcpServersOnly`. */
-  managedMcpOnly: boolean | null
-  /** Each a server's name, URL or command. */
-  allowedMcpServers: string[]
-  deniedMcpServers: string[]
-  /** `sandbox.enabled`. */
-  sandbox: boolean | null
-}
-
 export type TerminalOutput = {
   terminalId: string
   /** Raw bytes from the shell, ANSI escapes included. */
@@ -2209,6 +2089,12 @@ export type DesktopApi = {
   /** Shows it in Finder/Explorer/the desktop's file manager. */
   revealPath: (target: string) => Promise<void>
   /**
+   * Starts an OS drag of the file or folder, so it can be dropped outside the
+   * app — Finder, Slack, a mail. Called from a `dragstart` the renderer has
+   * cancelled: a page's own drag carries no file the OS can hand over.
+   */
+  startDragPath: (target: string) => Promise<void>
+  /**
    * An image in the workspace, as a `data:` URL the pane can draw.
    *
    * Bytes rather than a path because the renderer is not on a `file://` origin
@@ -2225,6 +2111,20 @@ export type DesktopApi = {
    * is held to the workspace's folders like the path in `readImageFile`.
    */
   readImageRelative: (dir: string, relative: string) => Promise<string>
+  /**
+   * A project's icon, as a `data:` URL, for its row in the projects column — or
+   * null for one with none. The picture chosen with `pickProjectIcon` if there
+   * is one, otherwise the project's own favicon, looked for in the
+   * conventional places only (`main/favicon.ts`).
+   */
+  projectIcon: (folderId: string) => Promise<string | null>
+  /**
+   * Asks for a picture in the OS picker and keeps a copy as the project's icon.
+   * False when cancelled.
+   */
+  pickProjectIcon: (folderId: string) => Promise<boolean>
+  /** Forgets the chosen picture, so the row goes back to the favicon. */
+  resetProjectIcon: (folderId: string) => Promise<void>
   /**
    * Where a document's relative link goes — `./CONTRIBUTING.md`, `../src/` —
    * joined in main for the same reason as `readImageRelative`.
@@ -2394,29 +2294,6 @@ export type DesktopApi = {
   claudeAccount: (configDir: string) => Promise<ClaudeAccount>
   /** The user's `claude --version` and the agent SDK this build bundles. */
   claudeVersions: () => Promise<ClaudeVersions>
-  /**
-   * What `.claude.json` and `settings.json` say for the account behind
-   * `profileId` — null for the default login. Read off disk and never written:
-   * see `main/claude-config.ts` for why that is the one exception to asking
-   * the CLI.
-   */
-  claudeConfig: (profileId: string | null) => Promise<ClaudeConfig>
-  /**
-   * The settings a `claude` session would start with in `folderId`'s
-   * directory (or with no project, null), under the account behind
-   * `profileId`: user, project, local and managed folded by the CLI's
-   * documented precedence. Read-only — `main/effective-settings.ts`.
-   */
-  claudeEffectiveSettings: (
-    profileId: string | null,
-    folderId: string | null
-  ) => Promise<EffectiveSettings & { layers: SettingsLayer[] }>
-  /** Shows one of those two files in the OS file manager. A key rather than a
-   * path, so this is not a way to reveal anything outside the workspace. */
-  revealClaudeConfig: (
-    profileId: string | null,
-    file: "state" | "settings" | "remote"
-  ) => Promise<void>
   /**
    * Signs one of those directories in: `claude auth login` in a pty of its own,
    * with that directory as `CLAUDE_CONFIG_DIR`. Resolves with the id its output
@@ -2806,8 +2683,12 @@ export const IPC = {
   renamePath: "files:rename",
   trashPath: "files:trash",
   revealPath: "files:reveal",
+  startDragPath: "files:start-drag",
   readImageFile: "files:read-image",
   readImageRelative: "files:read-image-relative",
+  projectIcon: "workspace:project-icon",
+  pickProjectIcon: "workspace:pick-project-icon",
+  resetProjectIcon: "workspace:reset-project-icon",
   resolveRelativePath: "files:resolve-relative",
   listWorkspaceFiles: "files:index",
   watchDirectories: "files:watch",
@@ -2827,9 +2708,6 @@ export const IPC = {
   saveClaudeProfiles: "claude-profiles:save",
   claudeAccount: "claude-profiles:account",
   claudeVersions: "claude:versions",
-  claudeConfig: "claude:config",
-  claudeEffectiveSettings: "claude:effective-settings",
-  revealClaudeConfig: "claude:reveal-config",
   claudeLogin: "claude-profiles:login",
   listWorktreeChats: "worktree-chats:list",
   createWorktreeChat: "worktree-chats:create",
