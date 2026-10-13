@@ -966,7 +966,10 @@ function ProjectChats({
                       // hue: the hue is spoken for by the shield, and a column
                       // where the news is a second colour is a column read by
                       // colour.
-                      isUnread && "font-medium"
+                      isUnread && "font-medium",
+                      // The transcript's `Working…` light over the title, so
+                      // the row says it in words as well as in the mark.
+                      isSending && !isWaiting && "text-shimmer"
                     )}
                   >
                     {chat.title}

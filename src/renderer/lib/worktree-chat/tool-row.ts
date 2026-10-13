@@ -108,8 +108,9 @@ export function rowOf(line: ToolLine): ToolRowWords {
   // whatever an MCP tool was given, which is its arguments' JSON and reads no
   // better in monospace. Everything else ran or matched something.
   const prose = line.todos !== undefined || line.name.startsWith("mcp__")
-  const object: RowObject | null = line.summary
-    ? { kind: prose ? "text" : "code", text: line.summary }
+  const text = line.name === "Bash" ? commandOf(line.summary) : line.summary
+  const object: RowObject | null = text
+    ? { kind: prose ? "text" : "code", text }
     : null
 
   return {
@@ -119,6 +120,24 @@ export function rowOf(line: ToolLine): ToolRowWords {
     outcome,
     ...(caption ? { caption } : {}),
   }
+}
+
+/**
+ * A command as its row's chip: without the `cd <dir>;` the CLI prefixes to
+ * nearly every one.
+ *
+ * In a chip that truncates at the width of a row, forty characters of the
+ * chat's own working directory were what survived, and thirty rows of
+ * `cd /Users/…/Yasuo; ` said nothing about which command each was. Only the
+ * leading hop is dropped, and only off the chip — the panel under the row
+ * opens onto the command whole, which is what ran.
+ */
+export function commandOf(summary: string): string {
+  const stripped = summary.replace(
+    /^cd\s+(?:"[^"]*"|'[^']*'|\S+)\s*(?:;|&&)\s*/,
+    ""
+  )
+  return stripped.trim() === "" ? summary : stripped
 }
 
 /**
@@ -206,14 +225,32 @@ export function rowsOf(lines: AssistantMessage[]): ActivityRow[] {
  */
 export function groupOutcome(lines: ToolLine[]): string {
   const files = lines.every((line) => line.path)
-  const n = lines.length
-  const count = files ? `${n} files` : `${n} calls`
+  // Distinct files, not calls: five edits to one file are one file's worth
+  // of change, and `5 files` over a row showing one chip was a count of
+  // something the row was not showing.
+  const n = files ? distinctFiles(lines).length : lines.length
+  const count = files ? `${n} ${n === 1 ? "file" : "files"}` : `${n} calls`
   const stats = lines.map((line) => (line.failed ? null : statOf(line.stat)))
   if (stats.some((stat) => stat === null)) return count
   const added = stats.reduce((sum, stat) => sum + stat!.added, 0)
   const removed = stats.reduce((sum, stat) => sum + stat!.removed, 0)
   const sum = statText({ added, removed })
   return sum ? `${count} · ${sum}` : count
+}
+
+/**
+ * One line per file in a merged row, the first call to each, for its chips:
+ * a turn that edits one file five times is one chip, not the same name five
+ * times across the row. Calls with no path keep a chip each.
+ */
+export function distinctFiles(lines: ToolLine[]): ToolLine[] {
+  const seen = new Set<string>()
+  return lines.filter((line) => {
+    if (!line.path) return true
+    if (seen.has(line.path)) return false
+    seen.add(line.path)
+    return true
+  })
 }
 
 /** How much an edit moved, read back out of the `+3 −1` main wrote it as. */

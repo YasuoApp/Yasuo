@@ -1,5 +1,7 @@
 import type { AssistantMessage } from "../src/shared/api"
 import {
+  commandOf,
+  distinctFiles,
   groupOutcome,
   splitStat,
   statOf,
@@ -70,6 +72,26 @@ section("one grammar for every tool")
   check(
     "and the description is the hover line",
     row.caption === "Run the suite"
+  )
+}
+
+check(
+  "a command's chip drops the CLI's leading cd",
+  commandOf("cd /Users/x/repo; bun test") === "bun test" &&
+    commandOf("cd /Users/x/repo && bun test") === "bun test" &&
+    commandOf('cd "/Users/x/my repo"; ls') === "ls"
+)
+check(
+  "but not a cd that is the command",
+  commandOf("cd /tmp") === "cd /tmp" &&
+    commandOf("ls; cd /tmp") === "ls; cd /tmp"
+)
+{
+  const object = rowOf(tool("Bash", { summary: "cd /r; git status" })).object
+  check(
+    "and the row's chip is the command, not the hop",
+    object?.kind === "code" && object.text === "git status",
+    object
   )
 }
 
@@ -251,6 +273,30 @@ check(
     tool("Edit", { summary: "/b", path: "/b", stat: "+2" }),
   ]) === "2 files · +5 −1"
 )
+{
+  const edits = [
+    tool("Edit", { summary: "/a", path: "/a", stat: "+3 −1" }),
+    tool("Edit", { summary: "/a", path: "/a", stat: "+2" }),
+    tool("Edit", { summary: "/b", path: "/b", stat: "−4" }),
+  ]
+  check(
+    "five edits to one file are one file, summed",
+    groupOutcome(edits.slice(0, 2)) === "1 file · +5 −1"
+  )
+  check(
+    "and a row's chips are one per file",
+    distinctFiles(edits)
+      .map((line) => line.path)
+      .join() === "/a,/b"
+  )
+  check(
+    "while calls with no path keep a chip each",
+    distinctFiles([
+      tool("Grep", { summary: "a" }),
+      tool("Grep", { summary: "a" }),
+    ]).length === 2
+  )
+}
 check(
   "and says only the count when one of them has none",
   groupOutcome([

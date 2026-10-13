@@ -4,6 +4,7 @@ import { X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { OutlineEntry } from "@/lib/worktree-chat/outline"
 import { IconButton } from "../icon-button"
+import { SideColumn } from "./side-column"
 
 /**
  * A chat's table of contents — what was asked, in order, as a column beside the
@@ -40,18 +41,20 @@ export function ChatOutline({
   }, [current])
 
   return (
-    <nav
-      aria-label="Table of contents"
-      className="flex w-60 shrink-0 flex-col border-l"
-    >
+    <SideColumn label="Table of contents">
       <div className="flex h-8 shrink-0 items-center gap-1 pr-1 pl-3">
-        <span className="flex-1 text-[0.7rem] font-medium text-muted-foreground">
+        <span className="min-w-0 flex-1 truncate text-[0.7rem] font-medium text-muted-foreground">
           Contents
           <span className="ml-1.5 tabular-nums opacity-70">
             {entries.length}
           </span>
         </span>
-        <IconButton label="Close contents" side="bottom" onClick={onClose}>
+        <IconButton
+          label="Close contents"
+          side="bottom"
+          onClick={onClose}
+          className="shrink-0"
+        >
           <X />
         </IconButton>
       </div>
@@ -86,6 +89,6 @@ export function ChatOutline({
           ))}
         </ol>
       )}
-    </nav>
+    </SideColumn>
   )
 }

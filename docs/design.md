@@ -298,6 +298,19 @@ send each is stored as a note file and the line records the names, so both the
 composer and the transcript draw thumbnails (`note-file://`). A tool's image
 results are kept the same way and drawn under the row, outside the fold.
 
+### A chat's shared media
+
+Telegram's "shared media", beside the transcript: a column with `Media` (every
+picture, both sides', as a grid that opens a viewer with `←`/`→`), `Files`
+(what the chat wrote, once each, by its last write) and `Links` (web links said
+by either side, not tool output). Newest first, read off the lines on screen
+(`lib/worktree-chat/media.ts`) with nothing stored. Every item lands on the
+line it came from; a subagent's lands on its `Agent` row. It takes the same
+slot as the table of contents and the two are exclusive — two columns leave a
+narrow pane no transcript. That slot (`SideColumn`) is dragged wider by its
+left edge, 200–560px and never past half the pane, one width for both columns
+and every chat, this run only; a double-click puts it back to 240.
+
 ### `/` in a chat's composer
 
 At the head of a message only, `/` lists the slash commands the user's CLI would
