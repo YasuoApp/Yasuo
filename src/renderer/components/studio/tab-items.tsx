@@ -71,7 +71,7 @@ export function useTabItems(): Map<string, TabStripItem> {
       copyLabel: "Copy path",
       // The same icon the tree draws, so a tab and the row it came from are
       // recognisably the same file.
-      icon: <FileIcon filePath={filePath} />,
+      icon: <FileIcon filePath={filePath} className="size-3" />,
       // The same dot the tree marks the row with: whichever of the two is being
       // looked at says the file has edits that are not on disk.
       dirty: isDirty(fileDocs[filePath]),
@@ -107,7 +107,7 @@ export function useTabItems(): Map<string, TabStripItem> {
       // Unless the strip holds every project's tabs, where *here* is no longer
       // said by the strip and four tabs reading `Changes` are four guesses.
       label: allProjectTabs && folder ? `Changes · ${folder}` : "Changes",
-      icon: <GitCompare className="size-3.5 shrink-0" />,
+      icon: <GitCompare className="size-3 shrink-0" />,
       // Nothing until the first read, and nothing for a clean project: a badge
       // reading zero is a thing to notice saying there is nothing to notice.
       note: count ? String(count) : undefined,
@@ -148,21 +148,21 @@ export function useTabItems(): Map<string, TabStripItem> {
       // Unread comes last of the three and can never be true beside the
       // spinner: what marks a chat unread is it having stopped.
       icon: waiting ? (
-        <ShieldQuestion className="size-3.5 shrink-0 animate-pulse text-primary" />
+        <ShieldQuestion className="size-3 shrink-0 animate-pulse text-primary" />
       ) : sending ? (
-        <Spinner className="size-3.5 shrink-0 text-muted-foreground" />
+        <Spinner className="size-3 shrink-0 text-muted-foreground" />
       ) : unread ? (
         // In the icon's own slot rather than beside it, so the label starts on
         // the same pixel either way — a tab that grew by a dot would shift every
         // tab to its right as a chat finished.
         <span
           aria-hidden
-          className="inline-flex size-3.5 shrink-0 items-center justify-center"
+          className="inline-flex size-3 shrink-0 items-center justify-center"
         >
           <span className="size-1.5 rounded-full bg-primary" />
         </span>
       ) : (
-        <MessageSquare className="size-3.5 shrink-0" />
+        <MessageSquare className="size-3 shrink-0" />
       ),
       title: waiting
         ? `${title} — waiting for your answer`

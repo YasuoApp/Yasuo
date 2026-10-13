@@ -18,18 +18,12 @@ import { create } from "zustand"
  */
 
 /**
- * The height of the dock's tab strip, in px — `studio.tsx` gives it to the
- * panel as its `collapsedSize`, so that closing the dock leaves the strip on
- * screen instead of taking it away.
+ * The height of the dock's tab strip, in px.
  *
- * That is the whole of what stops the chevron being a one-way door. There used
- * to be a button at the right of the title bar for the way back, from when the
- * dock collapsed to nothing; a strip that is always there answers it where the
- * question is asked, and the button is gone.
- *
- * One number rather than a Tailwind `h-9` in the strip and a `36` here: they
- * have to agree or the dock closes to a sliver of its own tabs, and nothing
- * would catch the drift.
+ * It was the panel's `collapsedSize` too, so that closing the dock left the
+ * strip on screen as the way back. The dock collapses to nothing now: the
+ * `NavRail`'s Terminal button and `⌃\`` are the way back, and are on screen
+ * whatever the dock is doing.
  */
 export const DOCK_STRIP_HEIGHT = 36
 

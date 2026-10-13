@@ -15,6 +15,7 @@ import {
   Pencil,
   Plus,
   ShieldQuestion,
+  SquareTerminal,
   Trash2,
 } from "lucide-react"
 
@@ -221,6 +222,13 @@ export function ProjectsSection() {
           void useWorktreeChats.getState().create({ folderId: folder.id })
         }
         onNewWorktree={() => setBranching(folder)}
+        // Pointing the dock first is what makes the `+`'s own `add` open the
+        // shell here rather than in whichever project was clicked last.
+        onNewTerminal={() => {
+          const shells = useShells.getState()
+          shells.showFor(folder.id)
+          shells.add()
+        }}
         // Not on a checkout, whose branch mark is saying something a picture
         // would not.
         onChangeIcon={
@@ -343,6 +351,7 @@ export function ProjectsSection() {
               // one.
               onNewChat={null}
               onNewWorktree={null}
+              onNewTerminal={null}
               onChangeIcon={null}
               onResetIcon={null}
               onRename={null}
@@ -527,6 +536,7 @@ function ProjectRow({
   onToggle,
   onNewChat,
   onNewWorktree,
+  onNewTerminal,
   onChangeIcon,
   onResetIcon,
   onRename,
@@ -572,6 +582,10 @@ function ProjectRow({
   /** Asks for a second checkout of this project — the dialog is the section's,
    * for the reason `onRemove`'s is. Nullable for the same row. */
   onNewWorktree: (() => void) | null
+  /** Opens a shell in this project's directory, in the dock. Clicking the row
+   * no longer starts one, so this is the way to ask for it by name. Null for
+   * `Ungrouped`, which is no directory. */
+  onNewTerminal: (() => void) | null
   /** Asks for a picture to draw instead of the favicon or the folder, and
    * forgets it again. Null on the rows with no icon to change. */
   onChangeIcon: (() => void) | null
@@ -770,6 +784,12 @@ function ProjectRow({
           <ContextMenuItem onClick={onNewWorktree}>
             <GitBranchPlus className="text-muted-foreground" />
             New worktree…
+          </ContextMenuItem>
+        )}
+        {onNewTerminal && (
+          <ContextMenuItem onClick={onNewTerminal}>
+            <SquareTerminal className="text-muted-foreground" />
+            New terminal here
           </ContextMenuItem>
         )}
         {onRename && (

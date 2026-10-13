@@ -10,8 +10,8 @@ import { IconButton } from "../icon-button"
  * The column is `collapsible`, so dragging its handle past the minimum shuts
  * it — and while it collapsed to nothing, the only way back was `⌘B` or the
  * View menu, neither of which is where somebody who has just dragged a column
- * shut is looking. The dock answered the same failure by collapsing to its own
- * tab row (`DOCK_STRIP_HEIGHT`); this is that turned on its side.
+ * shut is looking. Unlike the projects column and the dock, nothing on the
+ * `NavRail` reopens it, so the rail is its own way back.
  *
  * Always on screen rather than only while collapsed: a button that appeared
  * when the column went would be somewhere different depending on the state it
