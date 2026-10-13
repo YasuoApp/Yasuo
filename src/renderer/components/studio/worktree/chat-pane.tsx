@@ -224,7 +224,13 @@ function Conversation({
   const startedAt = useWorktreeChats((state) => state.startedAt[chatId])
   const agents = useWorktreeChats((state) => state.agents[chatId])
   const context = useWorktreeChats((state) => state.context[chatId])
-  const contextWindow = useWorktreeChats((state) => state.window[chatId])
+  // This run's measurement, else the one kept on the record — without the
+  // fallback a restarted app drew no meter until the next turn ended.
+  const contextWindow = useWorktreeChats(
+    (state) =>
+      state.window[chatId] ??
+      state.chats.find((chat) => chat.id === chatId)?.window
+  )
   const compacting = useWorktreeChats((state) => state.compacting[chatId])
   const compactError = useWorktreeChats((state) => state.compactError[chatId])
   const ask = useWorktreeChats((state) => state.asks[chatId])

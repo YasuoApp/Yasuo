@@ -85,9 +85,9 @@ type WorktreeChatState = {
    * request, and carries `maxTokens`, the auto-compact threshold and the split
    * by category — which is what makes a percentage possible at all.
    *
-   * Only for the chats a session has answered in this run, and not written down:
-   * it describes the process the chat is talking to, and a chat whose session
-   * was closed for idleness has none until its next turn.
+   * Only for the chats a session has answered in this run. Main also keeps the
+   * last one on the record (`WorktreeChat.window`), which the pane falls back
+   * to, so a restarted app still has a meter before the next turn.
    */
   window: Record<string, ChatWindow>
   /**
@@ -595,6 +595,9 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
       // reporting a conversation that has been thrown away.
       context: without(get().context, id),
       window: without(get().window, id),
+      // And the copy on the record, which the pane falls back to — main drops
+      // its own, but not before the next listing would be read.
+      chats: forgetWindow(get().chats, id),
       // Same reason: the session that was running them is closed.
       agents: without(get().agents, id),
       compacting: without(get().compacting, id),
@@ -746,6 +749,7 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
       unread: without(get().unread, id),
       context: without(get().context, id),
       window: without(get().window, id),
+      chats: forgetWindow(get().chats, id),
     })
 
     try {
@@ -1174,4 +1178,11 @@ function without<T>(record: Record<string, T>, key: string): Record<string, T> {
   const rest = { ...record }
   delete rest[key]
   return rest
+}
+
+/** The listing with one chat's kept `window` dropped — see `WorktreeChat`. */
+function forgetWindow(chats: WorktreeChat[], id: string): WorktreeChat[] {
+  return chats.map((chat) =>
+    chat.id === id && chat.window ? { ...chat, window: undefined } : chat
+  )
 }

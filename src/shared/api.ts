@@ -1152,10 +1152,9 @@ export type ChatWindowSlice = {
  * control channel at the end of a turn (`getContextUsage()`): a control request,
  * so it costs a round trip and no tokens.
  *
- * **Only ever about a live session.** The numbers describe the process the chat
- * is talking to, so a chat whose session has been closed for idleness has none
- * until its next turn — which is why this is an event and not a field on the
- * record. See the `window` event.
+ * **Measured of a live session.** The numbers describe the process the chat is
+ * talking to, which is why it arrives as an event. The last one is also kept on
+ * the record (`WorktreeChat.window`) so a restart does not blank the meter.
  */
 export type ChatWindow = {
   /** Estimated tokens in use. May exceed `maxTokens`: the SDK sends it
@@ -1623,6 +1622,17 @@ export type WorktreeChat = {
    * Read it through `chatOptions`, never directly.
    */
   options?: WorktreeChatOptions
+  /**
+   * The last `window` event this chat's session sent, kept so a restarted app
+   * has a meter before the next turn measures again.
+   *
+   * A reading of a session that may since have closed, and it is drawn anyway:
+   * a resume reloads the same transcript, so the next measurement lands within a
+   * few tokens of this one, where no meter at all read as a chat that had lost
+   * its context. The live event always wins over it (`chat-pane.tsx`). Dropped
+   * by `clear` and `edit`, which are the two things that make it a lie.
+   */
+  window?: ChatWindow
   createdAt: string
   updatedAt: string
 }
