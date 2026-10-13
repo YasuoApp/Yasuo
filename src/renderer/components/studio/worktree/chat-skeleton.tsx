@@ -1,7 +1,5 @@
-import { Bot } from "lucide-react"
 import { useEffect, useState } from "react"
 
-import type { ChatAgent } from "@shared/api"
 import { cn } from "@/lib/utils"
 import { elapsed } from "@/lib/worktree-chat/since"
 
@@ -15,78 +13,25 @@ import { elapsed } from "@/lib/worktree-chat/since"
  * (`styles/motion.css`). It was a GIF swordsman for a while, then a stock
  * spinner — `docs/design.md` § The chat's loading indicator has why.
  *
- * The dots sit in a `LOADER_H` box, and that box's height is on the label's
- * row too: the column is top-aligned so the agent rows hang under the label,
- * and the dots centre on that first row rather than on the whole column.
+ * Which subagents are running is not said here — that is `ChatAgents`, above
+ * the composer, so the loader stays one line however wide a turn fans out.
  */
-export function ChatSkeleton({
-  startedAt,
-  agents = [],
-}: {
-  startedAt?: number
-  /** The subagents running under this turn, if any — see `ChatAgent`. */
-  agents?: ChatAgent[]
-}) {
+export function ChatSkeleton({ startedAt }: { startedAt?: number }) {
   return (
-    <div className="flex items-start gap-2 px-1 text-xs text-muted-foreground">
+    <div
+      className={cn(
+        LOADER_H,
+        "flex items-center gap-2 px-1 text-xs text-muted-foreground"
+      )}
+    >
       <WorkingDots />
-
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <div className={cn(LOADER_H, "flex items-center gap-2")}>
-          <span className="text-shimmer">
-            {/* The count on the loader's own line, because it is the answer to
-                the question somebody is staring at it with: nothing is being
-                written, and this says who is out there working. */}
-            {agents.length > 0
-              ? `Working · ${agents.length} ${agents.length === 1 ? "agent" : "agents"}…`
-              : "Working…"}
-          </span>
-          {startedAt !== undefined && <Elapsed startedAt={startedAt} />}
-        </div>
-
-        {/* One line each, capped: a turn that fanned out to seven agents is the
-            case this was written for, and seven full descriptions push the answer
-            it is waiting for off the screen. The last tool is what shows movement
-            — a name on its own for five minutes reads as something stuck. */}
-        {agents.slice(0, AGENTS_SHOWN).map((agent) => (
-          <div key={agent.id} className="text-[0.7rem]">
-            <div className="flex items-baseline gap-1.5">
-              <Bot className="size-3 shrink-0 translate-y-0.5 text-muted-foreground/50" />
-              <span className="min-w-0 truncate text-muted-foreground/70">
-                {agent.description}
-              </span>
-              {agent.lastTool && (
-                <span className="shrink-0 font-mono text-muted-foreground/40">
-                  {agent.lastTool}
-                </span>
-              )}
-            </div>
-            {/* Where it has got to, under what it was asked: the description
-                is the same for the agent's whole life, and this is the line
-                that moves. One line, so seven agents still fit. */}
-            {agent.summary && (
-              <div className="truncate pl-4.5 text-muted-foreground/50">
-                {agent.summary}
-              </div>
-            )}
-          </div>
-        ))}
-        {agents.length > AGENTS_SHOWN && (
-          <div className="text-[0.7rem] text-muted-foreground/40">
-            and {agents.length - AGENTS_SHOWN} more
-          </div>
-        )}
-      </div>
+      <span className="text-shimmer">Working…</span>
+      {startedAt !== undefined && <Elapsed startedAt={startedAt} />}
     </div>
   )
 }
 
-/**
- * The spinner's row height, and the label row's, which have to be the same
- * number — see the alignment note above. One constant rather than `h-7` written twice,
- * because the two being equal is not a coincidence anyone reading them would
- * infer.
- */
+/** The loader's row height, shared by the dots' box so they centre on it. */
 const LOADER_H = "h-5"
 
 /**
@@ -112,10 +57,6 @@ function WorkingDots() {
     </div>
   )
 }
-
-/** How many agents are named before the rest become a count. Four is what fits
- * above the composer without the turn's own last line leaving the screen. */
-const AGENTS_SHOWN = 4
 
 /**
  * The running clock beside `Working…`.

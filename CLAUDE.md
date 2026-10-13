@@ -218,6 +218,23 @@ learnings…`, its dialog, `main/learnings.ts`, `shared/learnings.ts` and the
   push event to every window**, and the notification check asks whether _any_
   window is focused. `setAlwaysOnTop` acts on the calling window.
 
+- **`plugins.ts`** — two plugin folders, Obsidian's shape: the **built-in**
+  one (`plugins/<id>/` in this repo, bundled by `scripts/build-plugins.mjs`
+  into `dist-plugins/`, an `extraResources` entry; on until switched off) and
+  the user's `workspace/plugins/<id>/` (off until switched on), filled by
+  **installing** from a folder or a `.zip` (`plugin-install.ts` — copies the
+  three served files under the manifest's id; the same id again updates; the
+  marketplace will call the same `installPlugin`). Listing manifests, `workspace/plugin-data/<id>.json`, and the path the
+  `vsc-plugin://` handler in `protocol.ts` serves — `main.js` and `styles.css`
+  only. Nothing here runs one: the renderer `import()`s it (`lib/plugins/`).
+  **Not a sandbox** — a plugin can reach `window.desktop`. A built-in plugin
+  may import the renderer's **pure** modules and nothing stateful or heavy;
+  what it needs from the app comes through `PluginApp`, and React is **the
+  app's own** (`lib/plugins/shared-modules.ts`, rewritten at build). **Chat
+  export** (`plugins/chat-export/`, the chat row's export items) and the
+  **usage dashboard** (`plugins/usage/`, the rail's `Usage` button) are built-in
+  plugins. `docs/design.md` § Plugins has the argument.
+
 - **There is no `Preview` tab** in the dock any more, and so no `webviewTag`
   (`docs/design.md` § Preview, removed). `saveTextFile` is the one write
   outside the roots — a save dialog names the destination — for a chat's
@@ -581,11 +598,13 @@ by `lib/editor-conflicts.ts` in the file editor (`test/conflicts.ts`),
 naming of a profile's directory (`test/claude-account.ts`),
 `lib/worktree-chat/plan-usage.ts` — the usage meter's words, with
 `main/plan-usage.ts`'s own `readPlanUsage` (`test/plan-usage.ts`),
-`lib/worktree-chat/spend.ts` — the usage dashboard's grouping by day, project,
-model and chat (`test/chat-spend.ts`), `lib/worktree-chat/export.ts` — a chat as
-Markdown (`test/chat-export.ts`; `export-html.ts` is the DOM half),
+`plugins/usage/src/spend.ts` — the usage dashboard's grouping by day, project,
+model and chat (`test/chat-spend.ts`), `plugins/chat-export/src/markdown.ts` — a chat as
+Markdown (`test/chat-export.ts`; `html.ts` is the half that needs the app),
 `lib/appearance.ts` — palettes, fonts, font size and density as root attributes
-and CSS vars (`test/appearance.ts`). Put new logic on that side of the line.
+and CSS vars (`test/appearance.ts`), `lib/plugins/registry.ts` — what a plugin
+registered and taking it back (`test/plugin-registry.ts`, with `main/plugins.ts`
+in `test/plugins.ts` and `main/plugin-install.ts` in `test/plugin-install.ts`). Put new logic on that side of the line.
 
 A terminal selection is put into the chat's composer from outside the pane
 through `lib/worktree-chat/composer-bus.ts`:

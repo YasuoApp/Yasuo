@@ -50,6 +50,7 @@ import { ReplyToSelection } from "./chat-reply"
 import { ChatComposer, type ChatComposerHandle } from "./chat-composer"
 import { ChatActivity, DayDivider } from "./chat-activity"
 import { ChatMessage, type MessageEdit, SubagentSteps } from "./chat-message"
+import { ChatAgents } from "./chat-agents"
 import { ChatSkeleton, ChatTranscriptSkeleton } from "./chat-skeleton"
 import { WorktreeWelcome } from "./worktree-welcome"
 
@@ -1007,7 +1008,7 @@ function Conversation({
                 agents are what is still out there, so they draw their own
                 spinner. */}
                 {(sending || (agents ?? []).length > 0) && !ask && (
-                  <ChatSkeleton startedAt={startedAt} agents={agents} />
+                  <ChatSkeleton startedAt={startedAt} />
                 )}
               </div>
             )}
@@ -1046,6 +1047,7 @@ function Conversation({
 
       <div className="shrink-0 border-t p-3">
         <div className="mx-auto w-full max-w-2xl space-y-1.5">
+          <ChatAgents agents={agents ?? []} />
           <ChatComposer
             // One field per chat: its draft is that chat's, and a field kept
             // across a switch is one draft shared by every conversation.

@@ -24,7 +24,10 @@ import {
   ExternalLink,
   KeyRound,
   Palette,
+  FileArchive,
+  FolderOpen,
   Plus,
+  Puzzle,
   RefreshCw,
   Trash2,
   type LucideIcon,
@@ -43,6 +46,7 @@ import {
   sansFontFamily,
 } from "@/lib/appearance"
 import type { ClaudeVersions } from "@shared/api"
+import { isOn, usePlugins, type PluginStatus } from "@/lib/plugins/store"
 import { useSettings } from "@/lib/settings"
 import { installLabel, pendingUpdate, useUpdates } from "@/lib/updates"
 import {
@@ -54,6 +58,7 @@ import {
 import { useAgentModels } from "@/lib/worktree-chat/models"
 import { ClaudeLoginDialog } from "./claude-login-dialog"
 import { IconButton } from "./icon-button"
+import { OfficialBadge } from "./official-badge"
 import { UpdateProgressBar } from "./update-progress"
 import { ModelMenu, ProfileMenu } from "./worktree/chat-composer"
 import { StateBadge } from "./worktree/chat-mcp"
@@ -142,6 +147,8 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
               <ChatsSection />
             ) : section === "claude" ? (
               <ClaudeSection />
+            ) : section === "plugins" ? (
+              <PluginsSection />
             ) : (
               <UpdatesSection />
             )}
@@ -152,7 +159,8 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   )
 }
 
-type SectionId = "appearance" | "tabs" | "chats" | "claude" | "updates"
+type SectionId =
+  "appearance" | "tabs" | "chats" | "claude" | "plugins" | "updates"
 
 /** The sections, in the order they are listed. Each one is a heading, a line
  * saying what it covers, and the rows below — kept together so adding a
@@ -186,6 +194,12 @@ const SECTIONS: {
     label: "Claude",
     blurb: "Accounts a chat can run under.",
     icon: KeyRound,
+  },
+  {
+    id: "plugins",
+    label: "Plugins",
+    blurb: "Code of your own, run in the studio.",
+    icon: Puzzle,
   },
   {
     id: "updates",
@@ -454,6 +468,180 @@ function ChatsSection() {
       </Row>
     </Card>
   )
+}
+
+/**
+ * The plugins: the built-in ones, then the ones installed from a folder or a
+ * `.zip` — the way in for a plugin made outside the app until there is a
+ * marketplace, which will install through the same `installPlugin`.
+ *
+ * The warning is standing rather than a confirm on the first switch: it is
+ * true of every plugin every time, and a dialog clicked through once says
+ * nothing to whoever switches on the next one. An installed plugin arrives
+ * **off** for the same reason — picking a folder is not the decision to run it.
+ */
+function PluginsSection() {
+  const plugins = usePlugins((state) => state.plugins)
+  const enabled = usePlugins((state) => state.enabled)
+  const disabled = usePlugins((state) => state.disabled)
+  const status = usePlugins((state) => state.status)
+  const refresh = usePlugins((state) => state.refresh)
+  const setEnabled = usePlugins((state) => state.setEnabled)
+  const reload = usePlugins((state) => state.reload)
+  const install = usePlugins((state) => state.install)
+  const remove = usePlugins((state) => state.remove)
+  /** What the last install said: which plugin, or why not. */
+  const [outcome, setOutcome] = useState<{
+    text: string
+    failed: boolean
+  } | null>(null)
+  const [installing, setInstalling] = useState(false)
+
+  useEffect(() => {
+    void refresh()
+  }, [refresh])
+
+  const installFrom = async (source: "folder" | "zip") => {
+    setInstalling(true)
+    try {
+      const installed = await install(source)
+      if (installed) {
+        setOutcome({
+          text: installed.replaced
+            ? `Updated ${installed.name}.`
+            : `Installed ${installed.name}. Switch it on to run it.`,
+          failed: false,
+        })
+      }
+    } catch (error) {
+      setOutcome({ text: messageOfError(error), failed: true })
+    } finally {
+      setInstalling(false)
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs leading-relaxed">
+        A plugin runs inside the studio with the same access the studio has —
+        your files, your terminals, your chats. Built-in plugins come with the
+        app; switch on others only if you wrote or trust them.
+      </p>
+
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={installing}
+            onClick={() => void installFrom("folder")}
+          >
+            <FolderOpen className="size-3.5" />
+            Install from folder…
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={installing}
+            onClick={() => void installFrom("zip")}
+          >
+            <FileArchive className="size-3.5" />
+            Install from .zip…
+          </Button>
+        </div>
+        {/* `polite` so a screen reader hears how the install went, which is
+            otherwise a dialog closing and nothing else. */}
+        <p
+          aria-live="polite"
+          className={cn(
+            "text-xs",
+            outcome?.failed ? "text-destructive" : "text-muted-foreground"
+          )}
+        >
+          {outcome?.text ??
+            "A plugin is a folder with a manifest.json and a main.js. Installing the same id again updates it."}
+        </p>
+      </div>
+
+      {plugins.length === 0 ? null : (
+        <Card>
+          {plugins.map((plugin) => {
+            const on = isOn(plugin, { enabled, disabled })
+            const state = status[plugin.id]
+            const problem = plugin.error ?? failureOf(state)
+            return (
+              <Row
+                key={plugin.id}
+                title={
+                  <span className="inline-flex items-center gap-1.5">
+                    {plugin.manifest
+                      ? `${plugin.manifest.name} ${plugin.manifest.version}`
+                      : plugin.id}
+                    {plugin.bundled && <OfficialBadge />}
+                  </span>
+                }
+                description={
+                  problem ? (
+                    <span className="text-destructive">{problem}</span>
+                  ) : (
+                    (plugin.manifest?.description ?? plugin.id)
+                  )
+                }
+              >
+                <div className="flex items-center gap-1">
+                  {on && (
+                    <IconButton
+                      label="Reload"
+                      onClick={() => void reload(plugin.id)}
+                    >
+                      <RefreshCw className="size-3.5" />
+                    </IconButton>
+                  )}
+                  {/* A built-in plugin is switched off, never removed: it is
+                      part of the app, and the next update would bring it back. */}
+                  {!plugin.bundled && (
+                    <IconButton
+                      label="Remove"
+                      className="hover:text-destructive"
+                      onClick={() =>
+                        void remove(plugin.id).catch((error: unknown) =>
+                          setOutcome({
+                            text: messageOfError(error),
+                            failed: true,
+                          })
+                        )
+                      }
+                    >
+                      <Trash2 className="size-3.5" />
+                    </IconButton>
+                  )}
+                  <Switch
+                    checked={on}
+                    disabled={
+                      (!on && plugin.error !== null) ||
+                      state?.state === "loading"
+                    }
+                    onCheckedChange={(next) => void setEnabled(plugin.id, next)}
+                  />
+                </div>
+              </Row>
+            )
+          })}
+        </Card>
+      )}
+    </div>
+  )
+}
+
+function failureOf(status: PluginStatus | undefined): string | null {
+  return status?.state === "failed" ? status.error : null
+}
+
+/** What crossed the bridge as an error, without Electron's `Error invoking
+ * remote method '…':` in front of the sentence main wrote. */
+function messageOfError(error: unknown): string {
+  const text = error instanceof Error ? error.message : String(error)
+  return text.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, "")
 }
 
 /**
@@ -844,7 +1032,9 @@ function Row({
   description,
   children,
 }: {
-  title: string
+  /** A name, all but always — `ReactNode` because a plugin's carries the
+   * official badge beside it. */
+  title: ReactNode
   /** A sentence, all but always — `ReactNode` because the update row swaps its
    * own for a progress bar while an install runs. */
   description: ReactNode

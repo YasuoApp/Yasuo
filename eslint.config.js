@@ -23,6 +23,7 @@ export default [
     ignores: [
       "dist-electron/**",
       "dist-renderer/**",
+      "dist-plugins/**",
       "release/**",
       "src/renderer/public/**",
       /*

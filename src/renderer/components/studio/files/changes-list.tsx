@@ -472,7 +472,9 @@ function DirRow({
             open && "rotate-90"
           )}
         />
-        <span className="min-w-0 flex-1 truncate text-left text-xs">
+        {/* `leading-normal` for the reason the tree's row gives: `truncate`
+            clips to `text-xs`'s 16px line, and that cut the tail off a `g`. */}
+        <span className="min-w-0 flex-1 truncate text-left text-xs leading-normal">
           {node.label}
         </span>
       </SideRow>
@@ -660,7 +662,12 @@ function ChangeRow({
           ) : (
             <FileIcon filePath={change.path} className="size-3.5" />
           )}
-          <span className={cn("truncate text-xs", GIT_TONES[change.state])}>
+          <span
+            className={cn(
+              "truncate text-xs leading-normal",
+              GIT_TONES[change.state]
+            )}
+          >
             {nameOf(change.path)}
             {change.directory && "/"}
           </span>

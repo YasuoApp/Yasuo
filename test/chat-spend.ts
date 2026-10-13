@@ -12,7 +12,7 @@ import {
   stacksOf,
   topChats,
   totals,
-} from "../src/renderer/lib/worktree-chat/spend"
+} from "../plugins/usage/src/spend"
 import { check, finish, section } from "./harness"
 
 /**

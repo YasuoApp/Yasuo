@@ -5,6 +5,10 @@
 
 @custom-variant dark (&:is(.dark *));
 @source "../**/*.{ts,tsx}";
+/* The built-in plugins draw with this stylesheet's classes, so they are
+   scanned too — see `scripts/build-plugins.mjs`. A user's plugin is not, and
+   brings its own `styles.css`. */
+@source "../../../plugins/**/*.{ts,tsx}";
 
 @theme inline {
   --font-heading: var(--font-sans);

@@ -3,7 +3,7 @@ import {
   chatToMarkdown,
   fileNameOf,
   toolItemOf,
-} from "../src/renderer/lib/worktree-chat/export"
+} from "../plugins/chat-export/src/markdown"
 import { check, finish, section } from "./harness"
 
 /**

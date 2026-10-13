@@ -5,5 +5,5 @@
   // `components.json`, both find the path mapping without having to guess which
   // of the two to open.
   "extends": "./tsconfig.base.json",
-  "include": ["src", "test", "scripts", "vite.config.ts"]
+  "include": ["src", "test", "scripts", "plugins", "vite.config.ts"]
 }

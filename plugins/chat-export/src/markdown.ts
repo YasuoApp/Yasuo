@@ -1,9 +1,9 @@
 import type { AssistantMessage } from "@shared/api"
-import { isAgentTool } from "./activity"
-import { dateTimeOf, timeOf } from "./since"
-import { toolLabel } from "./tool-row"
-import { money, totalOf, usageLine } from "./usage"
-import { compactLine } from "./window"
+import { isAgentTool } from "@/lib/worktree-chat/activity"
+import { dateTimeOf, timeOf } from "@/lib/worktree-chat/since"
+import { toolLabel } from "@/lib/worktree-chat/tool-row"
+import { money, totalOf, usageLine } from "@/lib/worktree-chat/usage"
+import { compactLine } from "@/lib/worktree-chat/window"
 
 /**
  * A chat as a Markdown document: the file `Export as Markdown…` writes, and

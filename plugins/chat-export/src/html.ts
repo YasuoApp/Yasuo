@@ -1,10 +1,10 @@
 import type { AssistantMessage } from "@shared/api"
-import { markdownRenderer } from "@/lib/markdown/renderer"
-import type { ExportChat, ExportOptions } from "./export"
-import { toolRowOf } from "./export"
-import { dateTimeOf, timeOf } from "./since"
-import { money, totalOf, usageLine } from "./usage"
-import { compactLine } from "./window"
+import { dateTimeOf, timeOf } from "@/lib/worktree-chat/since"
+import { money, totalOf, usageLine } from "@/lib/worktree-chat/usage"
+import { compactLine } from "@/lib/worktree-chat/window"
+
+import type { ExportChat, ExportOptions } from "./markdown"
+import { toolRowOf } from "./markdown"
 
 /**
  * A chat as one HTML file: the `Export as HTML…` item.
@@ -16,33 +16,32 @@ import { compactLine } from "./window"
  * one under `prefers-color-scheme` so it reads the way the reader's machine
  * already does.
  *
- * The replies go through the app's own markdown renderer (`markdownRenderer`)
- * rather than a second parser: a table that rendered in the pane has to render
- * the same way in the file, and that is the one guarantee a second library
- * cannot give. It builds DOM, so this half lives in the renderer and is not
- * tested under `bun`; the words and the per-line shapes are `export.ts`'s and
- * are.
+ * The replies go through the app's own markdown renderer — `renderMarkdown` on
+ * the `PluginApp`, which is the transcript's — rather than a second parser
+ * bundled into this plugin: a table that rendered in the pane has to render the
+ * same way in the file, and that is the one guarantee a second library cannot
+ * give. It needs the app, so this half is not tested under `bun`; the words and
+ * the per-line shapes are `markdown.ts`'s and are.
  */
 
 export async function chatToHtml(
   chat: ExportChat,
   lines: AssistantMessage[],
-  options: ExportOptions = {}
+  options: ExportOptions,
+  renderMarkdown: (markdown: string) => Promise<string>
 ): Promise<string> {
-  const render = await markdownRenderer()
-  // A detached container that each reply is serialised through. One for every
-  // line rather than one shared, so a reply that throws mid-render leaves
-  // nothing of itself in the next.
-  const toHtml = (markdown: string): string => {
-    try {
-      const box = document.createElement("div")
-      box.replaceChildren(render(markdown))
-      return box.innerHTML
-    } catch (error) {
-      console.error("Could not render markdown for export", error)
-      return `<p class="plain">${escape(markdown)}</p>`
-    }
-  }
+  // Every reply rendered up front, since the renderer answers asynchronously
+  // and the blocks below are built in one synchronous pass.
+  const rendered = new Map<AssistantMessage, string>()
+  await Promise.all(
+    lines.map(async (line) => {
+      if (line.role === "assistant") {
+        rendered.set(line, await renderMarkdown(line.text))
+      }
+    })
+  )
+  const toHtml = (line: AssistantMessage & { text: string }): string =>
+    rendered.get(line) ?? `<p class="plain">${escape(line.text)}</p>`
 
   const body = lines.map((line) => blockOf(line, toHtml)).join("\n")
   const title = chat.title.trim() || "Untitled chat"
@@ -81,13 +80,13 @@ ${footer}
 
 function blockOf(
   line: AssistantMessage,
-  toHtml: (markdown: string) => string
+  toHtml: (line: AssistantMessage & { text: string }) => string
 ): string {
   switch (line.role) {
     case "user":
       return `<section class="msg user">${who("You", line.at)}<div class="bubble">${escape(line.text)}</div></section>`
     case "assistant":
-      return `<section class="msg claude">${who("Claude", line.at)}<div class="prose">${toHtml(line.text)}</div></section>`
+      return `<section class="msg claude">${who("Claude", line.at)}<div class="prose">${toHtml(line)}</div></section>`
     case "thinking":
       return `<details class="thinking"><summary>Thinking</summary><div class="plain">${escape(line.text)}</div></details>`
     case "tool":

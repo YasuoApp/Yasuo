@@ -17,7 +17,6 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { useStudio } from "@/lib/store"
 import { cn } from "@/lib/utils"
 import {
   byDay,
@@ -33,7 +32,7 @@ import {
   totals,
   type DaySpend,
   type SpendRange,
-} from "@/lib/worktree-chat/spend"
+} from "./spend"
 import { compact, modelLabel } from "@/lib/worktree-chat/usage"
 
 /** The top chats listed at first, and how many each `more` row adds. */
@@ -51,7 +50,7 @@ const MORE_CHATS = 20
  * workbench as a whole rather than about any one project, and a figure read
  * once and closed does not want a tab beside the files. Everything in it is
  * drawn from one read of `chatSpend()` — a row per turn across every chat —
- * folded in `lib/worktree-chat/spend.ts`; nothing here is a second account of
+ * folded in `./spend.ts`; nothing here is a second account of
  * what a chat moved, and the usage line under a chat's composer is the same
  * counts added up one chat at a time.
  *
@@ -71,7 +70,17 @@ const MORE_CHATS = 20
  * else is one `Other` series in the muted ink — a sixth hue is never
  * generated.
  */
-export function CostDashboard({ onClose }: { onClose: () => void }) {
+export function CostDashboard({
+  onClose,
+  loadSpend,
+  folders,
+}: {
+  onClose: () => void
+  /** `app.chats.spend` — the one read everything here is drawn from. */
+  loadSpend: () => Promise<ChatSpend[]>
+  /** The workspace's projects when the dialog opened, for their names. */
+  folders: { id: string; name: string }[]
+}) {
   // The rows and the moment they were read, together: every day in the chart
   // is cut against that `at`, so a dialog left open across midnight keeps the
   // days it was drawn with until Refresh rather than shifting under a hover.
@@ -87,7 +96,7 @@ export function CostDashboard({ onClose }: { onClose: () => void }) {
 
   useEffect(() => {
     let live = true
-    window.desktop.chatSpend().then(
+    loadSpend().then(
       (rows) => {
         if (!live) return
         setLoaded({ rows, at: new Date() })
@@ -103,12 +112,11 @@ export function CostDashboard({ onClose }: { onClose: () => void }) {
     return () => {
       live = false
     }
-  }, [asked])
+  }, [asked, loadSpend])
 
   const rows = loaded?.rows ?? null
   const loading = refreshing || (rows === null && error === null)
 
-  const folders = useStudio((state) => state.folders)
   const projectName = useCallback(
     (id: string | null) => {
       if (id === null || id === NONE) return "No project"

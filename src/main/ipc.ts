@@ -18,12 +18,13 @@ import {
   type WorktreeChatAnswer,
   type WorktreeChatOptions,
 } from "../shared/api"
+import type { PluginFile, PluginSource } from "../shared/plugins"
 import { agentCommands } from "./agent-commands"
 import { agentModels } from "./agent-models"
 import { claudeAccount } from "./claude-auth"
 import { claudeVersions } from "./claude-version"
 import { claudeBinary } from "./claude-bin"
-import { migrateLegacyDataDir } from "./data-dir"
+import { dataDir, migrateLegacyDataDir } from "./data-dir"
 import { WorktreeChats } from "./worktree-chat"
 import { findFavicon, MAX_FAVICON_BYTES } from "./favicon"
 import * as files from "./files"
@@ -47,11 +48,25 @@ import {
 import { ChatNotices, noticeText, type ChatNotice } from "./notify"
 import { installedMcpServers, removeMcpServer } from "./mcp-servers"
 import { planUsage } from "./plan-usage"
+import {
+  installedPluginDir,
+  installPlugin,
+  readPluginFolder,
+  readPluginZip,
+  type PluginFiles,
+} from "./plugin-install"
+import {
+  listAllPlugins,
+  pluginFilePath,
+  pluginRootOf,
+  readPluginData,
+  writePluginData,
+} from "./plugins"
 import { draftCommitMessage } from "./one-turn-agent"
 import type { Host } from "./host"
 import { expandHome, quote } from "./shell-env"
 import { systemUsage } from "./system-usage"
-import { Store } from "./store"
+import { PLUGIN_DATA_DIR, PLUGINS_DIR, Store, WORKSPACE_DIR } from "./store"
 import { installedShells } from "./shells"
 import { TerminalManager } from "./terminal"
 import { TsServers } from "./tsserver"
@@ -167,6 +182,7 @@ export function createIpc(host: Host): {
   watchers: { closeAll: () => void }
   startTray: () => Promise<void>
   noteFilePath: (fileName: string) => string
+  pluginFilePath: (id: string, file: PluginFile) => string
 } {
   // Before anything reads the tree: the store, the daemon's socket, the logs.
   migrateLegacyDataDir()
@@ -1228,6 +1244,59 @@ export function createIpc(host: Host): {
     terminals.cwd(terminalId)
   )
 
+  /*
+   * The plugins: what is on disk, and the one file each may write. Which are
+   * switched on is a setting the renderer keeps, and the renderer is where they
+   * run — see `main/plugins.ts` and `docs/design.md` § Plugins.
+   */
+  const pluginsDir = path.join(dataDir(), WORKSPACE_DIR, PLUGINS_DIR)
+  const pluginDataDir = path.join(dataDir(), WORKSPACE_DIR, PLUGIN_DATA_DIR)
+  const pluginRoots = { bundled: host.bundledPluginsDir, user: pluginsDir }
+
+  handle(IPC.listPlugins, () => listAllPlugins(pluginRoots))
+
+  handle(IPC.readPluginData, (_event, id: string) =>
+    readPluginData(pluginDataDir, id)
+  )
+
+  handle(IPC.writePluginData, (_event, id: string, data: unknown) =>
+    writePluginData(pluginDataDir, id, data)
+  )
+
+  /*
+   * Installing is a picker and a copy — see `main/plugin-install.ts`. Two
+   * sources rather than one picker taking both, because only macOS lets one
+   * dialog choose a folder *or* a file.
+   */
+  handle(IPC.installPlugin, async (_event, source: PluginSource) => {
+    let files: PluginFiles
+    if (source === "folder") {
+      const dir = await host.pickDirectory({
+        title: "Install a plugin from a folder",
+        buttonLabel: "Install",
+      })
+      if (!dir) return null
+      files = await readPluginFolder(dir)
+    } else if (source === "zip") {
+      const [zip] = await host.pickFiles({
+        title: "Install a plugin from a .zip",
+        single: true,
+        filters: [{ name: "Plugin archive", extensions: ["zip"] }],
+      })
+      if (!zip) return null
+      files = readPluginZip(await readFile(zip))
+    } else {
+      throw new Error(`Not a plugin source: ${String(source)}`)
+    }
+    return installPlugin(pluginRoots, files)
+  })
+
+  // To the trash, the way every delete in this app goes. Its saved data is
+  // left where it is, so installing it again picks up where it was.
+  handle(IPC.removePlugin, async (_event, id: string) => {
+    await host.trash(await installedPluginDir(pluginRoots, id))
+  })
+
   handle(IPC.systemUsage, () => systemUsage(host.appShare))
 
   handle(IPC.checkForUpdate, () =>
@@ -1288,5 +1357,8 @@ export function createIpc(host: Host): {
     /** For the `note-file://` handler, which is not an IPC call and so cannot
      * reach the store any other way — see `serveNoteFiles`. */
     noteFilePath: (fileName: string) => store.noteFilePath(fileName),
+    /** For the `vsc-plugin://` handler, the same way — see `servePlugins`. */
+    pluginFilePath: (id: string, file: PluginFile) =>
+      pluginFilePath(pluginRootOf(pluginRoots, id), id, file),
   }
 }

@@ -79,6 +79,19 @@ await new Promise((resolve, reject) => {
   )
 })
 
+// The built-in plugins, once: they are read off `dist-plugins/` when the
+// renderer starts, and a plugin being worked on is rebuilt by running this
+// script again and pressing Reload in Settings › Plugins.
+await new Promise((resolve, reject) => {
+  const build = start("node", ["scripts/build-plugins.mjs"], {
+    cwd: root,
+    stdio: "inherit",
+  })
+  build.on("close", (code) =>
+    code === 0 ? resolve() : reject(new Error(`plugin build failed (${code})`))
+  )
+})
+
 // Vite directly, not through `bun run dev`: that script is this file, and it
 // would call itself.
 const vite = start(bin("vite"), [], {

@@ -1,0 +1,7 @@
+{
+  "id": "chat-counter",
+  "name": "Chat counter",
+  "version": "0.1.0",
+  "description": "Counts the chats in the workspace, and says when one finishes.",
+  "author": "Visual Studio Claude"
+}
