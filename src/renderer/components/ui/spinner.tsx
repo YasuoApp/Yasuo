@@ -1,13 +1,14 @@
 import { cn } from "@/lib/utils"
-import { Loader2Icon } from "lucide-react"
 
-function Spinner({ className, ...props }: React.ComponentProps<"svg">) {
+// The drawing is `.spinner` in `styles/motion.css`, which says why it is not
+// lucide's `Loader2` any more.
+function Spinner({ className, ...props }: React.ComponentProps<"span">) {
   return (
-    <Loader2Icon
+    <span
       data-slot="spinner"
       role="status"
       aria-label="Loading"
-      className={cn("size-4 animate-spin", className)}
+      className={cn("spinner size-4 shrink-0", className)}
       {...props}
     />
   )

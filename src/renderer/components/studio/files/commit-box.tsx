@@ -1,7 +1,8 @@
 import { useState, type KeyboardEvent } from "react"
-import { Check, Loader2 } from "lucide-react"
+import { Check } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { Spinner } from "@/components/ui/spinner"
 import { Claude } from "@/components/ui/svgs/claude"
 import { Textarea } from "@/components/ui/textarea"
 import { useChanges } from "@/lib/files/changes"
@@ -127,7 +128,7 @@ export function CommitBox({ root }: { root: FileRoot }) {
           title="Have Claude write a message from the staged diff"
         >
           {drafting ? (
-            <Loader2 className="size-3 animate-spin" />
+            <Spinner className="size-3" />
           ) : (
             <Claude className="size-3" />
           )}
@@ -156,7 +157,7 @@ export function CommitBox({ root }: { root: FileRoot }) {
           onClick={() => void commit()}
           className="h-6 px-2 text-[0.6875rem]"
         >
-          {committing ? <Loader2 className="size-3 animate-spin" /> : null}
+          {committing ? <Spinner className="size-3" /> : null}
           Commit
         </Button>
       </div>

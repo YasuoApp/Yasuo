@@ -11,7 +11,6 @@ import {
   Copy,
   FileText,
   Hourglass,
-  Loader2,
   PenLine,
   ShieldCheck,
   TriangleAlert,
@@ -31,6 +30,7 @@ import { dateTimeOf, timeOf } from "@/lib/worktree-chat/since"
 import { usageDetail, usageLine } from "@/lib/worktree-chat/usage"
 import { compactLine } from "@/lib/worktree-chat/window"
 import { Button } from "@/components/ui/button"
+import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { MarkdownView } from "../markdown-view"
 import { IconButton } from "../icon-button"
@@ -560,9 +560,9 @@ function ToolRow({
    */
   const mark =
     live && isPending(of) ? (
-      <Loader2
+      <Spinner
         aria-label="Running"
-        className="size-3 shrink-0 translate-y-0.5 animate-spin text-foreground/70"
+        className="size-3 shrink-0 translate-y-0.5 text-foreground/70"
       />
     ) : (
       toolMark(

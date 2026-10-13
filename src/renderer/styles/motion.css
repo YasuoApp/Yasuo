@@ -56,6 +56,10 @@
      passing over the word rather than circling it. */
   --animate-dot: dot 1.2s ease-in-out infinite;
   --animate-shimmer: shimmer 2.4s ease-in-out infinite;
+
+  /* `.spinner`, below. Linear, because an eased turn reads as a stutter once
+     per lap. */
+  --animate-orbit: orbit 0.9s linear infinite;
 }
 
 @keyframes rise {
@@ -130,6 +134,40 @@
   }
 }
 
+@keyframes orbit {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+/*
+ * The studio's spinner (`ui/spinner.tsx`): an arc with a round head and a tail
+ * that fades out, after css-loaders.com's conic one. It replaced lucide's
+ * `Loader2`, whose eight ticks smeared into a grey blot at the 12px most rows
+ * draw it at; one arc stays legible there. Painted in `currentColor`, so a
+ * caller tints it the way it tinted the icon.
+ *
+ * Every length is a share of the box rather than of the font, so the ring is
+ * as thick at `size-3` as its size says and not as the text beside it does —
+ * 17% of the diameter is the head, and the mask's hole is the 66% of the radius
+ * that leaves. `scale` is the icon's own inset: lucide draws its ring in three
+ * quarters of the box, and a spinner swapped in at the same class should not
+ * grow. It is the `scale` property, not a transform, so it composes with the
+ * rotation and with a caller's `translate-*` instead of being replaced by them.
+ */
+.spinner {
+  display: inline-block;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  scale: 0.85;
+  background:
+    radial-gradient(farthest-side, currentColor 94%, #0000) top / 17% 17%
+      no-repeat,
+    conic-gradient(#0000 30%, currentColor);
+  mask: radial-gradient(farthest-side, #0000 66%, #000 calc(66% + 0.5px));
+  animation: var(--animate-orbit);
+}
+
 /*
  * A light passing across a line of text, left to right. It animates
  * `background-position`, the one keyframe here that is not opacity or
@@ -172,7 +210,9 @@
  * The two loops are deliberately left running: they are the only thing on
  * screen saying the launch has not stalled, and a spinner that does not spin
  * is not a calmer app, it is one that looks hung. Both are opacity in place,
- * which is the kind of motion this setting is least aimed at. The chat's dots
+ * which is the kind of motion this setting is least aimed at. `.spinner` keeps
+ * turning for the same reason, and has no opacity loop to fall back to — a
+ * still arc is exactly the hung app. The chat's dots
  * follow the same argument and drop their hop for that same breathing; the
  * shimmer is pure decoration beside them and stops.
  */

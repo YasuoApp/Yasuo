@@ -1,5 +1,6 @@
 import { useState } from "react"
 import {
+  ChevronRight,
   ClipboardCopy,
   ExternalLink,
   FileCode,
@@ -10,7 +11,6 @@ import {
   GitBranchPlus,
   Image as ImageIcon,
   ImageOff,
-  Loader2,
   MessageSquare,
   Pencil,
   Plus,
@@ -35,6 +35,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu"
+import { Spinner } from "@/components/ui/spinner"
 import { cn } from "@/lib/utils"
 import { useProjects } from "@/lib/projects"
 import { projectTree } from "@/lib/project-tree"
@@ -610,17 +611,28 @@ function ProjectRow({
         }
         className={cn(PILL, "font-medium text-foreground")}
       >
+        {/*
+          Open and shut, said once for every row. The folder used to say it by
+          itself, but a project's own picture cannot — so the chevron carries
+          it, on the rows with no picture too, or the column would line up two
+          ways. Pulled into the row's inset so the icon moves as little as it
+          can: the chats underneath are indented against it.
+        */}
+        <ChevronRight
+          aria-hidden
+          className={cn(
+            "-ml-2 size-3 shrink-0 text-muted-foreground transition-transform",
+            !shut && "rotate-90"
+          )}
+        />
         {favicon ? (
           <img
             src={favicon}
             alt=""
             draggable={false}
-            // Dimmed while shut, the one part of the folder's open-and-shut
-            // that a picture can still carry.
-            className={cn(
-              "size-4 shrink-0 rounded-sm object-contain",
-              shut && "opacity-60"
-            )}
+            // Never dimmed: the chevron says open or shut, and a project's own
+            // colours are what make it recognisable at a glance.
+            className="size-4 shrink-0 rounded-sm object-contain"
           />
         ) : (
           <Mark
@@ -664,7 +676,7 @@ function ProjectRow({
             counting something. Only for the working half: a chat stopped on a
             question is the opposite of moving. */}
         {running && activity.waiting === 0 && (
-          <Loader2 className="size-3 shrink-0 animate-spin text-muted-foreground group-hover/project:invisible" />
+          <Spinner className="size-3 shrink-0 text-muted-foreground group-hover/project:invisible" />
         )}
         {running && activity.waiting > 0 && (
           <ShieldQuestion className="size-3 shrink-0 animate-pulse text-primary group-hover/project:invisible" />
@@ -932,7 +944,7 @@ function ProjectChats({
                   {isWaiting ? (
                     <ShieldQuestion className="size-3 shrink-0 animate-pulse text-primary" />
                   ) : isSending ? (
-                    <Loader2 className="size-3 shrink-0 animate-spin text-muted-foreground" />
+                    <Spinner className="size-3 shrink-0 text-muted-foreground" />
                   ) : (
                     isUnread && (
                       // A dot in the slot the other two marks use, so the
