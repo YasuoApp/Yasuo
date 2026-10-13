@@ -237,7 +237,10 @@ export function ProjectsSection() {
         }
         onResetIcon={indent > 0 ? null : () => void resetProjectIcon(folder.id)}
         onRename={() => setRenaming(folder)}
-        onRemove={() => setRemoving(folder)}
+        // A checkout has `Remove worktree…` instead: forgetting the folder alone
+        // would strand the directory and its branch with no row left to reach
+        // them from.
+        onRemove={worktrees[folder.id] ? null : () => setRemoving(folder)}
         // Only for a project that is one: an ordinary folder has no checkout to
         // remove, and a menu item that explained that would be a menu item
         // nobody can use.
@@ -362,18 +365,12 @@ export function ProjectsSection() {
           <AlertDialogHeader>
             <AlertDialogTitle>Remove this project?</AlertDialogTitle>
             {/*
-              The same three sentences Explorer's own dialog says, and
-              deliberately so: this is the same call, and a second wording for it
-              would leave a user comparing two dialogs to work out whether their
-              repository is at stake. The folder is theirs — saying the directory
-              is untouched, by path, is the whole job here.
+              The same sentence Explorer's own dialog says: this is the same
+              call, and a second wording would leave somebody comparing the two
+              to work out whether their repository is at stake.
             */}
             <AlertDialogDescription>
-              “{removing?.name}” is removed from the workspace, along with any
-              tabs open on files inside it and any terminal sessions running in
-              it. The folder itself —{" "}
-              <code className="font-mono">{removing?.path}</code> — is left
-              exactly as it is.
+              The folder stays on disk.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -428,23 +425,13 @@ export function ProjectsSection() {
           <AlertDialogHeader>
             <AlertDialogTitle>Remove this worktree?</AlertDialogTitle>
             {/*
-              The two halves have to be separated here in a way the project
-              dialog never has to: this one **deletes a directory**, and it is
-              the only gesture in the app that does. So the sentence says what
-              goes — the checkout, uncommitted work in it included, since the
-              removal is forced — and what stays, which is the branch and every
-              commit on it.
+              The one gesture in the app that deletes a directory, so it says
+              what goes. No paths: an absolute one under
+              `workspace/worktrees/<uuid>` has nowhere to break and pushed the
+              dialog's grid wider than its card.
             */}
             <AlertDialogDescription>
-              The checkout at{" "}
-              <code className="font-mono">{unchecking?.path}</code> is deleted,
-              along with anything in it that has not been committed. The branch
-              it was on — and every commit already made there — is left alone,
-              and so is the project it was cut from,{" "}
-              <code className="font-mono">
-                {unchecking && worktrees[unchecking.id]}
-              </code>
-              .
+              The checkout, its branch and every chat in it are deleted.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -459,6 +446,8 @@ export function ProjectsSection() {
                 void useStudio
                   .getState()
                   .removeWorktree(folder.id)
+                  // Its chats went with it, main-side.
+                  .then(() => useWorktreeChats.getState().refresh())
                   .catch((error: unknown) =>
                     setFailure(
                       error instanceof Error ? error.message : String(error)

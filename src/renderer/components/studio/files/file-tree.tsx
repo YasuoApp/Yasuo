@@ -605,19 +605,12 @@ export function FileTree({ onAddFolder }: { onAddFolder: () => void }) {
           <AlertDialogHeader>
             <AlertDialogTitle>Remove this folder?</AlertDialogTitle>
             {/*
-              Both consequences, because this is now the only place a folder is
-              removed from: the tabs are this panel's own, and the sessions are
-              killed by the terminal store's subscription to the folder list. The
-              Terminal sidebar's dialog used to be the one that mentioned them.
-              And the folder is the user's own — a dialog that left that in doubt
-              would be asking them to gamble a repository on it.
+              The folder is the user's own — a dialog that left that in doubt
+              would be asking them to gamble a repository on it. No path: a long
+              one has nowhere to break and widens the dialog past its card.
             */}
             <AlertDialogDescription>
-              “{removingFolder?.name}” is removed from the workspace, along with
-              any tabs open on files inside it and any terminal sessions running
-              in it. The folder itself —{" "}
-              <code className="font-mono">{removingFolder?.path}</code> — is
-              left exactly as it is.
+              The folder stays on disk.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

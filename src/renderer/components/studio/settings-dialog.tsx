@@ -172,27 +172,25 @@ const SECTIONS: {
   {
     id: "tabs",
     label: "Tabs & editor",
-    blurb:
-      "Where the workbench's tab strip sits, how much it gathers, and what a file's editor shows beside the code.",
+    blurb: "The tab strip and the editor.",
     icon: Columns2,
   },
   {
     id: "chats",
     label: "Chats",
-    blurb: "What a chat does while you are looking at something else.",
+    blurb: "Notifications while you are away.",
     icon: Bell,
   },
   {
     id: "claude",
     label: "Claude",
-    blurb: "Separate `claude` identities a chat's turns can run under.",
+    blurb: "Accounts a chat can run under.",
     icon: KeyRound,
   },
   {
     id: "updates",
     label: "Updates",
-    blurb:
-      "Which Visual Studio Claude this is, and whether there is a newer one.",
+    blurb: "Version and updates.",
     icon: ArrowUpCircle,
   },
 ]
@@ -223,10 +221,7 @@ function AppearanceSection({ onReplayTour }: { onReplayTour: () => void }) {
   return (
     <div className="space-y-4">
       <Card>
-        <Row
-          title="Theme"
-          description="Follow the system, or pin the studio to one of the two."
-        >
+        <Row title="Theme" description="Follow the system, or pick one.">
           <Segmented
             value={theme ?? "system"}
             options={[
@@ -239,7 +234,7 @@ function AppearanceSection({ onReplayTour }: { onReplayTour: () => void }) {
         </Row>
         <Row
           title="Accent"
-          description="The colour of buttons, selections and the active row, and the tint every grey in the window carries."
+          description="Buttons, selections and the active row."
         >
           <div role="radiogroup" className="flex items-center gap-1.5">
             {ACCENT_PALETTES.map((candidate) => (
@@ -272,10 +267,7 @@ function AppearanceSection({ onReplayTour }: { onReplayTour: () => void }) {
       </Card>
 
       <Card>
-        <Row
-          title="Font"
-          description="The interface's typeface. A family not installed on this machine falls back to the system's."
-        >
+        <Row title="Font" description="The interface font.">
           <FontPicker
             value={fontSans}
             labels={SANS_FONT_LABELS}
@@ -286,7 +278,7 @@ function AppearanceSection({ onReplayTour }: { onReplayTour: () => void }) {
         </Row>
         <Row
           title="Monospace font"
-          description="For code: the editors, the diff and the terminal. Open editors pick it up when they are next opened."
+          description="Editors, diffs and the terminal."
         >
           <FontPicker
             value={fontMono}
@@ -296,10 +288,7 @@ function AppearanceSection({ onReplayTour }: { onReplayTour: () => void }) {
             }}
           />
         </Row>
-        <Row
-          title="Font size"
-          description="Scales the whole window — the rows and paddings go with the text, not only the text."
-        >
+        <Row title="Font size" description="Scales the whole window.">
           <Segmented
             value={fontSize}
             options={[
@@ -314,7 +303,7 @@ function AppearanceSection({ onReplayTour }: { onReplayTour: () => void }) {
         </Row>
         <Row
           title="Density"
-          description="How tightly the sidebar's rows and a chat's turns sit."
+          description="Spacing of sidebar rows and chat turns."
         >
           <Segmented
             value={density}
@@ -331,10 +320,7 @@ function AppearanceSection({ onReplayTour }: { onReplayTour: () => void }) {
       </Card>
 
       <Card>
-        <Row
-          title="Tour"
-          description="The five cards shown on first launch, pointing at the parts of the window."
-        >
+        <Row title="Tour" description="The first-launch walkthrough.">
           <Button
             variant="outline"
             size="sm"
@@ -420,13 +406,13 @@ function TabsSection() {
       */}
       <Row
         title="Group tabs by folder"
-        description="One tab per folder in the strip, with that folder's own files, requests or notes in a second strip inside it. Off, every file and request is a tab of its own."
+        description="One tab per folder, its files in a second strip."
       >
         <Switch checked={groupTabs} onCheckedChange={setGroupTabs} />
       </Row>
       <Row
         title="Show who last changed the line"
-        description="The author, the date and the commit message after the line the caret is on, with the commit in a card when you hover it — the way GitLens does. Read from git blame; nothing leaves this machine."
+        description="Git blame after the current line, like GitLens."
       >
         <Switch checked={gitBlame} onCheckedChange={setGitBlame} />
       </Row>
@@ -458,7 +444,7 @@ function ChatsSection() {
       */}
       <Row
         title="Notify me when a chat finishes"
-        description="A notification when a chat goes quiet, fails, or stops to ask you something — only while this window is not focused, and clicking it opens that chat. Off, the only sign is the row in the sidebar."
+        description="When a chat finishes, fails or asks something, while the window is in the background."
       >
         <Switch checked={on} onCheckedChange={setOn} />
       </Row>
@@ -471,7 +457,7 @@ function ChatsSection() {
       */}
       <Row
         title="Count the chats in the menu bar"
-        description="An icon outside the window carrying how many chats are answering and how many are waiting on you, with a menu naming them. Off, the sidebar row is the only count."
+        description="How many chats are running or waiting on you."
       >
         <Switch checked={tray} onCheckedChange={setTray} />
       </Row>
@@ -517,7 +503,7 @@ function UpdatesSection() {
         title="Version"
         description={
           !check
-            ? "Asking GitHub what is out."
+            ? "Checking…"
             : check.status === "current"
               ? `Visual Studio Claude ${check.current} — the latest release.`
               : `Visual Studio Claude ${check.current}.`
@@ -541,7 +527,7 @@ function UpdatesSection() {
         title="Claude Code"
         description={
           !versions
-            ? "Asking claude for its version."
+            ? "Checking…"
             : `CLI ${versions.cli ?? "not found"} · Agent SDK ${versions.sdk}${
                 versions.error ? ` — ${versions.error}` : ""
               }`
@@ -560,9 +546,9 @@ function UpdatesSection() {
                 <UpdateProgressBar progress={progress} />
               </span>
             ) : update.installable ? (
-              "Installs into /Applications and reopens the app. Terminal sessions and anything running in the dock end with it."
+              "Restarts the app; terminal sessions end."
             ) : (
-              "Installing from inside the app is macOS only — the release page has the build for this machine."
+              "In-app install is macOS only."
             )
           }
         >
@@ -683,7 +669,7 @@ function ClaudeSection() {
             already on disk. */}
         <Row
           title="Helper turns"
-          description="Which model, effort and account the drafted commit message runs on."
+          description="Model and account for drafted commit messages."
         >
           <div className="flex items-center gap-1.5">
             <ModelMenu
@@ -709,10 +695,7 @@ function ClaudeSection() {
 
       <Card>
         {profiles.length === 0 ? (
-          <p className="p-4 text-xs text-muted-foreground">
-            No profiles yet. A chat with none picked runs under the default
-            account above.
-          </p>
+          <p className="p-4 text-xs text-muted-foreground">No profiles yet.</p>
         ) : (
           profiles.map((profile) => (
             <div key={profile.id} className="space-y-2 p-4">
@@ -761,17 +744,6 @@ function ClaudeSection() {
         <Plus data-icon="inline-start" />
         Profile
       </Button>
-
-      <p className="text-xs leading-relaxed text-muted-foreground">
-        Sets <code className="font-mono">CLAUDE_CONFIG_DIR</code> for the turn —
-        the same variable a terminal would export to point{" "}
-        <code className="font-mono">claude</code> at a login, its settings and
-        its conversation history kept apart from the default{" "}
-        <code className="font-mono">~/.claude</code>. Each profile gets a
-        directory of its own under{" "}
-        <code className="font-mono">~/.vsclaude/workspace/claude-profiles</code>
-        , which <strong>Log in</strong> creates and signs in.
-      </p>
     </div>
   )
 }

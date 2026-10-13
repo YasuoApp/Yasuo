@@ -90,7 +90,7 @@ export function Studio() {
     void useSettings.getState().restore()
     void useFiles.getState().restore()
     void useProjects.getState().restore()
-    void useWorktreeChats.getState().refresh()
+    void useWorktreeChats.getState().restore()
     void useClaudeProfiles.getState().refresh()
   }, [])
 
@@ -399,7 +399,7 @@ function Workbench() {
           nothing open at all, or tabs open with none of them on screen. */}
         {!shown && (
           <div className="absolute inset-0">
-            <NothingOpen pane={pane} hasOpenTabs={hasOpenTabs} />
+            <NothingOpen />
           </div>
         )}
       </div>
