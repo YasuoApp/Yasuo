@@ -10,6 +10,7 @@ import {
   OTHER,
   rangeOf,
   stacksOf,
+  topChats,
   totals,
 } from "../src/renderer/lib/worktree-chat/spend"
 import { check, finish, section } from "./harness"
@@ -209,6 +210,22 @@ check(
   "a chat's project rides along",
   chats.find((c) => c.key === "c")!.folderId === null
 )
+check(
+  "the cut folds into one row that adds back up to the totals",
+  (() => {
+    const { top, rest } = topChats(rows, 2)
+    const sum = totals(rows)
+    return (
+      top.map((c) => c.key).join() === "e,d" &&
+      rest !== null &&
+      top.length + rest.chats === sum.chats &&
+      top.reduce((s, c) => s + c.turns, 0) + rest.turns === sum.turns &&
+      top.reduce((s, c) => s + c.tokens, 0) + rest.tokens === sum.tokens
+    )
+  })(),
+  topChats(rows, 2)
+)
+check("nothing cut, no rest row", topChats(rows, 10).rest === null)
 
 section("totals")
 

@@ -521,6 +521,7 @@ section("the model's name, and the numbers")
   check("a thousand gets a digit", compact(38_797) === "38.8k")
   check("and loses it once it says nothing", compact(410_400) === "410k")
   check("millions too", compact(4_180_000) === "4.2M")
+  check("and billions", compact(1_729_000_000) === "1.7B")
   check("a cent is two places", money(0.31) === "$0.31")
   check("under one is four", money(0.0049) === "$0.0049")
 }

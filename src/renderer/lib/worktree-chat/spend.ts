@@ -225,6 +225,31 @@ export function byChat(rows: ChatSpend[]): ChatSpendGroup[] {
   })
 }
 
+/** The chats past a list's cut, folded into one row. */
+export type SpendRest = { chats: number; turns: number; tokens: number }
+
+/**
+ * The first `limit` of `byChat`, and what the cut left out as one row — so
+ * the table's rows add up to the tiles above it rather than to some smaller
+ * number nobody can see the reason for. `rest` is null when nothing was cut.
+ */
+export function topChats(
+  rows: ChatSpend[],
+  limit: number
+): { top: ChatSpendGroup[]; rest: SpendRest | null } {
+  const all = byChat(rows)
+  const cut = all.slice(limit)
+  if (cut.length === 0) return { top: all, rest: null }
+  return {
+    top: all.slice(0, limit),
+    rest: {
+      chats: cut.length,
+      turns: cut.reduce((sum, chat) => sum + chat.turns, 0),
+      tokens: cut.reduce((sum, chat) => sum + chat.tokens, 0),
+    },
+  }
+}
+
 export function totals(rows: ChatSpend[]): SpendTotals {
   const chats = new Set<string>()
   let tokens = 0

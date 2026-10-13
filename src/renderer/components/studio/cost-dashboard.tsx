@@ -20,7 +20,6 @@ import {
 import { useStudio } from "@/lib/store"
 import { cn } from "@/lib/utils"
 import {
-  byChat,
   byDay,
   byModel,
   byProject,
@@ -30,11 +29,16 @@ import {
   rangeOf,
   SPEND_RANGES,
   stacksOf,
+  topChats,
   totals,
   type DaySpend,
   type SpendRange,
 } from "@/lib/worktree-chat/spend"
 import { compact, modelLabel } from "@/lib/worktree-chat/usage"
+
+/** The top chats listed at first, and how many each `more` row adds. */
+const TOP_CHATS = 10
+const MORE_CHATS = 20
 
 /**
  * How many tokens the workspace's chats have moved — the rail's `Usage` button.
@@ -130,7 +134,11 @@ export function CostDashboard({ onClose }: { onClose: () => void }) {
   const sum = useMemo(() => totals(scoped), [scoped])
   const projects = useMemo(() => byProject(scoped), [scoped])
   const models = useMemo(() => byModel(scoped), [scoped])
-  const chats = useMemo(() => byChat(scoped).slice(0, 10), [scoped])
+  const [chatLimit, setChatLimit] = useState(TOP_CHATS)
+  const { top: chats, rest } = useMemo(
+    () => topChats(scoped, chatLimit),
+    [scoped, chatLimit]
+  )
 
   const seriesLabel = (key: string) =>
     key === OTHER
@@ -296,6 +304,9 @@ export function CostDashboard({ onClose }: { onClose: () => void }) {
                   <table className="w-full text-xs">
                     <thead className="text-muted-foreground">
                       <tr className="border-b">
+                        <th className="w-8 py-1.5 pr-2 text-right font-medium">
+                          #
+                        </th>
                         <th className="py-1.5 pr-2 text-left font-medium">
                           Chat
                         </th>
@@ -311,8 +322,11 @@ export function CostDashboard({ onClose }: { onClose: () => void }) {
                       </tr>
                     </thead>
                     <tbody className="tabular-nums">
-                      {chats.map((chat) => (
+                      {chats.map((chat, index) => (
                         <tr key={chat.key} className="border-b last:border-0">
+                          <td className="py-1.5 pr-2 text-right text-muted-foreground">
+                            {index + 1}
+                          </td>
                           <td className="max-w-0 truncate py-1.5 pr-2">
                             {chat.title}
                           </td>
@@ -327,6 +341,37 @@ export function CostDashboard({ onClose }: { onClose: () => void }) {
                           </td>
                         </tr>
                       ))}
+                      {rest && (
+                        <tr
+                          className="cursor-pointer text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                          onClick={() =>
+                            setChatLimit((limit) => limit + MORE_CHATS)
+                          }
+                        >
+                          <td />
+                          <td className="py-1.5 pr-2" colSpan={2}>
+                            + {count(rest.chats)} more{" "}
+                            {rest.chats === 1 ? "chat" : "chats"}
+                          </td>
+                          <td className="py-1.5 pr-2 text-right">
+                            {count(rest.turns)}
+                          </td>
+                          <td className="py-1.5 text-right">
+                            {compact(rest.tokens)}
+                          </td>
+                        </tr>
+                      )}
+                      {chats.length > TOP_CHATS && (
+                        <tr
+                          className="cursor-pointer text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                          onClick={() => setChatLimit(TOP_CHATS)}
+                        >
+                          <td />
+                          <td className="py-1.5" colSpan={4}>
+                            Show top {TOP_CHATS} only
+                          </td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 )}
