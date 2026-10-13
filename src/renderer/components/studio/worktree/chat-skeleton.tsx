@@ -3,7 +3,6 @@ import { useEffect, useState } from "react"
 
 import type { ChatAgent } from "@shared/api"
 import { cn } from "@/lib/utils"
-import { MascotLoader } from "@/components/studio/mascot-loader"
 import { elapsed } from "@/lib/worktree-chat/since"
 
 /**
@@ -12,22 +11,13 @@ import { elapsed } from "@/lib/worktree-chat/since"
  * and read as content arriving that never did — the rows a turn actually draws
  * land within a second of the spinner anyway.
  *
- * This was a 12px `Spinner` on the same line as the label. It is the one of the
- * app's four busy indicators with room for a drawing: the other three
- * (`tab-items.tsx`, `board-card.tsx`, `projects-section.tsx`) are 12–14px icon
- * slots in a row of text, and a 433x230 drawing scaled into one of those is a
- * smudge. They keep their `Loader2`.
+ * The loader is three dots hopping in turn and a light passing over `Working…`
+ * (`styles/motion.css`). It was a GIF swordsman for a while, then a stock
+ * spinner — `docs/design.md` § The chat's loading indicator has why.
  *
- * The loader is 28px, so the label and the agent rows are a **column beside it**
- * rather than lines indented past it. The old layout hung the agent rows off a
- * `pl-5` that had to equal the icon's width plus the gap; a flex column cannot
- * drift out of alignment with the thing above it.
- *
- * `LOADER_H` is on the loader *and* on the label's row, and that pairing is the
- * whole of the vertical alignment: the column is top-aligned, so without a first
- * row as tall as the drawing the label sits against the top of a 28px box and
- * reads as floating above it. Centring the column instead would put the loader
- * halfway down once a few agent rows appear.
+ * The dots sit in a `LOADER_H` box, and that box's height is on the label's
+ * row too: the column is top-aligned so the agent rows hang under the label,
+ * and the dots centre on that first row rather than on the whole column.
  */
 export function ChatSkeleton({
   startedAt,
@@ -39,19 +29,17 @@ export function ChatSkeleton({
 }) {
   return (
     <div className="flex items-start gap-2 px-1 text-xs text-muted-foreground">
-      {/* `label` stays plain English: it is the accessible name, and a screen
-          reader announcing a pun is a screen reader announcing nothing. */}
-      <MascotLoader className={cn(LOADER_H, "shrink-0")} label="Working" />
+      <WorkingDots />
 
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <div className={cn(LOADER_H, "flex items-center gap-2")}>
-          <span className="text-muted-foreground/60">
+          <span className="text-shimmer">
             {/* The count on the loader's own line, because it is the answer to
                 the question somebody is staring at it with: nothing is being
                 written, and this says who is out there working. */}
             {agents.length > 0
-              ? `Hasaging · ${agents.length} ${agents.length === 1 ? "agent" : "agents"}…`
-              : "Hasaging…"}
+              ? `Working · ${agents.length} ${agents.length === 1 ? "agent" : "agents"}…`
+              : "Working…"}
           </span>
           {startedAt !== undefined && <Elapsed startedAt={startedAt} />}
         </div>
@@ -94,12 +82,36 @@ export function ChatSkeleton({
 }
 
 /**
- * The loader's height, and the label row's, which have to be the same number —
- * see the alignment note above. One constant rather than `h-7` written twice,
+ * The spinner's row height, and the label row's, which have to be the same
+ * number — see the alignment note above. One constant rather than `h-7` written twice,
  * because the two being equal is not a coincidence anyone reading them would
  * infer.
  */
-const LOADER_H = "h-7"
+const LOADER_H = "h-5"
+
+/**
+ * Three dots hopping in turn, in the theme's accent. The stagger is a third of
+ * the hop's rise, so one dot is always on its way up — a wave rather than three
+ * dots blinking together.
+ */
+function WorkingDots() {
+  return (
+    <div
+      role="status"
+      aria-label="Working"
+      className={cn(LOADER_H, "flex shrink-0 items-center gap-1 px-0.5")}
+    >
+      {[0, 140, 280].map((delay) => (
+        <span
+          key={delay}
+          aria-hidden
+          className="size-1.25 animate-dot rounded-full bg-primary"
+          style={{ animationDelay: `${delay}ms` }}
+        />
+      ))}
+    </div>
+  )
+}
 
 /** How many agents are named before the rest become a count. Four is what fits
  * above the composer without the turn's own last line leaving the screen. */

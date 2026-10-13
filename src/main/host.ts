@@ -17,6 +17,9 @@ export type Host = {
   pickFiles: (options: {
     title: string
     directory?: string
+    /** One file rather than several. */
+    single?: boolean
+    filters?: { name: string; extensions: string[] }[]
   }) => Promise<string[]>
   /** Asks where to put a text file and writes it; null when cancelled.
    * `caller` is whatever the transport identifies a window by. */
@@ -35,6 +38,9 @@ export type Host = {
   trash: (target: string) => Promise<void>
   /** Shows a path in the OS file manager. */
   reveal: (target: string) => Promise<void>
+  /** Hands a path to the OS as a drag out of the calling window, so it can be
+   * dropped into Finder, Slack, a mail — anywhere that takes a file. */
+  startDrag: (caller: unknown, target: string) => Promise<void>
 
   /** Whether somebody is looking at one of this app's windows right now — the
    * check a notification is skipped on. */

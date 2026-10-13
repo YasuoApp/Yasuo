@@ -1,9 +1,8 @@
 /*
- * The studio's own motion, which is now the launch screen's and nothing else.
- * The chat's loading indicator used to be the other half of this file — an SVG
- * choreographed in five keyframe blocks, then a spritesheet stepped through with
- * `steps()`. It is an animated GIF now and animates itself, so it has no CSS at
- * all; `components/studio/mascot-loader.tsx` is the whole of it.
+ * The studio's own motion: the launch screen's, and the chat's loading
+ * indicator — three dots and a shimmer on `Working…` (`chat-skeleton.tsx`). That
+ * indicator was an SVG choreographed in five keyframe blocks, then a
+ * spritesheet, then a GIF, and briefly a stock spinner.
  *
  * The rest of the studio animates through what shadcn's components bring with
  * them and nothing else. It is a file of its own rather than a block in
@@ -51,6 +50,12 @@
      starting reads as one that is stuck. */
   --animate-breathe: breathe 2.6s ease-in-out infinite;
   --animate-sweep: sweep 1.8s ease-in-out infinite;
+
+  /* The chat's turn indicator. The dots are staggered by the caller; the
+     shimmer holds still for the last third of its cycle so the light reads as
+     passing over the word rather than circling it. */
+  --animate-dot: dot 1.2s ease-in-out infinite;
+  --animate-shimmer: shimmer 2.4s ease-in-out infinite;
 }
 
 @keyframes rise {
@@ -102,6 +107,48 @@
   }
 }
 
+@keyframes dot {
+  0%,
+  70%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0) scale(0.8);
+  }
+  35% {
+    opacity: 1;
+    transform: translateY(-0.1875rem) scale(1);
+  }
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  66%,
+  to {
+    background-position: 0% 0;
+  }
+}
+
+/*
+ * A light passing across a line of text, left to right. It animates
+ * `background-position`, the one keyframe here that is not opacity or
+ * transform — it repaints, but what it repaints is one short word, which is
+ * cheaper than layering a second copy of the text to move a mask over it.
+ */
+.text-shimmer {
+  background-image: linear-gradient(
+    90deg,
+    var(--muted-foreground) 40%,
+    var(--foreground) 50%,
+    var(--muted-foreground) 60%
+  );
+  background-size: 200% 100%;
+  background-clip: text;
+  color: transparent;
+  animation: var(--animate-shimmer);
+}
+
 /*
  * The onboarding tour's spotlight (`onboarding-tour.tsx`) sliding from one
  * target to the next. A transition rather than a keyframe because the
@@ -125,7 +172,9 @@
  * The two loops are deliberately left running: they are the only thing on
  * screen saying the launch has not stalled, and a spinner that does not spin
  * is not a calmer app, it is one that looks hung. Both are opacity in place,
- * which is the kind of motion this setting is least aimed at.
+ * which is the kind of motion this setting is least aimed at. The chat's dots
+ * follow the same argument and drop their hop for that same breathing; the
+ * shimmer is pure decoration beside them and stops.
  */
 @media (prefers-reduced-motion: reduce) {
   :root {
@@ -134,6 +183,8 @@
     --animate-fade: none;
     --animate-pop: none;
     --animate-settle: none;
+    --animate-dot: breathe 1.2s ease-in-out infinite;
+    --animate-shimmer: none;
   }
 
   /* Scoped to the launch screen's own crossfade rather than left to a blanket
@@ -142,14 +193,4 @@
   .tour-spot {
     transition-duration: 1ms !important;
   }
-
-  /*
-   * The chat's loading indicator is **not** here, and cannot be: it is an
-   * animated GIF now, whose clock belongs to the image decoder rather than to
-   * the compositor, so there is no declaration that reaches it. It was an SVG
-   * that dropped its choreography and kept its wind under this setting, then a
-   * spritesheet that could at least be slowed to a third. Switching it off would
-   * mean shipping a still frame as a second asset — see
-   * `components/studio/mascot-loader.tsx`.
-   */
 }

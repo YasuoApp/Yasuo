@@ -12,7 +12,7 @@ import {
   FileText,
   Hourglass,
   Loader2,
-  Pencil,
+  PenLine,
   ShieldCheck,
   TriangleAlert,
 } from "lucide-react"
@@ -346,12 +346,13 @@ function ThinkingRow({
  * The prompt's row of actions — its time, Edit and Copy — under the bubble's
  * end.
  *
- * **Always drawn**, which reverses the hover-only version, and the reason is
- * Edit: a button that cuts the conversation is one somebody has to be able to
- * find without sweeping the cursor over every message to see what lights up.
+ * **Hover-only**, the whole row. It was always drawn for a while, so that Edit
+ * could be found without sweeping the cursor over every message; that was
+ * reversed at the user's request, since a pair of buttons under every bubble
+ * is a column of them down the transcript. `focus-within` keeps the row up
+ * while one of its buttons has keyboard focus, or Tab would land on nothing.
  * Under rather than in the corner: the corner cost the bubble a right padding
- * wide enough for a button, on every line of it. The time alone is still
- * hover-only — a stamp on every bubble is a column of clocks nobody asked for.
+ * wide enough for a button, on every line of it.
  */
 function MessageActions({
   text,
@@ -369,10 +370,8 @@ function MessageActions({
   children?: ReactNode
 }) {
   return (
-    <div className="flex h-5 items-center justify-end gap-0.5 pt-0.5">
-      <span className="mr-1 opacity-0 transition-opacity group-hover:opacity-100">
-        {children}
-      </span>
+    <div className="flex h-5 items-center justify-end gap-0.5 pt-0.5 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
+      <span className="mr-1">{children}</span>
       {canEdit && (
         <IconButton
           label={editLabel}
@@ -380,7 +379,7 @@ function MessageActions({
           onClick={onEdit}
           className="size-5 shrink-0 text-muted-foreground"
         >
-          <Pencil />
+          <PenLine />
         </IconButton>
       )}
       <CopyButton text={text} label="Copy message" />
@@ -472,7 +471,7 @@ function EditMessage({
 /**
  * Copy, with the check and the tooltip saying "Copied" for a moment.
  *
- * Always drawn, like the Edit beside it — see `MessageActions`.
+ * Hover-only, like the Edit beside it — see `MessageActions`.
  */
 function CopyButton({ text, label }: { text: string; label: string }) {
   const [copied, setCopied] = useState(false)

@@ -12,6 +12,12 @@ import { cn } from "@/lib/utils"
  * the button only has to be where the selection ended, which is where the
  * eye is.
  *
+ * **Only on speech.** Both ends of the run have to be inside a `[data-line]` —
+ * a user message or a reply, the two roles `⌘F` searches too. A turn's cost
+ * line, a tool row or the `Working…` under a running turn is the app talking
+ * about the conversation, not anything said in it, and a quote of it is
+ * nothing anybody replies to.
+ *
  * Shown once the mouse is up rather than as the selection grows, because a
  * button that follows the drag sits under the cursor the moment it stops and
  * takes the click that was meant to extend the selection. Keyboard selection
@@ -54,6 +60,10 @@ export function ReplyToSelection({
       }
       const range = selection.getRangeAt(0)
       if (!root.contains(range.commonAncestorContainer)) {
+        setAt(null)
+        return
+      }
+      if (!inSpeech(selection.anchorNode) || !inSpeech(selection.focusNode)) {
         setAt(null)
         return
       }
@@ -124,4 +134,10 @@ export function ReplyToSelection({
       Reply
     </button>
   )
+}
+
+/** Whether a selection's end lies inside something said — see `data-line`. */
+function inSpeech(node: Node | null): boolean {
+  const element = node instanceof Element ? node : node?.parentElement
+  return Boolean(element?.closest("[data-line]"))
 }

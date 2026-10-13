@@ -135,11 +135,12 @@ export function registerIpc(
       return result.canceled ? null : (result.filePaths[0] ?? null)
     },
 
-    async pickFiles({ title, directory }) {
+    async pickFiles({ title, directory, single, filters }) {
       const result = await showOpenDialog({
         title,
-        properties: ["openFile", "multiSelections"],
+        properties: single ? ["openFile"] : ["openFile", "multiSelections"],
         ...(directory ? { defaultPath: directory } : {}),
+        ...(filters ? { filters } : {}),
       })
       return result.canceled ? [] : result.filePaths
     },
@@ -166,6 +167,14 @@ export function registerIpc(
     trash: (target) => shell.trashItem(target),
     async reveal(target) {
       shell.showItemInFolder(target)
+    },
+    async startDrag(caller, target) {
+      const sender = (caller as IpcMainInvokeEvent | undefined)?.sender
+      if (!sender || sender.isDestroyed()) return
+      // macOS refuses a drag with an empty image, and the file's own icon is
+      // what Finder would have shown under the pointer anyway.
+      const icon = await app.getFileIcon(target, { size: "small" })
+      sender.startDrag({ file: target, icon })
     },
 
     // Any window of this app's, not only the studio's: a chat popped out into

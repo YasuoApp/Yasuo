@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto"
 import {
+  copyFile,
   mkdir,
+  readdir,
   readFile,
   realpath,
   rm,
@@ -93,6 +95,9 @@ export const DRAWINGS_DIR = "drawings"
  * file is the document that points at it — see `shared/note-files.ts`.
  */
 export const NOTE_FILES_DIR = "note-files"
+
+/** The pictures chosen for projects' rows — see `Store.projectIconPath`. */
+export const PROJECT_ICONS_DIR = "project-icons"
 
 /**
  * A note file's name, checked before it becomes a filename.
@@ -525,6 +530,70 @@ export class Store {
         })
       )
     })
+  }
+
+  /**
+   * The picture somebody chose for a project's row, or null for one that kept
+   * whatever `findFavicon` finds.
+   *
+   * A copy under the workspace's own files rather than the path it was picked
+   * from: the original is anywhere on the machine — a Downloads folder, a
+   * screenshot's temporary file — and outside every root `files:*` may read.
+   * Named by the folder's id with the picture's own extension, which is what
+   * its MIME type is read off.
+   */
+  projectIconPath(folderId: string): Promise<string | null> {
+    const id = ownId(folderId)
+    const dir = path.join(this.workspaceDir, PROJECT_ICONS_DIR)
+    return this.enqueue(async () => {
+      try {
+        const name = (await readdir(dir)).find(
+          (entry) => path.parse(entry).name === id
+        )
+        return name ? path.join(dir, name) : null
+      } catch (error) {
+        if (isNotFound(error)) return null
+        throw error
+      }
+    })
+  }
+
+  /** Replaces a project's chosen picture with a copy of `source`. */
+  setProjectIcon(folderId: string, source: string): Promise<void> {
+    const id = ownId(folderId)
+    const dir = path.join(this.workspaceDir, PROJECT_ICONS_DIR)
+    return this.enqueue(async () => {
+      await mkdir(dir, { recursive: true })
+      await this.dropProjectIcon(dir, id)
+      await copyFile(
+        source,
+        path.join(dir, id + path.extname(source).toLowerCase())
+      )
+    })
+  }
+
+  /** Forgets a project's chosen picture, so its favicon is looked for again. */
+  clearProjectIcon(folderId: string): Promise<void> {
+    const id = ownId(folderId)
+    const dir = path.join(this.workspaceDir, PROJECT_ICONS_DIR)
+    return this.enqueue(() => this.dropProjectIcon(dir, id))
+  }
+
+  /** Every file under the id, whatever its extension — a `.png` replaced by
+   * an `.svg` would otherwise leave two, and `projectIconPath` pick either. */
+  private async dropProjectIcon(dir: string, id: string): Promise<void> {
+    let entries: string[]
+    try {
+      entries = await readdir(dir)
+    } catch (error) {
+      if (isNotFound(error)) return
+      throw error
+    }
+    await Promise.all(
+      entries
+        .filter((entry) => path.parse(entry).name === id)
+        .map((entry) => rm(path.join(dir, entry), { force: true }))
+    )
   }
 
   /** Where a folder's commands and sessions run. */

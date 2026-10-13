@@ -75,6 +75,7 @@ export function MarkdownView({
       try {
         node.replaceChildren(sanitizeHtml(markdownToHTML(source)))
         if (baseDir) resolveLocalImages(node, baseDir)
+        addCopyButtons(node)
       } catch (error) {
         console.error("Could not render markdown", error)
         // The same fallback as `failed` below, put in place rather than flagged:
@@ -123,10 +124,61 @@ export function MarkdownView({
   return (
     <div
       ref={host}
-      onClick={(event) => followLink(event, baseDir)}
+      onClick={(event) => {
+        if (copyCode(event)) return
+        followLink(event, baseDir)
+      }}
       className={cn("markdown-prose text-sm", className)}
     />
   )
+}
+
+const COPY_ICON =
+  '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>'
+const CHECK_ICON = '<path d="M20 6 9 17l-5-5"/>'
+
+function iconSvg(paths: string): string {
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`
+}
+
+/**
+ * A Copy button on every fence of a file — a README's `docker ps` is there to
+ * be pasted into a shell. A file only: a chat reply has its one Copy on the
+ * turn's cost line (`replyOf`), and a button per fence there would be a second.
+ *
+ * Plain DOM, like the document it goes into, with lucide's two paths by hand
+ * rather than a React root per fence. The `<pre>` is wrapped because it scrolls
+ * sideways, and a button positioned inside it would scroll away with the text.
+ */
+function addCopyButtons(host: HTMLElement): void {
+  for (const pre of Array.from(host.querySelectorAll("pre"))) {
+    const frame = document.createElement("div")
+    frame.className = "markdown-code"
+    pre.replaceWith(frame)
+    const button = document.createElement("button")
+    button.type = "button"
+    button.className = "markdown-code-copy"
+    button.title = "Copy"
+    button.setAttribute("aria-label", "Copy code")
+    button.innerHTML = iconSvg(COPY_ICON)
+    frame.append(pre, button)
+  }
+}
+
+/** A click on a fence's Copy, answered here; true when it was one. */
+function copyCode(event: MouseEvent<HTMLDivElement>): boolean {
+  if (!(event.target instanceof Element)) return false
+  const button = event.target.closest<HTMLButtonElement>(".markdown-code-copy")
+  if (!button || !event.currentTarget.contains(button)) return false
+  const text = button.parentElement?.querySelector("pre")?.textContent ?? ""
+  void navigator.clipboard.writeText(text.replace(/\n$/, ""))
+  button.innerHTML = iconSvg(CHECK_ICON)
+  button.title = "Copied"
+  setTimeout(() => {
+    button.innerHTML = iconSvg(COPY_ICON)
+    button.title = "Copy"
+  }, 1200)
+  return true
 }
 
 /**
