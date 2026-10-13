@@ -21,7 +21,6 @@ import { getSetting, setSetting } from "./workspace"
 const SETTINGS_KEY = "workbench.settings"
 
 type Stored = {
-  groupTabs: boolean
   /**
    * The diff view's two: the committed side beside the working one or the two
    * interleaved, and whether whitespace is drawn.
@@ -66,6 +65,13 @@ type Stored = {
    */
   gitBlame: boolean
   /**
+   * Every project's tabs in the strip at once, rather than only the project
+   * being worked in (`inScope` in `lib/panels.ts`). Off by default: per project
+   * is how the strip has always been, and nothing closes either way — turning
+   * it back off only stops drawing the other projects' tabs.
+   */
+  allProjectTabs: boolean
+  /**
    * The chat composer's field, dragged taller by its top edge — in pixels, or
    * null for the height its text gives it. One for every chat rather than per
    * chat: it is how much room somebody likes to write in, not something about a
@@ -78,15 +84,13 @@ function isStored(value: unknown): value is Stored {
   // Every field is optional since `tabsPlacement` went, so this is the whole of
   // what tells a bag from a stored `null` — which would otherwise pass and be
   // spread over the defaults as though it had parsed. A leftover
-  // `tabsPlacement` key is ignored rather than rejected: what is on disk is
-  // left alone, and the next `save()` stops writing it.
+  // `tabsPlacement` or `groupTabs` key is ignored rather than rejected: what is
+  // on disk is left alone, and the next `save()` stops writing it.
   if (typeof value !== "object" || value === null) return false
   const record = value as Partial<Stored>
   return (
-    // Absent from anything written before grouping existed, which is read as
-    // off — the arrangement somebody already has is the one they chose. The two
-    // diff flags are the same story, one feature later.
-    (record.groupTabs === undefined || typeof record.groupTabs === "boolean") &&
+    // Absent from anything written before the diff flags existed, which is read
+    // as the default.
     (record.diffSideBySide === undefined ||
       typeof record.diffSideBySide === "boolean") &&
     (record.diffWhitespace === undefined ||
@@ -110,6 +114,8 @@ function isStored(value: unknown): value is Stored {
     (record.density === undefined || isDensity(record.density)) &&
     (record.onboarded === undefined || typeof record.onboarded === "boolean") &&
     (record.gitBlame === undefined || typeof record.gitBlame === "boolean") &&
+    (record.allProjectTabs === undefined ||
+      typeof record.allProjectTabs === "boolean") &&
     (record.composerHeight === undefined ||
       record.composerHeight === null ||
       typeof record.composerHeight === "number")
@@ -143,7 +149,6 @@ type SettingsState = Stored & {
    */
   chatTray: boolean
 
-  setGroupTabs: (group: boolean) => void
   setChatNotifications: (on: boolean) => void
   setChatTray: (on: boolean) => void
   setDiffSideBySide: (sideBySide: boolean) => void
@@ -162,6 +167,7 @@ type SettingsState = Stored & {
   setOnboarded: (onboarded: boolean) => void
   setGitBlame: (on: boolean) => void
   setComposerHeight: (height: number | null) => void
+  setAllProjectTabs: (on: boolean) => void
   /** Reads the stored preferences. Called once, at launch. */
   restore: () => Promise<void>
 }
@@ -188,7 +194,6 @@ export const useSettings = create<SettingsState>((set, get) => {
    */
   const save = () => {
     const {
-      groupTabs,
       diffSideBySide,
       diffWhitespace,
       reviewModel,
@@ -201,10 +206,10 @@ export const useSettings = create<SettingsState>((set, get) => {
       density,
       onboarded,
       gitBlame,
+      allProjectTabs,
       composerHeight,
     } = get()
     remember(SETTINGS_KEY, {
-      groupTabs,
       diffSideBySide,
       diffWhitespace,
       reviewModel,
@@ -217,12 +222,12 @@ export const useSettings = create<SettingsState>((set, get) => {
       density,
       onboarded,
       gitBlame,
+      allProjectTabs,
       composerHeight,
     })
   }
 
   return {
-    groupTabs: false,
     // Side by side is what a diff is for — two columns to compare — and the
     // toolbar is one click away for a pane too narrow to hold them.
     diffSideBySide: true,
@@ -236,15 +241,11 @@ export const useSettings = create<SettingsState>((set, get) => {
     // preference somebody already made.
     onboarded: false,
     gitBlame: true,
+    allProjectTabs: false,
     composerHeight: null,
     chatNotifications: true,
     chatTray: true,
     loaded: false,
-
-    setGroupTabs(groupTabs) {
-      set({ groupTabs })
-      save()
-    },
 
     setChatNotifications(chatNotifications) {
       set({ chatNotifications })
@@ -314,6 +315,11 @@ export const useSettings = create<SettingsState>((set, get) => {
 
     setGitBlame(gitBlame) {
       set({ gitBlame })
+      save()
+    },
+
+    setAllProjectTabs(allProjectTabs) {
+      set({ allProjectTabs })
       save()
     },
 

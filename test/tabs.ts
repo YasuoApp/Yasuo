@@ -3,6 +3,7 @@ import {
   bare,
   kindOf,
   neighbour,
+  orderWhere,
   PREFIX,
 } from "../src/renderer/lib/tabs"
 import { check, finish, section } from "./harness"
@@ -170,6 +171,40 @@ check(
     prefixes.every((other) => one === other || !other.startsWith(one))
   ),
   prefixes
+)
+
+/*
+ * The strip is per project, so a drag in it has only ever seen *some* of what
+ * the panel holds — and the panel's `reorder` replaces its whole list. This is
+ * what keeps the tabs of the project nobody is looking at from closing on a drag.
+ */
+section("dragging a strip that is only part of what a panel holds")
+
+const held = ["App.tsx", "store.ts", "index.css", "main.go", "db.sql"]
+const shown = (id: string) => !["main.go", "db.sql"].includes(id)
+
+check(
+  "the shown tabs are reordered",
+  orderWhere(held, shown, ["index.css", "App.tsx", "store.ts"]).join() ===
+    ["index.css", "App.tsx", "store.ts", "main.go", "db.sql"].join()
+)
+
+check(
+  "and the ones the strip never drew are still there, in their own slots",
+  orderWhere(held, shown, ["index.css", "App.tsx", "store.ts"])
+    .filter((id) => !shown(id))
+    .join() === ["main.go", "db.sql"].join()
+)
+
+check(
+  "a list missing one of the shown tabs is refused rather than closing it",
+  orderWhere(held, shown, ["index.css", "App.tsx"]).join() === held.join()
+)
+
+check(
+  "and so is one naming a tab the strip was not drawing",
+  orderWhere(held, shown, ["App.tsx", "store.ts", "main.go"]).join() ===
+    held.join()
 )
 
 finish()

@@ -3,7 +3,6 @@ import { useEffect } from "react"
 import {
   closeAllTabs,
   closeOtherTabs,
-  closeShownTab,
   closeTab,
   keepTab,
   reorderTabs,
@@ -34,13 +33,9 @@ import { TabStrip } from "./tab-strip"
  * The order that results cannot live in any one panel — a request between two
  * tables is a position none of the three stores has anywhere to record — so it
  * is `tabOrder` on the studio store, and the panels keep only their own
- * membership. `arrange` in `lib/tabs.ts` reconciles the two.
- *
- * A tab here is not always one thing open. With grouping on, a panel's tabs are
- * gathered under the folder each belongs to and this strip holds one tab per
- * folder, with `GroupTabs` drawing that folder's own tabs inside it. Which ids
- * that leaves is `tabIds` in `lib/panels.ts`; what each of them looks like is
- * `useTabItems`, shared with the strip inside.
+ * membership. `arrange` in `lib/tabs.ts` reconciles the two. Which ids that
+ * leaves is `tabIds` in `lib/panels.ts`; what each of them looks like is
+ * `useTabItems`.
  */
 export function WorkspaceTabs({ pane }: { pane: Pane }) {
   // Read for the subscription: the strip is `tabIds` reconciled against this,
@@ -73,7 +68,7 @@ export function WorkspaceTabs({ pane }: { pane: Pane }) {
       if (!activeId) return
 
       event.preventDefault()
-      closeShownTab(activeId)
+      closeTab(activeId)
     }
 
     window.addEventListener("keydown", onKeyDown, { capture: true })
@@ -86,9 +81,8 @@ export function WorkspaceTabs({ pane }: { pane: Pane }) {
    * `⌘⇧[` / `⌘⇧]` and `⌘1`…`⌘9` — walking the strip from the keyboard.
    *
    * Over `items` rather than the panels' own lists, because the strip is the
-   * order somebody can see: with grouping on a step lands on the next *folder*,
-   * which is what the next tab on screen is. Wraps at either end, as a browser
-   * does. `⌘9` is the last tab however many there are.
+   * order somebody can see. Wraps at either end, as a browser does. `⌘9` is the
+   * last tab however many there are.
    */
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -125,7 +119,7 @@ export function WorkspaceTabs({ pane }: { pane: Pane }) {
   useEffect(
     () =>
       window.desktop.onMenuCommand((command) => {
-        if (command === "close-tab" && activeId) closeShownTab(activeId)
+        if (command === "close-tab" && activeId) closeTab(activeId)
       }),
     [activeId]
   )

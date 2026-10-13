@@ -48,7 +48,6 @@ import {
   SPLASH_FADE_MS,
 } from "./splash"
 import { HAS_TRAFFIC_LIGHTS, IS_MAC, TitleBarDragStrip } from "./title-bar"
-import { GroupTabs } from "./group-tabs"
 import { WorkspaceTabs } from "./workspace-tabs"
 
 /** What each pane on the rail shows. Built here rather than inline so the
@@ -238,9 +237,12 @@ function Workbench() {
    * later and in the layer that is allowed to know about both.
    */
   const activeFolderId = useProjects((state) => state.activeFolderId)
+  // And when the strip goes back to one project: the pane may be on a tab of
+  // another one that it was showing a moment ago.
+  const allProjectTabs = useSettings((state) => state.allProjectTabs)
   useEffect(() => {
     reconcileScope()
-  }, [activeFolderId])
+  }, [activeFolderId, allProjectTabs])
 
   /*
    * The sidebar's own panel, collapsed rather than unmounted.
@@ -367,11 +369,6 @@ function Workbench() {
    */
   const paneContent = (
     <div className="flex h-full min-h-0 min-w-0 flex-col" data-tour="composer">
-      {/* The strip inside the tab on screen, when the panel is grouping its
-          tabs under the folder each belongs to — between the workbench's own
-          strip and the pane. */}
-      <GroupTabs pane={pane} />
-
       <div className="relative min-h-0 flex-1 overflow-hidden">
         {/*
         Every panel is hidden rather than unmounted, and built the first time it

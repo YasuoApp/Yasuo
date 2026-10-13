@@ -508,7 +508,7 @@ app minted, only while `isUntitledBranch` still holds, never one the user named.
   its bands through whatever pane was showing.
 - **`PANELS` in `lib/panels.ts` is where a tab's identity lives.** `rootOf` says
   which project a tab belongs to (it is in the strip only while that project is
-  active); `groupOf` says what a folder means per panel when grouping is on. A
+  active, unless the `allProjectTabs` setting lifts the scope in `inScope`). A
   panel that leaves `rootOf` off is one whose tabs belong to the _workspace_
   rather than to a project, and so never leave the strip.
   `reconcileScope` is called from an effect in `studio.tsx`, not from `setActive`
@@ -549,8 +549,7 @@ app minted, only while `isUntitledBranch` still holds, never one the user named.
 
 Logic worth testing is split out from the drawing: `lib/worktree-chat/activity.ts`
 (`test/chat-activity.ts`), `lib/worktree-chat/usage.ts` (`test/chat-usage.ts`),
-`lib/tab-groups.ts`
-(`test/tab-groups.ts`), `lib/files/roots.ts` (`test/file-roots.ts`),
+`lib/tabs.ts` (`test/tabs.ts`), `lib/files/roots.ts` (`test/file-roots.ts`),
 `lib/worktree-chat/running.ts` (`test/chat-running.ts`) with `main/notify.ts`'s
 own `ChatNotices` (`test/notify.ts`),
 `lib/worktree-chat/tool-row.ts` — a tool call as `verb · object · outcome`,
