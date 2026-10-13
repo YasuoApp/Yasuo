@@ -17,21 +17,6 @@ export const PREFIX: Record<Pane, string> = {
 }
 
 /**
- * What marks a tab id as a *group's* rather than one of the panel's own.
- *
- * A grouped strip holds one tab per folder, and that tab has to be addressable
- * exactly like any other — the order, the drag, `⌘W` and `neighbour` all work
- * on strip ids and must not learn a second shape. So a group is
- * `api:@<folderId>` where one of its requests is `api:<requestId>`.
- *
- * A character rather than a longer marker, and this one because no id it has to
- * stay clear of can start with it: a file tab is an absolute path, and the rest
- * are uuids. Without it the API panel would collide with itself — a folder
- * there can be open as a tab *and* be the group its requests gather into.
- */
-export const GROUP = "@"
-
-/**
  * Which panel a strip id belongs to.
  *
  * **Read off `PREFIX` rather than listed here**, and that is the whole point:
@@ -53,26 +38,39 @@ export function kindOf(id: string): Pane | null {
   return null
 }
 
-/** The id as its own panel knows it, with the prefix taken back off. Still
- * carries the `GROUP` marker when it is a group's — `isGroup` is the question,
- * and `bareGroup` takes the marker off. */
+/** The id as its own panel knows it, with the prefix taken back off. */
 export function bare(id: string, kind: Pane): string {
   return id.slice(PREFIX[kind].length)
 }
 
-/** The strip id of one group of a panel's tabs. */
-export function groupTabId(kind: Pane, group: string): string {
-  return PREFIX[kind] + GROUP + group
-}
+/**
+ * The list with the items `picks` matches replaced by `members`, written back
+ * into the slots they already occupy.
+ *
+ * In place rather than appended, which is the whole point: the strip is per
+ * project, so a drag in it has only ever seen *some* of what a panel holds, and
+ * it must not move — or, through a `reorder` that replaces the whole list,
+ * close — the tabs of a project that is not on screen.
+ *
+ * A `members` that does not name exactly what `picks` matches is refused: a
+ * stale list is a list some of whose tabs have closed, and dropping them here
+ * would close them a second way.
+ */
+export function orderWhere<T>(
+  items: T[],
+  picks: (item: T) => boolean,
+  members: T[]
+): T[] {
+  const own = items.filter(picks)
+  if (
+    members.length !== own.length ||
+    !members.every((member) => own.includes(member))
+  ) {
+    return items
+  }
 
-/** Whether a bare id names a group rather than one of the panel's own tabs. */
-export function isGroup(bareId: string): boolean {
-  return bareId.startsWith(GROUP)
-}
-
-/** The group's own id — a folder id — with the marker taken back off. */
-export function bareGroup(bareId: string): string {
-  return bareId.slice(GROUP.length)
+  let next = 0
+  return items.map((item) => (picks(item) ? members[next++]! : item))
 }
 
 /**

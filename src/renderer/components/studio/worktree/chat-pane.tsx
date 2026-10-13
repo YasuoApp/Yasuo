@@ -67,8 +67,7 @@ import { WorktreeWelcome } from "./worktree-welcome"
  * removed, and came here with it: this is the only chat left in the app.
  *
  * One pane for every chat, keyed by which one the strip has selected — the tabs
- * above it are `lib/panels.ts`'s, gathered under the project when grouping is
- * switched on.
+ * above it are `lib/panels.ts`'s.
  */
 export function WorktreeChatPane({
   chatId,

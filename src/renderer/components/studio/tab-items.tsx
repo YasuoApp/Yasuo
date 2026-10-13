@@ -5,10 +5,9 @@ import { useChanges } from "@/lib/files/changes"
 import { isDeleted, isDirty, useFiles } from "@/lib/files/store"
 import { gitStateOf, GIT_TONES, useGitStatus } from "@/lib/files/git-status"
 import { nameOf } from "@/lib/files/paths"
-import { groupRootId } from "@/lib/panels"
-import { useTabGroups } from "@/lib/panels"
-import { useStudio, type Pane } from "@/lib/store"
-import { groupTabId, PREFIX } from "@/lib/tabs"
+import { useSettings } from "@/lib/settings"
+import { useStudio } from "@/lib/store"
+import { PREFIX } from "@/lib/tabs"
 import { useWorktreeChats } from "@/lib/worktree-chat/store"
 import { FileIcon } from "./file-icon"
 import type { TabStripItem } from "./tab-strip"
@@ -17,14 +16,9 @@ import type { TabStripItem } from "./tab-strip"
  * What every open tab looks like, by the id the strip addresses it with.
  *
  * The one thing about a tab that is genuinely its own panel's — its label, its
- * icon, the line it shows on hover, the dot on a file with unsaved edits. Both
- * strips draw from this: the workbench's, which holds a mixture of four
- * panels', and the one inside a folder's tab, which holds one panel's members.
- * They were the same code twice for as long as the second one existed.
+ * icon, the line it shows on hover, the dot on a file with unsaved edits.
  *
  * Keyed by strip id, so a caller with a list of ids has nothing left to decide.
- * A group's own tab is in here too, under `api:@<folderId>` — see `groupItem`
- * for what a folder's tab says that its members do not.
  */
 export function useTabItems(): Map<string, TabStripItem> {
   const chats = useWorktreeChats((state) => state.chats)
@@ -53,8 +47,7 @@ export function useTabItems(): Map<string, TabStripItem> {
   const gitStatus = useGitStatus()
 
   const workspaceFolders = useStudio((state) => state.folders)
-
-  const groups = useTabGroups()
+  const allProjectTabs = useSettings((state) => state.allProjectTabs)
 
   const items = new Map<string, TabStripItem>()
   const add = (item: TabStripItem) => items.set(item.id, item)
@@ -111,7 +104,9 @@ export function useTabItems(): Map<string, TabStripItem> {
 
     add({
       id: PREFIX.changes + rootId,
-      label: "Changes",
+      // Unless the strip holds every project's tabs, where *here* is no longer
+      // said by the strip and four tabs reading `Changes` are four guesses.
+      label: allProjectTabs && folder ? `Changes · ${folder}` : "Changes",
       icon: <GitCompare className="size-3.5 shrink-0" />,
       // Nothing until the first read, and nothing for a clean project: a badge
       // reading zero is a thing to notice saying there is nothing to notice.
@@ -131,9 +126,7 @@ export function useTabItems(): Map<string, TabStripItem> {
     const chat = chats.find((candidate) => candidate.id === id)
     if (!chat) continue
 
-    // Which project it is in, on hover, because the label cannot carry it:
-    // ungrouped, two chats in two projects are two titles side by side with
-    // nothing saying which is which.
+    // Which project it is in, on hover, because the label cannot carry it.
     const where = workspaceFolders.find(
       (folder) => folder.id === chat.folderId
     )?.name
@@ -179,81 +172,5 @@ export function useTabItems(): Map<string, TabStripItem> {
     })
   }
 
-  /*
-   * And the folders' own tabs, for whichever panels are grouping.
-   *
-   * Built from the members above rather than beside them: what a folder's tab
-   * says is what its members say, gathered — the icon of the one on screen, the
-   * dot if any of them is unsaved, and how many there are.
-   */
-  for (const { pane, group, members, shown } of groups) {
-    const memberItems = members.flatMap((member) => {
-      const item = items.get(PREFIX[pane] + member)
-      return item ? [item] : []
-    })
-    const front = items.get(PREFIX[pane] + shown) ?? memberItems[0]
-    if (!front) continue
-
-    const name = groupName(pane, group, { workspaceFolders })
-
-    add({
-      id: groupTabId(pane, group),
-      label: name,
-      // The icon of the tab it is showing, so the strip says what is on screen
-      // rather than only which folder it came from.
-      icon: front.icon,
-      title: `${name} — ${front.label}`,
-      // A folder is unsaved if anything filed under it is: the dot has to
-      // survive being folded away, or closing the tab would be the first thing
-      // to mention the edits inside it.
-      dirty: memberItems.some((item) => item.dirty),
-      // Only from the second onwards — a folder holding one tab has nothing to
-      // count, and the number would read as part of the name.
-      note: members.length > 1 ? String(members.length) : undefined,
-    })
-  }
-
   return items
-}
-
-/** A group's own name: the folder it stands for, or what the panel calls the
- * tabs that are filed under nothing. */
-function groupName(
-  pane: Pane,
-  group: string,
-  lists: {
-    workspaceFolders: { id: string; name: string }[]
-  }
-): string {
-  // A chat's group is where it runs, and its id is a root's — the project.
-  const rootId = groupRootId(group)
-  if (rootId) {
-    return (
-      lists.workspaceFolders.find((entry) => entry.id === rootId)?.name ??
-      // Between the project leaving the workspace and its chats closing.
-      "Project"
-    )
-  }
-
-  const found = {
-    files: lists.workspaceFolders,
-    // `Changes` has no `groupOf` either, for the reason a chat's group is
-    // never reached: there is one of these per project already.
-    changes: [],
-    // Every chat is in a project, so the name above is always the answer and
-    // this is never reached for one.
-    worktree: [],
-  }[pane].find((folder) => folder.id === group)
-
-  if (found) return found.name
-
-  // The top level of a panel's own tree, which is a real place to file a
-  // request or a note rather than an absence of one — so it is named for the
-  // panel, not "Ungrouped". A file is always inside a root, so it only reaches
-  // here between a folder going and its tabs closing.
-  return {
-    files: "Files",
-    worktree: "Chats",
-    changes: "",
-  }[pane]
 }

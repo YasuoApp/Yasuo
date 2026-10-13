@@ -376,17 +376,21 @@ strip is restored on reload, each record reconciled against what exists. Panels
 and tabs switched away from are **hidden, not unmounted**, so scroll, undo and
 carets survive — except the diff (see below).
 
+### One project's tabs, or every project's
+
+A file, a chat and a `Changes` tab belong to a project (`rootOf`), and by
+default the strip holds only the active project's; the rest stay open and come
+back with their project. Settings › Tabs & editor › **Show tabs from every
+project** (`allProjectTabs`) lifts that in `inScope`, so the strip, the pane,
+`⌘W`, a drag and Close All all see every project's tabs; picking one moves the
+active project to it. A `Changes` tab adds its project's name in that mode.
+Turning it off closes nothing — `reconcileScope` moves the pane back into the
+active project.
+
 ### The preview tab
 
 A single click in the tree opens an italic **preview** tab that the next single
 click replaces; a double click or a keystroke keeps it. Only the tree previews.
-
-### Grouped tabs
-
-Settings › Tabs can gather tabs under one tab per folder, with an inner strip.
-Off by default, and no panel is an exception. `groupOf` says what a folder is per
-panel; `lib/tab-groups.ts` is the pure half (tested). A folder's tab closes
-everything under it; `⌘W` still closes one tab.
 
 ## Search
 
@@ -669,6 +673,16 @@ the user's own browser.
 
 The strip as a column beside the pane. Nine `vertical` branches in one component
 for a layout that took width from the pane.
+
+### Grouped tabs, removed
+
+A setting gathering a panel's tabs under one tab per folder, with a second strip
+inside it. The strip is already per project, so the folder a tab would fold
+under was nearly always the one on screen; what replaced it is the choice
+between that and every project's tabs at once (§ One project's tabs, or every
+project's). `orderWhere`, the in-place reorder
+that keeps another project's tabs from closing on a drag, moved to `lib/tabs.ts`.
+A stored `groupTabs` key is ignored.
 
 ### The assistant, removed
 

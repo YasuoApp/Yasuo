@@ -388,27 +388,18 @@ function previewFamily(value: string): string {
 }
 
 function TabsSection() {
-  const groupTabs = useSettings((state) => state.groupTabs)
-  const setGroupTabs = useSettings((state) => state.setGroupTabs)
+  const allProjectTabs = useSettings((state) => state.allProjectTabs)
+  const setAllProjectTabs = useSettings((state) => state.setAllProjectTabs)
   const gitBlame = useSettings((state) => state.gitBlame)
   const setGitBlame = useSettings((state) => state.setGitBlame)
 
   return (
     <Card>
-      {/*
-        Off by default: the strip somebody already has is the one they chose,
-        and a preference that rearranges every open tab the first time the app
-        launches is not a default, it is a surprise.
-
-        The sessions are not mentioned because they are not affected — they have
-        always been gathered this way, for a reason that is theirs alone: a tab
-        there stands for a process rather than for something the user opened.
-      */}
       <Row
-        title="Group tabs by folder"
-        description="One tab per folder, its files in a second strip."
+        title="Show tabs from every project"
+        description="Off: only the project you are working in."
       >
-        <Switch checked={groupTabs} onCheckedChange={setGroupTabs} />
+        <Switch checked={allProjectTabs} onCheckedChange={setAllProjectTabs} />
       </Row>
       <Row
         title="Show who last changed the line"
