@@ -119,21 +119,28 @@
   );
   --primary: oklch(0.54 0.2 277);
   --primary-foreground: oklch(0.99 0.005 277);
-  --secondary: oklch(0.965 calc(0.006 * var(--brand-tint)) var(--brand-hue));
+  /*
+   * Measured against the dark half rather than chosen by eye, because a light
+   * ground punishes the same alpha harder: `text-muted-foreground/70` blends
+   * toward white, and at 0.52 it came out 2.95:1 where dark's was 4:1, with
+   * a hover (`--accent`) only 1.16:1 off the page. These put both halves at
+   * roughly the same ratios — muted text ~7:1, a selected row ~1.25:1.
+   */
+  --secondary: oklch(0.952 calc(0.008 * var(--brand-tint)) var(--brand-hue));
   --secondary-foreground: oklch(
     0.3 calc(0.03 * var(--brand-tint)) var(--brand-hue)
   );
-  --muted: oklch(0.965 calc(0.006 * var(--brand-tint)) var(--brand-hue));
+  --muted: oklch(0.952 calc(0.008 * var(--brand-tint)) var(--brand-hue));
   --muted-foreground: oklch(
-    0.52 calc(0.02 * var(--brand-tint)) var(--brand-hue)
+    0.46 calc(0.022 * var(--brand-tint)) var(--brand-hue)
   );
-  --accent: oklch(0.945 calc(0.014 * var(--brand-tint)) var(--brand-hue));
+  --accent: oklch(0.92 calc(0.018 * var(--brand-tint)) var(--brand-hue));
   --accent-foreground: oklch(
     0.34 calc(0.11 * var(--brand-tint)) var(--brand-hue)
   );
   --destructive: oklch(0.58 0.22 25);
-  --border: oklch(0.9 calc(0.006 * var(--brand-tint)) var(--brand-hue));
-  --input: oklch(0.9 calc(0.008 * var(--brand-tint)) var(--brand-hue));
+  --border: oklch(0.88 calc(0.008 * var(--brand-tint)) var(--brand-hue));
+  --input: oklch(0.87 calc(0.01 * var(--brand-tint)) var(--brand-hue));
   --ring: oklch(0.6 0.19 277);
 
   /*
@@ -219,12 +226,14 @@
   --sidebar-primary: oklch(0.54 0.2 277);
   --sidebar-primary-foreground: oklch(0.99 0.005 277);
   --sidebar-accent: oklch(
-    0.94 calc(0.016 * var(--brand-tint)) var(--brand-hue)
+    0.915 calc(0.02 * var(--brand-tint)) var(--brand-hue)
   );
   --sidebar-accent-foreground: oklch(
     0.32 calc(0.11 * var(--brand-tint)) var(--brand-hue)
   );
-  --sidebar-border: oklch(0.9 calc(0.006 * var(--brand-tint)) var(--brand-hue));
+  --sidebar-border: oklch(
+    0.88 calc(0.008 * var(--brand-tint)) var(--brand-hue)
+  );
   --sidebar-ring: oklch(0.6 0.19 277);
 
   /*

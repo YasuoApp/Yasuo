@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react"
-import { CircleAlert, Loader2 } from "lucide-react"
+import { CircleAlert } from "lucide-react"
 
+import { Spinner } from "@/components/ui/spinner"
 import { cn } from "@/lib/utils"
 import {
   dayDividerBetween,
@@ -138,9 +139,9 @@ function ToolGroup({
       >
         <Chevron open={open} />
         {running ? (
-          <Loader2
+          <Spinner
             aria-label="Running"
-            className="size-3 shrink-0 translate-y-0.5 animate-spin text-foreground/70"
+            className="size-3 shrink-0 translate-y-0.5 text-foreground/70"
           />
         ) : (
           toolMark(lines[0]!.name, "size-3 shrink-0 translate-y-0.5")
@@ -205,9 +206,9 @@ function Fold({
             what is running now, and that something failed, are the two
             things that cannot wait for somebody to think of opening it. */}
         {running && (
-          <Loader2
+          <Spinner
             aria-hidden
-            className="size-3 shrink-0 translate-y-0.5 animate-spin text-foreground/70"
+            className="size-3 shrink-0 translate-y-0.5 text-foreground/70"
           />
         )}
         {!running && (counts.failed ?? 0) > 0 && (

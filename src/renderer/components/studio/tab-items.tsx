@@ -1,10 +1,6 @@
-import {
-  GitCompare,
-  Loader2,
-  MessageSquare,
-  ShieldQuestion,
-} from "lucide-react"
+import { GitCompare, MessageSquare, ShieldQuestion } from "lucide-react"
 
+import { Spinner } from "@/components/ui/spinner"
 import { useChanges } from "@/lib/files/changes"
 import { isDeleted, isDirty, useFiles } from "@/lib/files/store"
 import { gitStateOf, GIT_TONES, useGitStatus } from "@/lib/files/git-status"
@@ -156,7 +152,7 @@ export function useTabItems(): Map<string, TabStripItem> {
       icon: waiting ? (
         <ShieldQuestion className="size-3.5 shrink-0 animate-pulse text-primary" />
       ) : chatSending.includes(id) ? (
-        <Loader2 className="size-3.5 shrink-0 animate-spin text-muted-foreground" />
+        <Spinner className="size-3.5 shrink-0 text-muted-foreground" />
       ) : unread ? (
         // In the icon's own slot rather than beside it, so the label starts on
         // the same pixel either way — a tab that grew by a dot would shift every
