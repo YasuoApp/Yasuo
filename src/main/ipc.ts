@@ -827,6 +827,8 @@ export function createIpc(host: Host): {
    * Answers rather than throws: a draft that did not arrive leaves the box exactly as it was, which is a message somebody
    * types themselves.
    */
+  /** The draft running per folder, so `Stop` has something to abort. */
+  const drafts = new Map<string, AbortController>()
   handle(
     IPC.draftCommitMessage,
     async (
@@ -835,14 +837,29 @@ export function createIpc(host: Host): {
       model: string | null,
       effort: string | null,
       profileId: string | null
-    ) =>
-      draftCommitMessage({
-        cwd: await store.resolveFolderDir(folderId),
-        model,
-        effort,
-        configDir: await configDirOf(profileId),
-      })
+    ) => {
+      // A second press for the same folder replaces the first rather than
+      // running beside it: the box has one message to put an answer in.
+      drafts.get(folderId)?.abort()
+      const controller = new AbortController()
+      drafts.set(folderId, controller)
+      try {
+        return await draftCommitMessage({
+          cwd: await store.resolveFolderDir(folderId),
+          model,
+          effort,
+          configDir: await configDirOf(profileId),
+          signal: controller.signal,
+        })
+      } finally {
+        if (drafts.get(folderId) === controller) drafts.delete(folderId)
+      }
+    }
   )
+
+  handle(IPC.cancelCommitDraft, (_event, folderId: string) => {
+    drafts.get(folderId)?.abort()
+  })
 
   /**
    * The new files a discard could not restore, moved to the trash.

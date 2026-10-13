@@ -78,6 +78,8 @@ const api: DesktopApi = {
       effort,
       profileId
     ),
+  cancelCommitDraft: (folderId) =>
+    ipcRenderer.invoke(IPC.cancelCommitDraft, folderId),
   fileDiff: (filePath) => ipcRenderer.invoke(IPC.fileDiff, filePath),
   imageAtHead: (filePath) => ipcRenderer.invoke(IPC.imageAtHead, filePath),
   gitBlame: (filePath, text) =>

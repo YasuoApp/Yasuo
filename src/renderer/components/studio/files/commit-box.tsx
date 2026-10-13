@@ -1,13 +1,12 @@
-import { useState, type KeyboardEvent } from "react"
+import type { KeyboardEvent } from "react"
 import { Check } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { Claude } from "@/components/ui/svgs/claude"
 import { Textarea } from "@/components/ui/textarea"
-import { useChanges } from "@/lib/files/changes"
+import { useCommitBox, useCommitBoxes } from "@/lib/files/commit-box"
 import type { FileRoot } from "@/lib/files/roots"
-import { useSettings } from "@/lib/settings"
 import { isStudioShortcut } from "@/lib/shortcuts"
 
 /**
@@ -33,75 +32,19 @@ import { isStudioShortcut } from "@/lib/shortcuts"
  * would be a second meaning for `Staged` two rows below it.
  */
 export function CommitBox({ root }: { root: FileRoot }) {
-  const [message, setMessage] = useState("")
-  const [committing, setCommitting] = useState(false)
-  const [drafting, setDrafting] = useState(false)
-  /** git's own refusal, or the draft's — drawn until the next attempt. Not a
-   * toast: what it is about is on screen, and the message it happened to is
-   * still in the box. */
-  const [error, setError] = useState<string | null>(null)
-  /** What the last commit was, until the next word is typed. The list empties
-   * itself the moment a commit lands, so without this the only sign that
-   * anything happened is rows disappearing — which is also what `Discard all`
-   * looks like. */
-  const [done, setDone] = useState<string | null>(null)
-
-  const busy = committing || drafting
-
-  async function commit() {
-    if (!message.trim() || busy) return
-    setCommitting(true)
-    setError(null)
-    try {
-      const written = await useChanges.getState().commit(root, message)
-      setMessage("")
-      setDone(`${written.sha} · ${written.subject}`)
-    } catch (failed) {
-      setError(failed instanceof Error ? failed.message : String(failed))
-    } finally {
-      setCommitting(false)
-    }
-  }
-
-  async function draft() {
-    if (busy) return
-    setDrafting(true)
-    setError(null)
-    const settings = useSettings.getState()
-    // Settings › `Commit message drafts`, because this is the one read-only `claude`
-    // with one place to be configured.
-    const answer = await window.desktop
-      .draftCommitMessage(
-        root.folderId,
-        settings.reviewModel,
-        settings.reviewEffort,
-        settings.reviewProfileId
-      )
-      .catch((failed: unknown) => ({
-        error: failed instanceof Error ? failed.message : String(failed),
-      }))
-    setDrafting(false)
-
-    if ("error" in answer) {
-      setError(answer.error)
-      return
-    }
-    // Replaced, not appended, and this is the one place the draft touches
-    // something the user may have typed — which is why the button is theirs to
-    // press and why what lands is editable rather than committed.
-    setMessage(answer.text.trim())
-  }
+  // In a store rather than `useState`: this box is unmounted by switching the
+  // `Git` tab to `Commits`, and a draft or a typed message has to survive that.
+  const { message, committing, drafting, error, done } = useCommitBox(root.id)
+  const boxes = useCommitBoxes.getState()
+  const commit = () => boxes.commit(root)
+  const draft = () => boxes.draft(root)
+  const stopDraft = () => boxes.stopDraft(root)
 
   return (
     <div className="flex flex-col gap-1.5 border-b border-border/60 px-3 py-2">
       <Textarea
         value={message}
-        onChange={(event) => {
-          setMessage(event.target.value)
-          // The last commit's line goes the moment the next message starts:
-          // it describes what is no longer on screen.
-          if (done) setDone(null)
-        }}
+        onChange={(event) => boxes.setMessage(root.id, event.target.value)}
         onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => {
           // ⌘⏎ commits, which is the shortcut every message box in every forge
           // and editor has. A bare Enter must not: a commit message has a body,
@@ -122,17 +65,21 @@ export function CommitBox({ root }: { root: FileRoot }) {
         <Button
           size="sm"
           variant="secondary"
-          disabled={busy}
-          onClick={() => void draft()}
+          disabled={committing}
+          onClick={() => (drafting ? stopDraft() : void draft())}
           className="h-6 gap-1.5 px-2 text-[0.6875rem]"
-          title="Have Claude write a message from the staged diff"
+          title={
+            drafting
+              ? "Stop drafting"
+              : "Have Claude write a message from the staged diff"
+          }
         >
           {drafting ? (
             <Spinner className="size-3" />
           ) : (
             <Claude className="size-3" />
           )}
-          Draft
+          {drafting ? "Stop" : "Draft"}
         </Button>
 
         <div className="min-w-0 flex-1 truncate text-[0.6875rem] text-muted-foreground">
@@ -153,7 +100,7 @@ export function CommitBox({ root }: { root: FileRoot }) {
 
         <Button
           size="sm"
-          disabled={busy || !message.trim()}
+          disabled={committing || !message.trim()}
           onClick={() => void commit()}
           className="h-6 px-2 text-[0.6875rem]"
         >
