@@ -35,6 +35,7 @@ import { ExplorerRail } from "./files/explorer-rail"
 import { ChangesPane } from "./files/changes-pane"
 import { FileWorkspace } from "./files/file-workspace"
 import { AddFolderDialog } from "./add-folder-dialog"
+import { ClaudeSetup, useClaudeSetup } from "./claude-setup"
 import { CommandPalette } from "./command-palette"
 import { CostDashboard } from "./cost-dashboard"
 import { NothingOpen } from "./nothing-open"
@@ -111,7 +112,20 @@ export function Studio() {
   const settingsLoaded = useSettings((state) => state.loaded)
   const onboarded = useSettings((state) => state.onboarded)
   const setOnboarded = useSettings((state) => state.setOnboarded)
-  const touring = launch === "done" && settingsLoaded && !onboarded
+  /** Whether there is a `claude` to chat with — see `ClaudeSetup`. Its screen
+   * goes first and the tour waits on it, since a tour of chats is no use to a
+   * machine that cannot have one yet. */
+  const setup = useClaudeSetup()
+  const [setupSkipped, setSetupSkipped] = useState(false)
+  const setupStep =
+    setup.step === "install" || setup.step === "signIn" ? setup.step : null
+  const settingUp = launch === "done" && !setupSkipped && setupStep !== null
+  const touring =
+    launch === "done" &&
+    settingsLoaded &&
+    !onboarded &&
+    setup.step !== "checking" &&
+    !settingUp
 
   /*
    * The manifest is a small file on a local disk and usually lands well inside
@@ -155,6 +169,15 @@ export function Studio() {
     <>
       {launch !== "splash" && <Workbench />}
       {launch !== "done" && <Splash closing={launch === "closing"} />}
+      {settingUp && setupStep && (
+        <ClaudeSetup
+          step={setupStep}
+          versions={setup.versions}
+          checking={setup.checking}
+          onRecheck={() => void setup.recheck()}
+          onSkip={() => setSetupSkipped(true)}
+        />
+      )}
       {touring && <OnboardingTour onDone={() => setOnboarded(true)} />}
       {/* The launch screen has nothing clickable, so the top of the window is
           its drag handle. Owned here rather than by the splash because it has to

@@ -1008,7 +1008,10 @@ function Row({
         {lead}
         <span
           className={cn(
-            "truncate",
+            // `truncate` clips to the span's own box, and `text-xs`'s 16px
+            // line is shorter than a Windows sans font's descent: the tail of
+            // a `g` was cut off. The row is taller than this either way.
+            "truncate leading-normal",
             dirty && "italic",
             // Git's colour, and only where git has something to say — a
             // tracked file with no changes is the ordinary row and stays the
