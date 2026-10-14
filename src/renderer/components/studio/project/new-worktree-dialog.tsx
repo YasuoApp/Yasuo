@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/combobox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Spinner } from "@/components/ui/spinner"
 
 import { useProjects } from "@/lib/projects"
 import { useShells } from "@/lib/shell/store"
@@ -181,7 +182,10 @@ export function NewWorktreeDialog({
     <Dialog
       open
       onOpenChange={(next) => {
-        if (!next) onClose()
+        // Not while git is making it: the checkout lands either way, and a
+        // dialog shut halfway is a project appearing with nothing that said
+        // one was coming — or a refusal with nowhere left to show it.
+        if (!next && !adding) onClose()
       }}
     >
       <DialogContent className="sm:max-w-lg">
@@ -193,84 +197,95 @@ export function NewWorktreeDialog({
         </DialogHeader>
 
         <form onSubmit={(event) => void submit(event)} className="space-y-4">
-          <div>
-            <Label htmlFor={branchId} className="text-xs font-medium">
-              Branch <span className="text-muted-foreground">(optional)</span>
-            </Label>
-            <BranchField
-              id={branchId}
-              value={branch}
-              autoFocus
-              onChange={(next) => {
-                setBranch(next)
-                if (!named) setName(next)
-              }}
-              placeholder="feature/sso"
-              groups={checkoutGroups}
-            />
-            <p className="mt-1.5 text-xs text-muted-foreground">
-              {existing
-                ? "Exists already — it will be checked out as it is."
-                : "Leave empty to name it after the first chat."}
-            </p>
-          </div>
+          {/* `contents`, so the fieldset only carries `disabled` down to every
+              field while the form's own spacing still applies. */}
+          <fieldset disabled={adding} className="contents">
+            <div>
+              <Label htmlFor={branchId} className="text-xs font-medium">
+                Branch <span className="text-muted-foreground">(optional)</span>
+              </Label>
+              <BranchField
+                id={branchId}
+                value={branch}
+                autoFocus
+                onChange={(next) => {
+                  setBranch(next)
+                  if (!named) setName(next)
+                }}
+                placeholder="feature/sso"
+                groups={checkoutGroups}
+                disabled={adding}
+              />
+              <p className="mt-1.5 text-xs text-muted-foreground">
+                {existing
+                  ? "Exists already — it will be checked out as it is."
+                  : "Leave empty to name it after the first chat."}
+              </p>
+            </div>
 
-          <div>
-            <Label htmlFor={baseId} className="text-xs font-medium">
-              From <span className="text-muted-foreground">(optional)</span>
-            </Label>
-            <BranchField
-              id={baseId}
-              value={base}
-              onChange={setBase}
-              placeholder={options?.current ?? "HEAD"}
-              groups={baseGroups}
-              disabled={existing}
-            />
-          </div>
+            <div>
+              <Label htmlFor={baseId} className="text-xs font-medium">
+                From <span className="text-muted-foreground">(optional)</span>
+              </Label>
+              <BranchField
+                id={baseId}
+                value={base}
+                onChange={setBase}
+                placeholder={options?.current ?? "HEAD"}
+                groups={baseGroups}
+                disabled={existing || adding}
+              />
+            </div>
 
-          <div>
-            <Label htmlFor={nameId} className="text-xs font-medium">
-              Name <span className="text-muted-foreground">(optional)</span>
-            </Label>
-            <Input
-              id={nameId}
-              value={name}
-              onChange={(event) => {
-                setNamed(true)
-                setName(event.target.value)
-              }}
-              className="mt-1.5"
-            />
-          </div>
+            <div>
+              <Label htmlFor={nameId} className="text-xs font-medium">
+                Name <span className="text-muted-foreground">(optional)</span>
+              </Label>
+              <Input
+                id={nameId}
+                value={name}
+                onChange={(event) => {
+                  setNamed(true)
+                  setName(event.target.value)
+                }}
+                className="mt-1.5"
+              />
+            </div>
 
-          <div>
-            <Label htmlFor={setupId} className="text-xs font-medium">
-              Setup <span className="text-muted-foreground">(optional)</span>
-            </Label>
-            <Input
-              id={setupId}
-              value={setup ?? ""}
-              onChange={(event) => setSetup(event.target.value)}
-              placeholder="bun install"
-              spellCheck={false}
-              className="mt-1.5 font-mono text-xs"
-            />
-            <p className="mt-1.5 text-xs text-muted-foreground">
-              Runs in a terminal in the new checkout.
-              {options?.includes &&
-                " Files listed in .worktreeinclude are copied first."}
-            </p>
-          </div>
+            <div>
+              <Label htmlFor={setupId} className="text-xs font-medium">
+                Setup <span className="text-muted-foreground">(optional)</span>
+              </Label>
+              <Input
+                id={setupId}
+                value={setup ?? ""}
+                onChange={(event) => setSetup(event.target.value)}
+                placeholder="bun install"
+                spellCheck={false}
+                className="mt-1.5 font-mono text-xs"
+              />
+              <p className="mt-1.5 text-xs text-muted-foreground">
+                Runs in a terminal in the new checkout.
+                {options?.includes &&
+                  " Files listed in .worktreeinclude are copied first."}
+              </p>
+            </div>
+          </fieldset>
 
           {error && <p className="text-xs text-destructive">{error}</p>}
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onClose}
+              disabled={adding}
+            >
               Cancel
             </Button>
             <Button type="submit" disabled={adding}>
-              Create
+              {adding && <Spinner className="size-3.5" />}
+              {adding ? "Creating…" : "Create"}
             </Button>
           </DialogFooter>
         </form>
