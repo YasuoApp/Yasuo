@@ -44,6 +44,8 @@ import {
   File,
   FileCode,
   Image,
+  Link,
+  Link2,
   FilePlus,
   Folder,
   FolderOpen,
@@ -112,6 +114,10 @@ const CREATING_WORDS: Record<
  * rows whose answer changes re-render as the pointer moves.
  */
 const DropTarget = createContext<string | null>(null)
+
+/** The path `Cut` is holding, drawn faded until it is pasted — VS Code's way of
+ * saying the row is about to leave. A context for the reason `DropTarget` is. */
+const CutPath = createContext<string | null>(null)
 
 const carriesFiles = (event: DragEvent) =>
   [...event.dataTransfer.types].includes("Files")
@@ -430,44 +436,50 @@ export function FileTree({ onAddFolder }: { onAddFolder: () => void }) {
             }
           >
             <DropTarget.Provider value={dropDir}>
-              {/* No heading over the list, and no row for the root itself. The
+              <CutPath.Provider value={copied?.cut ? copied.path : null}>
+                {/* No heading over the list, and no row for the root itself. The
                 tree is one project's files, so a row saying which one would be
                 a row every file is indented under for no answer it gives —
                 which project and which branch is the bar above, where it can be
                 read with the list scrolled. */}
-              {shown && folder ? (
-                <Directory
-                  dir={shown.path}
-                  depth={0}
-                  onMenu={(entry) => setMenuTarget({ kind: "entry", entry })}
-                />
-              ) : (
-                /* A workspace pointed at nothing used to draw an empty list and
+                {shown && folder ? (
+                  <Directory
+                    dir={shown.path}
+                    depth={0}
+                    onMenu={(entry) => setMenuTarget({ kind: "entry", entry })}
+                  />
+                ) : (
+                  /* A workspace pointed at nothing used to draw an empty list and
                  say nothing, because `Add folder` was a button in the header
                  directly above it. It is not any more, and a blank column whose
                  only way forward is a right-click is a dead end — so the way in
                  is drawn where the files would have been. Only for a workspace
                  with no folders at all: a folder that is merely empty has a
                  root bar above it saying which one it is. */
-                folders.length === 0 && (
-                  <Empty className="border-0 py-8">
-                    <EmptyHeader>
-                      <EmptyTitle className="text-sm">
-                        No folders yet
-                      </EmptyTitle>
-                      <EmptyDescription>
-                        Point the workspace at a directory on this machine.
-                      </EmptyDescription>
-                    </EmptyHeader>
-                    <EmptyContent>
-                      <Button size="sm" variant="outline" onClick={onAddFolder}>
-                        <FolderPlus />
-                        Add folder…
-                      </Button>
-                    </EmptyContent>
-                  </Empty>
-                )
-              )}
+                  folders.length === 0 && (
+                    <Empty className="border-0 py-8">
+                      <EmptyHeader>
+                        <EmptyTitle className="text-sm">
+                          No folders yet
+                        </EmptyTitle>
+                        <EmptyDescription>
+                          Point the workspace at a directory on this machine.
+                        </EmptyDescription>
+                      </EmptyHeader>
+                      <EmptyContent>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={onAddFolder}
+                        >
+                          <FolderPlus />
+                          Add folder…
+                        </Button>
+                      </EmptyContent>
+                    </Empty>
+                  )
+                )}
+              </CutPath.Provider>
             </DropTarget.Provider>
           </ContextMenuTrigger>
         )}
@@ -647,7 +659,7 @@ export function FileTree({ onAddFolder }: { onAddFolder: () => void }) {
               void navigator.clipboard.writeText(menuTarget.entry.path)
             }
           >
-            <Copy />
+            <Link />
             Copy path
           </ContextMenuItem>
           {shown && (
@@ -658,7 +670,7 @@ export function FileTree({ onAddFolder }: { onAddFolder: () => void }) {
                 )
               }
             >
-              <Copy />
+              <Link2 />
               Copy relative path
             </ContextMenuItem>
           )}
@@ -950,7 +962,7 @@ function RootMenu({
         Collapse all
       </ContextMenuItem>
       <ContextMenuItem onClick={() => void navigator.clipboard.writeText(path)}>
-        <Copy />
+        <Link />
         Copy path
       </ContextMenuItem>
       <ContextMenuItem onClick={() => void window.desktop.revealPath(path)}>
@@ -1052,6 +1064,7 @@ function Row({
   const directory = entry.kind === "directory"
   const dropDir = directory ? entry.path : parentOf(entry.path)
   const dropping = useContext(DropTarget) === entry.path && directory
+  const cut = useContext(CutPath) === entry.path
   const Icon = directory
     ? open
       ? FolderOpen
@@ -1138,6 +1151,7 @@ function Row({
       <SideRow
         active={active}
         indent={depth}
+        className={cn(cut && "opacity-50")}
         // The state in words as well as in colour: the hover line is the only
         // thing that says what a green name means to somebody who has not
         // learnt the palette, or who cannot see it.
