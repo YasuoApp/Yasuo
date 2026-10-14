@@ -42,24 +42,30 @@ export function CommitBox({ root }: { root: FileRoot }) {
 
   return (
     <div className="flex flex-col gap-1.5 border-b border-border/60 px-3 py-2">
-      <Textarea
-        value={message}
-        onChange={(event) => boxes.setMessage(root.id, event.target.value)}
-        onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => {
-          // ⌘⏎ commits, which is the shortcut every message box in every forge
-          // and editor has. A bare Enter must not: a commit message has a body,
-          // and this is the field it is typed in.
-          // Lowercased, which is what `isStudioShortcut` compares against.
-          if (!isStudioShortcut(event.nativeEvent, "enter")) return
-          event.preventDefault()
-          void commit()
-        }}
-        placeholder="Message (⌘⏎ to commit)"
-        // Two lines to start with, which is a subject and the blank line under
-        // it — the shape of the message this is for. It grows as one is typed.
-        rows={2}
-        className="min-h-14 resize-none text-xs"
-      />
+      {/* `rounded-lg` is the textarea's own, which the ring inherits. */}
+      <div
+        className="border-run rounded-lg"
+        data-running={drafting || undefined}
+      >
+        <Textarea
+          value={message}
+          onChange={(event) => boxes.setMessage(root.id, event.target.value)}
+          onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => {
+            // ⌘⏎ commits, which is the shortcut every message box in every forge
+            // and editor has. A bare Enter must not: a commit message has a body,
+            // and this is the field it is typed in.
+            // Lowercased, which is what `isStudioShortcut` compares against.
+            if (!isStudioShortcut(event.nativeEvent, "enter")) return
+            event.preventDefault()
+            void commit()
+          }}
+          placeholder="Message (⌘⏎ to commit)"
+          // Two lines to start with, which is a subject and the blank line under
+          // it — the shape of the message this is for. It grows as one is typed.
+          rows={2}
+          className="min-h-14 resize-none text-xs"
+        />
+      </div>
 
       <div className="flex items-center gap-1.5">
         <Button
