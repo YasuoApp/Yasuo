@@ -135,6 +135,7 @@ async function oneTurn(request: {
         onCompacted: () => {},
         onBusy: () => {},
         onAgents: () => {},
+        onDequeued: () => {},
         onTurn: (error) => {
           const text = said.join("\n\n").trim()
           if (error) return finish({ error })

@@ -150,11 +150,11 @@ type ChatState = {
    * The messages sent into a chat that was already working, by chat id.
    *
    * **A message sent mid-turn is queued, and this is the only thing that says
-   * so.** The CLI takes it either way and folds it into the *next* turn, so what
-   * is on screen is a line sitting under an answer that is not being written for
-   * it — indistinguishable, until it starts, from the message the turn running
-   * above it is about. Which is the thing somebody wants to know before typing a
-   * third.
+   * so.** The CLI holds it until the running turn's next step — between one
+   * tool call and the next — and folds it in there, or into the next turn if
+   * the answer finishes first. Until then what is on screen is a line sitting
+   * under an answer that has not read it, which is the thing somebody wants to
+   * know before typing a third.
    *
    * Line ids rather than a count, because the mark goes on the line: two queued
    * messages are two rows waiting, and a `2` at the foot of the pane would not
@@ -162,8 +162,8 @@ type ChatState = {
    *
    * In memory and never written down, like `sending` and `unread`: what makes a
    * line queued is a process in the main process, and a reload has neither the
-   * process nor the claim. Emptied at the end of the turn they were queued
-   * behind — see the `done` branch in `listen`.
+   * process nor the claim. Taken off oldest first as the CLI takes each in —
+   * the `dequeued` branch in `listen` — and emptied by `done` regardless.
    */
   queued: Record<string, string[]>
 
@@ -1030,17 +1030,35 @@ export const useChats = create<ChatState>((set, get) => ({
         return
       }
 
+      /*
+       * The CLI has taken the oldest waiting message in — most often mid-turn,
+       * between two tool calls, so the answer still being written above it is
+       * now about it too. In order on both sides, so the first mark is the one.
+       */
+      if (event.type === "dequeued") {
+        const marks = get().queued[chatId]
+        if (!marks) return
+        const [, ...rest] = marks
+        set({
+          queued:
+            rest.length > 0
+              ? { ...get().queued, [chatId]: rest }
+              : without(get().queued, chatId),
+        })
+        return
+      }
+
       if (event.type === "done") {
         // A turn can end while a card is up — Stop, or a failure — and the
         // question died with the process that asked it.
         if (get().asks[chatId]) set({ asks: without(get().asks, chatId) })
         /*
-         * And whatever was queued behind that turn is now the turn.
+         * And whatever was still queued behind that turn is now the turn.
          *
-         * The end of a turn is exactly the moment the CLI folds its queue into
-         * the next one, so this is the one edge that clears the marks — all of
-         * them, since the fold takes every message waiting rather than the
-         * oldest. A turn that ended in an error clears them too: a message
+         * Most marks are gone before this, taken off one at a time by
+         * `dequeued` as the CLI folds them in mid-turn; this is the backstop
+         * for a CLI that sends no such frame, and it clears every mark, since
+         * what is left goes into the next turn at once. A turn that ended in an error clears them too: a message
          * queued behind a turn that died is not still waiting, and the line
          * under it is about to say what happened.
          */

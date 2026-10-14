@@ -4,6 +4,7 @@ import {
   type SDKMessage,
   type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk"
+import { randomUUID, type UUID } from "node:crypto"
 
 import type {
   AssistantMessage,
@@ -341,6 +342,17 @@ export type AgentHandlers = {
    * one.
    */
   onAgents: (agents: ChatAgent[]) => void
+  /**
+   * A message sent mid-turn has been taken into the conversation — the oldest
+   * of them, since the CLI drains its queue in order.
+   *
+   * Not the end of the turn: the CLI folds what is waiting in at the next step
+   * the model takes, between one tool call and the next, so a message is
+   * usually read long before the answer it arrived under is over. Off the CLI's
+   * `command_lifecycle` frame, which it sends only for a message carrying a
+   * `uuid` — hence `send` stamping one.
+   */
+  onDequeued: () => void
   /** One turn is over. `error` is null when it succeeded. The session is not
    * over: another message may already be queued behind this one. */
   onTurn: (error: string | null) => void
@@ -421,7 +433,7 @@ class Inbox {
 
   constructor(private readonly sessionId: string) {}
 
-  push(prompt: AgentPrompt): void {
+  push(prompt: AgentPrompt, uuid?: string): void {
     if (this.closed) return
     this.waiting.push({
       type: "user",
@@ -429,6 +441,7 @@ class Inbox {
       // Not a subagent's — this is the person typing.
       parent_tool_use_id: null,
       session_id: this.sessionId,
+      ...(uuid !== undefined && { uuid: uuid as UUID }),
     })
     this.wake?.()
   }
@@ -667,6 +680,10 @@ export async function startAgentSession(
   /** Whether a turn is in flight, so `send` knows which of the two above it
    * is. */
   let answering = true
+  /** The uuids of messages sent mid-turn that the CLI has not taken in yet —
+   * see `onDequeued`. A message sent to an idle chat is not in here: nothing
+   * on screen says it is waiting, so there is nothing to take back. */
+  const waiting = new Set<string>()
 
   /**
    * The window, asked of the CLI once a turn has ended.
@@ -719,6 +736,28 @@ export async function startAgentSession(
           // entry still in the map here is a bookend that never arrived — and a
           // heartbeat under a finished chat is a spinner nobody can stop.
           if (idle) forgetAgents()
+          continue
+        }
+
+        /*
+         * A message sent mid-turn has left the CLI's queue — folded into the
+         * running turn at its next step, or opening the next one. Not in the
+         * SDK's `SDKMessage` union, hence the cast; the CLI sends it for any
+         * message stamped with a `uuid`. `cancelled` and the rest are the same
+         * news for the mark: the message is not waiting any more.
+         */
+        const lifecycle = message as {
+          type: string
+          command_uuid?: unknown
+          state?: unknown
+        }
+        if (lifecycle.type === "command_lifecycle") {
+          if (
+            lifecycle.state !== "queued" &&
+            typeof lifecycle.command_uuid === "string" &&
+            waiting.delete(lifecycle.command_uuid)
+          )
+            handlers.onDequeued()
           continue
         }
 
@@ -925,12 +964,14 @@ export async function startAgentSession(
       // An idle chat's turn starts here; one that is already working keeps the
       // clock it has, since this message is queued behind that turn.
       if (!answering) turnStartedAt = Date.now()
+      const queued = answering ? randomUUID() : undefined
+      if (queued) waiting.add(queued)
       answering = true
       // Ahead of any word from the CLI, and deliberately: the composer has just
       // emptied itself, and a chat that looked idle until the CLI got round to
       // saying otherwise reads as a message that went nowhere.
       handlers.onBusy(true)
-      inbox.push(prompt)
+      inbox.push(prompt, queued)
     },
     interrupt: () => {
       interrupted = true
