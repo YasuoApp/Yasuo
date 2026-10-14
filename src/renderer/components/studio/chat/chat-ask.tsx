@@ -48,7 +48,11 @@ export function AskCard({
   }
 
   return (
-    <div className="rounded-lg border border-primary/40 bg-primary/5 p-2.5">
+    // Always running: the card is only drawn while the turn waits on it.
+    <div
+      className="border-run rounded-lg border border-primary/40 bg-primary/5 p-2.5"
+      data-running
+    >
       <p className="flex items-baseline gap-1.5 text-xs">
         <ShieldQuestion className="size-3.5 shrink-0 translate-y-0.5 text-primary" />
         <span className="min-w-0">{ask.title}</span>
@@ -183,7 +187,10 @@ function Questions({
   }
 
   return (
-    <div className="space-y-3 rounded-lg border border-primary/40 bg-primary/5 p-2.5">
+    <div
+      className="border-run space-y-3 rounded-lg border border-primary/40 bg-primary/5 p-2.5"
+      data-running
+    >
       {ask.questions.map((question) => (
         <div key={question.question}>
           <p className="flex items-baseline gap-1.5 text-xs">

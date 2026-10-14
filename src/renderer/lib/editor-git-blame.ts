@@ -14,23 +14,11 @@ import {
   WidgetType,
   type DecorationSet,
   type Tooltip,
-  type TooltipView,
   type ViewUpdate,
 } from "@codemirror/view"
 
 import type { GitBlame, GitBlameCommit } from "@shared/api"
-import {
-  ago,
-  annotationOf,
-  commitAt,
-  askAboutCommit,
-  commitUrl,
-  fileUrl,
-  issueNumbers,
-  messageParts,
-} from "./files/git-blame"
-import { useComposerBus } from "./chat/composer-bus"
-import { dateTimeOf } from "./chat/since"
+import { annotationOf, commitAt } from "./files/git-blame"
 
 /**
  * Who last changed the caret's line, written faintly after it, and the commit
@@ -56,28 +44,33 @@ import { dateTimeOf } from "./chat/since"
  * the theme is. */
 export const gitBlameConf = new Compartment()
 
-/** What the card's buttons are drawn from — `components/studio/files/
- * blame-actions.tsx`, which is handed in rather than imported so that `lib/`
- * does not reach into the components. */
-export type BlameActions = {
-  hash: string
-  summary: string
-  /** `GitHub`, `GitLab`, `Bitbucket` — null for a remote with no forge. */
-  forge: string | null
-  commitHref: string | null
-  fileHref: string | null
-  issues: { number: number; href: string }[]
-  onAsk: () => void
+/** What the card is drawn from — `components/studio/files/blame-card.tsx`,
+ * which is handed in rather than imported so that `lib/` does not reach into
+ * the components. */
+export type BlameCard = {
+  /** The file on disk — the gate `gitLineHistory` is asked through. */
+  filePath: string
+  blame: GitBlame
+  commit: GitBlameCommit
+  /** The caret's line, in the buffer. */
+  line: number
+  /** The same line in `commit`, where its history starts. */
+  source: { line: number; path: string } | null
+  close: () => void
+  /** The card has grown — the history arrived — and its place is re-asked. */
+  remeasure: () => void
 }
 
-/** Draws the buttons into `host`, and answers with the way to take them down. */
-export type MountBlameActions = (
-  host: HTMLElement,
-  actions: BlameActions
-) => () => void
+/** Draws the card into `host`, and answers with the way to take it down. */
+export type MountBlameCard = (host: HTMLElement, card: BlameCard) => () => void
 
-const actionsMount = Facet.define<MountBlameActions, MountBlameActions | null>({
+const cardMount = Facet.define<MountBlameCard, MountBlameCard | null>({
   combine: (values) => values[0] ?? null,
+})
+
+/** The file the extension was made for, for the card's history call. */
+const blamedPath = Facet.define<string, string>({
+  combine: (values) => values[0] ?? "",
 })
 
 const answered = StateEffect.define<GitBlame | null>()
@@ -136,8 +129,13 @@ class Annotation extends WidgetType {
    * **Laid over the line, not in it.** The file editor wraps, so words written
    * into the line made it longer — onto a second row, pushing every line under
    * it down a row as the caret moved. So the line gets a zero-width anchor, and
-   * the words hang off it absolutely, cut to the room left before the edge
-   * (`fit`) — the code on screen never moves for them.
+   * the words hang off it absolutely — the code on screen never moves for
+   * them.
+   *
+   * **Never cut.** They were once trimmed to the room before the edge and
+   * hidden below 60px, which hid them — and the card behind them — on exactly
+   * the long lines; now a line that reaches the edge pushes them past it, and
+   * the scroller's horizontal bar is the way to them.
    */
   toDOM(view: EditorView) {
     const dom = document.createElement("span")
@@ -147,7 +145,6 @@ class Annotation extends WidgetType {
     text.textContent = this.text
     if (this.hoverable) holdOpen(view, text)
     dom.appendChild(text)
-    fit(view)
     return dom
   }
 
@@ -156,46 +153,8 @@ class Annotation extends WidgetType {
   }
 }
 
-/** Least room worth writing into; past this the line has the width and the
- * annotation is hidden rather than drawn as a lone `…`. */
-const MIN_WIDTH = 60
 /** The gap between the code and the words. */
 const GAP = 32
-
-/**
- * Cuts the annotation to the room between the end of its line and the edge of
- * what is visible, re-asked whenever the geometry moves — a resize, a scroll
- * sideways, a fold opening above it.
- */
-function fit(view: EditorView) {
-  view.requestMeasure({
-    key: "gitBlameFit",
-    read() {
-      const anchor = view.contentDOM.querySelector<HTMLElement>(".cm-gitBlame")
-      if (!anchor) return null
-      const right = Math.min(
-        view.contentDOM.getBoundingClientRect().right,
-        view.scrollDOM.getBoundingClientRect().right
-      )
-      return {
-        anchor,
-        room: right - anchor.getBoundingClientRect().left - GAP - 8,
-      }
-    },
-    write(measured) {
-      if (!measured) return
-      const text = measured.anchor.firstElementChild as HTMLElement | null
-      if (!text) return
-      const fits = measured.room >= MIN_WIDTH
-      text.style.display = fits ? "" : "none"
-      if (fits) text.style.maxWidth = `${measured.room}px`
-    },
-  })
-}
-
-const refit = EditorView.updateListener.of((update) => {
-  if (update.geometryChanged || update.viewportChanged) fit(update.view)
-})
 
 const annotation = EditorView.decorations.compute(
   [blameState, "selection"],
@@ -243,100 +202,35 @@ function holdOpen(view: EditorView, dom: HTMLElement) {
 
 const card = showTooltip.compute([blameState, "selection"], (state) => {
   if (!state.field(blameState).hover) return null
+  const mount = state.facet(cardMount)
   const current = currentOf(state)
-  if (!current?.commit) return null
+  if (!mount || !current?.commit) return null
   const { blame } = state.field(blameState)
-  const commit = current.commit
+  const path = state.facet(blamedPath)
+  const card: Omit<BlameCard, "close" | "remeasure"> = {
+    filePath: path,
+    blame: blame!,
+    commit: current.commit,
+    line: current.line,
+    source: blame!.sources[current.line - 1] ?? null,
+  }
   return {
     pos: current.to,
     above: false,
     arrow: false,
-    create: (view) => cardView(view, commit, blame!, current.line),
+    create(view) {
+      const dom = document.createElement("div")
+      dom.className = "cm-gitBlameCard"
+      holdOpen(view, dom)
+      const unmount = mount(dom, {
+        ...card,
+        close: () => view.dispatch({ effects: hovered.of(false) }),
+        remeasure: () => view.requestMeasure(),
+      })
+      return { dom, destroy: unmount }
+    },
   } satisfies Tooltip
 })
-
-function el<K extends keyof HTMLElementTagNameMap>(
-  tag: K,
-  className: string,
-  text?: string
-): HTMLElementTagNameMap[K] {
-  const node = document.createElement(tag)
-  node.className = className
-  if (text !== undefined) node.textContent = text
-  return node
-}
-
-function link(text: string, href: string, className = ""): HTMLAnchorElement {
-  const anchor = el("a", className, text)
-  anchor.href = href
-  // Out to the browser — `setWindowOpenHandler` in `main.ts` sends a new
-  // window's URL to `shell.openExternal`.
-  anchor.target = "_blank"
-  anchor.rel = "noreferrer"
-  return anchor
-}
-
-function cardView(
-  view: EditorView,
-  commit: GitBlameCommit,
-  blame: GitBlame,
-  line: number
-): TooltipView {
-  const dom = el("div", "cm-gitBlameCard")
-  holdOpen(view, dom)
-
-  const head = el("div", "cm-gitBlameCard-head")
-  const author = el("span", "cm-gitBlameCard-author", commit.author)
-  if (commit.email) author.title = commit.email
-  head.append(
-    author,
-    el("span", "cm-gitBlameCard-when", ago(commit.date)),
-    el("span", "cm-gitBlameCard-date", `(${dateTimeOf(commit.date)})`)
-  )
-
-  const message = el("div", "cm-gitBlameCard-message")
-  for (const part of messageParts(commit.summary, blame.webUrl)) {
-    message.append(
-      "href" in part
-        ? link(part.text, part.href)
-        : document.createTextNode(part.text)
-    )
-  }
-
-  dom.append(head, message)
-
-  const mount = view.state.facet(actionsMount)
-  if (!mount) return { dom }
-
-  const { webUrl } = blame
-  const forge = webUrl && new URL(webUrl).hostname.replace(/\.(com|org)$/, "")
-  const actions = el("div", "cm-gitBlameCard-actions")
-  dom.append(actions)
-  const unmount = mount(actions, {
-    hash: commit.hash,
-    summary: commit.summary,
-    // The forge's links are absent rather than greyed for a remote `webUrlOf`
-    // cannot address — a button that cannot work is not an option.
-    forge: forge ? forge[0]!.toUpperCase() + forge.slice(1) : null,
-    commitHref: webUrl && commitUrl(webUrl, commit.hash),
-    fileHref: webUrl && fileUrl(webUrl, commit.hash, blame.path, line),
-    issues: webUrl
-      ? issueNumbers(commit.summary).map((number) => ({
-          number,
-          href: `${webUrl}/issues/${number}`,
-        }))
-      : [],
-    onAsk() {
-      view.dispatch({ effects: hovered.of(false) })
-      // Into the draft, never sent — the question is the user's to write, the
-      // same bargain the terminal's `Ask about this` makes.
-      useComposerBus
-        .getState()
-        .deliver({ text: askAboutCommit(commit, blame.path, line) })
-    },
-  })
-  return { dom, destroy: unmount }
-}
 
 const theme = EditorView.baseTheme({
   // `inline-block` with no width, top-aligned, so the words hung off it sit on
@@ -351,8 +245,9 @@ const theme = EditorView.baseTheme({
     position: "absolute",
     top: "0",
     left: `${GAP}px`,
-    overflow: "hidden",
-    textOverflow: "ellipsis",
+    // Room after the words, so scrolled to the end they do not sit against
+    // the scrollbar.
+    paddingRight: "16px",
     whiteSpace: "pre",
     color: "var(--muted-foreground)",
     opacity: "0.7",
@@ -361,33 +256,6 @@ const theme = EditorView.baseTheme({
   },
   ".cm-gitBlame-text:hover": { opacity: "1" },
   ".cm-tooltip:has(> .cm-gitBlameCard)": { overflow: "visible" },
-  ".cm-gitBlameCard": {
-    display: "flex",
-    flexDirection: "column",
-    gap: "8px",
-    maxWidth: "36rem",
-    padding: "10px 12px",
-    font: "12px/1.5 var(--font-sans, inherit)",
-  },
-  ".cm-gitBlameCard-head": {
-    display: "flex",
-    flexWrap: "wrap",
-    alignItems: "baseline",
-    gap: "6px",
-  },
-  ".cm-gitBlameCard-author": { fontWeight: "600" },
-  ".cm-gitBlameCard-date": {
-    color: "var(--muted-foreground)",
-    fontStyle: "italic",
-  },
-  ".cm-gitBlameCard-message": { whiteSpace: "pre-wrap" },
-  ".cm-gitBlameCard a": { color: "var(--primary)", textDecoration: "none" },
-  ".cm-gitBlameCard a:hover": { textDecoration: "underline" },
-  ".cm-gitBlameCard-actions": {
-    display: "flex",
-    paddingTop: "6px",
-    borderTop: "1px solid var(--border)",
-  },
 })
 
 /** How long typing has to stop before the buffer is blamed again. */
@@ -438,17 +306,14 @@ function asker(path: string) {
   )
 }
 
-export function gitBlame(
-  path: string,
-  mountActions?: MountBlameActions
-): Extension {
+export function gitBlame(path: string, mountCard?: MountBlameCard): Extension {
   return [
     blameState,
     annotation,
-    refit,
     card,
     theme,
     asker(path),
-    mountActions ? actionsMount.of(mountActions) : [],
+    blamedPath.of(path),
+    mountCard ? cardMount.of(mountCard) : [],
   ]
 }

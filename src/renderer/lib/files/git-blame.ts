@@ -1,4 +1,4 @@
-import type { GitBlame, GitBlameCommit } from "@shared/api"
+import type { GitBlame, GitBlameCommit, GitLineCommit } from "@shared/api"
 
 /**
  * The words the editor's blame annotation and its hover are drawn from — the
@@ -111,13 +111,47 @@ export function issueNumbers(summary: string): number[] {
 }
 
 /** What `Ask in chat` types into the composer: the commit and the line, for a
- * question the user still writes. */
+ * question the user still writes. `latest` is false for a commit stepped back
+ * to in the card's history, which changed the line before the one on screen. */
 export function askAboutCommit(
+  commit: Pick<GitBlameCommit, "hash" | "summary" | "author">,
+  path: string,
+  line: number,
+  latest = true
+): string {
+  const which = latest ? "which last changed" : "an earlier change to"
+  return `About commit ${commit.hash.slice(0, 7)} ("${commit.summary}") by ${commit.author}, ${which} @${path}#L${line}: `
+}
+
+/** The size of a whole commit under its message: `3 files changed · +12 −4`. */
+export function statText(stat: GitLineCommit["stat"]): string {
+  if (!stat) return ""
+  const files = `${stat.files} ${stat.files === 1 ? "file" : "files"} changed`
+  return `${files} · +${stat.added} −${stat.removed}`
+}
+
+/**
+ * The commit the card shows, while the history behind it is still being read
+ * — the blame's own fields, as the first entry of that history will have them.
+ */
+export function provisionalOf(
   commit: GitBlameCommit,
   path: string,
   line: number
-): string {
-  return `About commit ${commit.hash.slice(0, 7)} ("${commit.summary}") by ${commit.author}, which last changed @${path}#L${line}: `
+): GitLineCommit {
+  return {
+    hash: commit.hash,
+    author: commit.author,
+    email: commit.email,
+    date: commit.date,
+    subject: commit.summary,
+    body: "",
+    path,
+    line,
+    before: [],
+    after: [],
+    stat: null,
+  }
 }
 
 /** The same for a commit picked in the `Commits` view, where there is no line:
@@ -128,4 +162,37 @@ export function askAboutLoggedCommit(commit: {
   author: string
 }): string {
   return `About commit ${commit.hash.slice(0, 7)} ("${commit.subject}") by ${commit.author}: `
+}
+
+/** A `Key: value` line at the foot of a message — `Co-Authored-By`,
+ * `Signed-off-by` — with the name and address split out of the value. */
+export type Trailer = { key: string; name: string; email: string }
+
+/**
+ * The body without its trailer block, and the trailers it had: the card draws
+ * them as chips under the prose rather than as a paragraph of addresses. Only
+ * the **last** paragraph is read, and only when every line of it is a trailer
+ * — git's own rule, so a `Note: …` mid-message stays prose.
+ */
+export function trailersOf(body: string): {
+  text: string
+  trailers: Trailer[]
+} {
+  const paragraphs = body.trimEnd().split(/\n\s*\n/)
+  const last = paragraphs.at(-1) ?? ""
+  const rows = last.split("\n").filter((row) => row.trim())
+  const parsed = rows.map((row) =>
+    /^([A-Za-z][\w-]*):\s*(.*?)\s*(?:<([^>]*)>)?\s*$/.exec(row.trim())
+  )
+  if (rows.length === 0 || parsed.some((match) => !match)) {
+    return { text: body, trailers: [] }
+  }
+  return {
+    text: paragraphs.slice(0, -1).join("\n\n").trim(),
+    trailers: parsed.map((match) => ({
+      key: match![1]!,
+      name: match![2]!,
+      email: match![3] ?? "",
+    })),
+  }
 }

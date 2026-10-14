@@ -50,6 +50,7 @@ import {
   fileAtHead,
   fileBytesAtHead,
   fileDiff,
+  lineHistory,
   stage,
   unstage,
   upstream,
@@ -996,14 +997,36 @@ export function createIpc(host: Host): {
   })
 
   // The narrowest root again, for the same reason as above.
-  handle(IPC.gitBlame, async (_event, filePath: string, text: string) => {
+  async function blameRoot(filePath: string) {
     const target = await inWorkspace(filePath)
     const root = (await fileRoots())
       .filter((candidate) => files.insideAny([candidate.path], target))
       .sort((a, b) => b.path.length - a.path.length)[0]
+    return root ? { dir: root.path, target } : null
+  }
+
+  handle(IPC.gitBlame, async (_event, filePath: string, text: string) => {
+    const root = await blameRoot(filePath)
     if (!root || typeof text !== "string") return null
-    return blame(root.path, target, text)
+    return blame(root.dir, root.target, text)
   })
+
+  // `hash` and `path` are history rather than a file on disk; `git.ts`
+  // refuses either being anything but a hash and a repository path.
+  handle(
+    IPC.gitLineHistory,
+    async (
+      _event,
+      filePath: string,
+      hash: string,
+      file: string,
+      line: number
+    ) => {
+      const root = await blameRoot(filePath)
+      if (!root) return []
+      return lineHistory(root.dir, String(hash), String(file), Number(line))
+    }
+  )
 
   /**
    * Every directory the Explorer may read: the workspace's folders.
