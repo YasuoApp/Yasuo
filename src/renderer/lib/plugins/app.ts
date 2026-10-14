@@ -44,7 +44,7 @@ export type PluginApp = {
     icon?: PluginIcon
     run: (chatId: string) => void | Promise<void>
   }) => void
-  /** A button on the window's rail, under Search. */
+  /** A button on the window's rail, at its foot above Terminal. */
   addRailButton: (button: {
     id: string
     label: string

@@ -103,8 +103,14 @@ export function NavRail({ onOpenSettings }: { onOpenSettings: () => void }) {
       >
         <Search />
       </RailButton>
-      {/* What plugins add, under Search — the built-in `usage` plugin's
-          dashboard is one (`plugins/usage/`). */}
+
+      <div className="flex-1" />
+
+      {/* What plugins add, at the foot beside Settings rather than under
+          Search: a plugin's button runs something — the built-in `usage`
+          plugin's dashboard (`plugins/usage/`) is a dialog — and has no pressed
+          state, so beside the column's two views it read as a third. Above
+          Terminal, so the foot's two stay put however many plugins there are. */}
       {pluginButtons.map((button) => {
         const Icon = PLUGIN_ICON_COMPONENTS[button.icon]
         return (
@@ -117,9 +123,6 @@ export function NavRail({ onOpenSettings }: { onOpenSettings: () => void }) {
           </RailButton>
         )
       })}
-
-      <div className="flex-1" />
-
       <RailButton
         label="Terminal"
         pressed={dockOpen}

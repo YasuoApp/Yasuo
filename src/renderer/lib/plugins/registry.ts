@@ -39,7 +39,7 @@ export type PluginChatMenuItem = {
   run: (chatId: string) => void | Promise<void>
 }
 
-/** One button a plugin added to the window's rail, under Search. */
+/** One button a plugin added to the window's rail, at its foot above Terminal. */
 export type PluginRailButton = {
   id: string
   pluginId: string
