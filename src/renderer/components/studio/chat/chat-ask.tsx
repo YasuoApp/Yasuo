@@ -5,8 +5,8 @@ import { Pencil, ShieldQuestion } from "lucide-react"
 import type {
   ChatAskOption,
   ChatAskQuestion,
-  WorktreeChatAnswer,
-  WorktreeChatAsk,
+  ChatAnswer,
+  ChatAsk,
 } from "@shared/api"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -23,7 +23,7 @@ import { cn } from "@/lib/utils"
  * answered — so a chat that let you type a second message here would be offering
  * something it cannot do. It is the one thing on screen with anything to say.
  *
- * Two shapes, because the CLI asks two different things (see `WorktreeChatAsk`).
+ * Two shapes, because the CLI asks two different things (see `ChatAsk`).
  * A **permission** is yes or no about something the model is trying to do, and
  * the wording comes from the CLI, which knows which argument of a call matters.
  * A **question** is `AskUserQuestion` — the model wrote the options and one of
@@ -33,12 +33,12 @@ import { cn } from "@/lib/utils"
  * Nothing here has a timeout. A question that answered itself after a while
  * would be this app deciding, and the turn is still stoppable from the composer.
  */
-export function ChatAsk({
+export function AskCard({
   ask,
   onAnswer,
 }: {
-  ask: WorktreeChatAsk
-  onAnswer: (answer: WorktreeChatAnswer) => void
+  ask: ChatAsk
+  onAnswer: (answer: ChatAnswer) => void
 }) {
   if (ask.kind === "questions") {
     // Keyed by ask, so a second question in the same chat gets a fresh set of
@@ -70,7 +70,7 @@ export function ChatAsk({
           Allow
         </Button>
         {/* Offered only where accepting it would do something — the SDK does
-            not always have a rule to remember. See `WorktreeChatAsk.always`. */}
+            not always have a rule to remember. See `ChatAsk.always`. */}
         {ask.always && (
           <Button
             size="sm"
@@ -114,8 +114,8 @@ function Questions({
   ask,
   onAnswer,
 }: {
-  ask: Extract<WorktreeChatAsk, { kind: "questions" }>
-  onAnswer: (answer: WorktreeChatAnswer) => void
+  ask: Extract<ChatAsk, { kind: "questions" }>
+  onAnswer: (answer: ChatAnswer) => void
 }) {
   const [picked, setPicked] = useState<Record<string, string[]>>({})
   const [custom, setCustom] = useState<Record<string, string>>({})

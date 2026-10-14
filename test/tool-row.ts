@@ -9,7 +9,7 @@ import {
   rowsOf,
   toolLabel,
   type ToolLine,
-} from "../src/renderer/lib/worktree-chat/tool-row"
+} from "../src/renderer/lib/chat/tool-row"
 import { check, finish, section } from "./harness"
 
 /**

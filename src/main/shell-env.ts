@@ -20,7 +20,7 @@ const run = promisify(execFile)
  *
  * Shared rather than local to one caller: `ipc.ts` needs it for a field that
  * accepts typing (`addFolder`, `pickFiles`'s default directory, a
- * `ClaudeProfile`'s `configDir`), and `worktree-chat.ts` needs it again at the
+ * `ClaudeProfile`'s `configDir`), and `chat.ts` needs it again at the
  * point a profile's directory becomes `CLAUDE_CONFIG_DIR` — a env var handed
  * to a process the SDK spawns directly, with no shell in between to expand a
  * literal `~` the way one typed at a prompt would be.

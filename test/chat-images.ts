@@ -4,7 +4,7 @@ import {
   imageTag,
   namedIn,
   withoutTag,
-} from "../src/renderer/lib/worktree-chat/images"
+} from "../src/renderer/lib/chat/images"
 import { check, finish, section } from "./harness"
 
 /**

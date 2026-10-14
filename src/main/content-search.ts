@@ -20,7 +20,7 @@ const run = promisify(execFile)
  *
  * Free of `electron`, like `files.ts` beside it, so `test/content-search.ts`
  * can import it. `ipc.ts` holds the generation that makes an older search stop,
- * and `WorktreeChats.search` the transcripts.
+ * and `Chats.search` the transcripts.
  *
  * **A walk and a read per search, nothing indexed.** The walk is the palette's
  * own (`indexFiles`, with its ignored directories and its cap), and the files

@@ -65,7 +65,7 @@ export function worktreeSlug(text: string, max = 40): string {
  * have to exist before any work happens in them, which is the whole way a
  * checkout differs from a chat, where the `+` writes nothing down until the
  * first message. So the branch is minted here and **replaced** once the chat
- * running in it has a title of its own (`retitle` in `main/worktree-chat.ts`
+ * running in it has a title of its own (`retitle` in `main/chat.ts`
  * reads the CLI's `ai-title`; `nameWorktree` below is what acts on it).
  *
  * The prefix is what makes "has anybody named this yet" a question git can

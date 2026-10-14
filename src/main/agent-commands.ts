@@ -33,7 +33,7 @@ import { locate, spawnEnvironment } from "./shell-env"
  * that frame is emitted when a *turn* starts. A never-yielding prompt never
  * starts one, so no init frame arrives here (verified: the message stream stays
  * empty for the whole call). Which commands make no sense in this composer is
- * therefore the renderer's own list, in `lib/worktree-chat/command-text.ts`, and
+ * therefore the renderer's own list, in `lib/chat/command-text.ts`, and
  * this module hands over everything the CLI named.
  */
 

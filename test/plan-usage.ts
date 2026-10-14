@@ -7,7 +7,7 @@ import {
   usageTone,
   windowLabel,
   windowShort,
-} from "../src/renderer/lib/worktree-chat/plan-usage"
+} from "../src/renderer/lib/chat/plan-usage"
 import { check, finish, section } from "./harness"
 
 /**

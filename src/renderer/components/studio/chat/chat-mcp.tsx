@@ -36,8 +36,8 @@ import {
   stateLabel,
   withServerOff,
   withToolOff,
-} from "@/lib/worktree-chat/mcp-servers"
-import { compact } from "@/lib/worktree-chat/usage"
+} from "@/lib/chat/mcp-servers"
+import { compact } from "@/lib/chat/usage"
 import { IconButton } from "../icon-button"
 import { serverMark } from "./chat-marks"
 import { ToolbarButton } from "./chat-composer"
@@ -48,7 +48,7 @@ import { ToolbarButton } from "./chat-composer"
  *
  * It was Settings › MCP, with one list of switched-off tools for the whole
  * workspace. It is in the composer's toolbar now because the switches are the
- * chat's (`WorktreeChatOptions.disabledTools`): the chat reading a Figma file
+ * chat's (`ChatOptions.disabledTools`): the chat reading a Figma file
  * wants Figma, the one refactoring a module wants its forty tools out of the
  * prompt. The listing and **Remove** came with them rather than being left as a
  * Settings section of their own, so there is one place MCP is looked at.

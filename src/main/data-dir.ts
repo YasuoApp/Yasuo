@@ -79,6 +79,33 @@ export function migrateLegacyDataDir(): void {
 }
 
 /**
+ * Renames `workspace/worktree-chats{,.json}` to `workspace/chats{,.json}`, the
+ * name the chats were kept under while they lived in `git worktree` checkouts.
+ *
+ * Each of the two moves only when the old one is there and the new one is not,
+ * for the reason `migrateLegacyDataDir` refuses to finish over a workspace in
+ * use. Nothing outside this app points at these files — the CLI keeps its own
+ * session under `~/.claude`, by session id — so a move costs no resume.
+ */
+export function migrateChatFiles(): void {
+  const workspace = path.join(dataDir(), "workspace")
+  const moves: [string, string][] = [
+    ["worktree-chats.json", "chats.json"],
+    ["worktree-chats", "chats"],
+  ]
+  for (const [from, to] of moves) {
+    const source = path.join(workspace, from)
+    const target = path.join(workspace, to)
+    if (!existsSync(source) || existsSync(target)) continue
+    try {
+      renameSync(source, target)
+    } catch (error) {
+      console.error(`Could not move ${source} to ${target}:`, error)
+    }
+  }
+}
+
+/**
  * A Claude profile's `configDir` is written into the manifest as an absolute
  * path the first time it is filled in (`withConfigDirs`), so after the move it
  * names a directory that is gone — and a profile pointed at an empty config

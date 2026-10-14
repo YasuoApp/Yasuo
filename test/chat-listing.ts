@@ -1,11 +1,11 @@
-import type { AssistantMessage, WorktreeChat } from "../src/shared/api"
-import { WorktreeChats } from "../src/main/worktree-chat"
+import type { AssistantMessage, Chat } from "../src/shared/api"
+import { Chats } from "../src/main/chat"
 import { check, finish, section } from "./harness"
 
 /**
  * The chat listing under concurrent edits.
  *
- * Every change to `worktree-chats.json` is a read, a change and a write, and
+ * Every change to `chats.json` is a read, a change and a write, and
  * the store only serialises the file operations, not the pairs. A chat
  * created while another chat's append was between its read and its write was
  * gone again once the append wrote back the list it had read, and `send`
@@ -17,9 +17,9 @@ import { check, finish, section } from "./harness"
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 1))
 
 function source() {
-  let listing: WorktreeChat[] = []
+  let listing: Chat[] = []
   const lines = new Map<string, AssistantMessage[]>()
-  const chats = new WorktreeChats(
+  const chats = new Chats(
     {
       folderDir: async () => "/tmp",
       claudeProfiles: async () => [],

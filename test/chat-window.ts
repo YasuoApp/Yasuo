@@ -9,7 +9,7 @@ import {
   windowLabel,
   windowSlices,
   WINDOW_TONES,
-} from "../src/renderer/lib/worktree-chat/window"
+} from "../src/renderer/lib/chat/window"
 import { check, finish, section } from "./harness"
 import type { ChatWindow } from "../src/shared/api"
 

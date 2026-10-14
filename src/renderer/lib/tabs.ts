@@ -13,7 +13,7 @@ export const PREFIX: Record<Pane, string> = {
   // The id after it is a **root** id rather than anything the panel made up:
   // there is one `Changes` tab per project, and that is what it is about.
   changes: "changes:",
-  worktree: "chat:",
+  chat: "chat:",
 }
 
 /**

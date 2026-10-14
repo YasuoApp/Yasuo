@@ -7,7 +7,7 @@ import {
 } from "@codemirror/view"
 import { create } from "zustand"
 
-import { useComposerBus } from "@/lib/worktree-chat/composer-bus"
+import { useComposerBus } from "@/lib/chat/composer-bus"
 
 import { lineCount, selectedLines, type LineRun } from "./selected-lines"
 

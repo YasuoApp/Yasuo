@@ -2,7 +2,7 @@ import type { ClaudeAccount, ClaudeVersions } from "../src/shared/api"
 import {
   installCommand,
   setupStep,
-} from "../src/renderer/lib/worktree-chat/claude-setup"
+} from "../src/renderer/lib/chat/claude-setup"
 import { check, finish, section } from "./harness"
 
 /**

@@ -17,7 +17,7 @@ import {
   usePlanUsage,
   windowLabel,
   windowShort,
-} from "@/lib/worktree-chat/plan-usage"
+} from "@/lib/chat/plan-usage"
 import { IconButton } from "../icon-button"
 
 /**

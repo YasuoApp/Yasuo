@@ -24,11 +24,11 @@ import {
   type ChatSeed,
   type ChatSpend,
   type ClaudeProfile,
-  type WorktreeChat,
-  type WorktreeChatAnswer,
-  type WorktreeChatAsk,
-  type WorktreeChatEvent,
-  type WorktreeChatOptions,
+  type Chat,
+  type ChatAnswer,
+  type ChatAsk,
+  type ChatEvent,
+  type ChatOptions,
 } from "../shared/api"
 import { contentTypeOf, extensionForType } from "../shared/note-files"
 import { spendRows } from "./chat-digest"
@@ -103,7 +103,7 @@ import { expandHome } from "./shell-env"
  * came to, with switches that only take things away.
  *
  * **What the chat's own toolbar decides** is on the record rather than here:
- * `WorktreeChatOptions` is a model, an effort and a permission per chat, and a
+ * `ChatOptions` is a model, an effort and a permission per chat, and a
  * turn is built from whatever it said when the message was sent. Only the last
  * of the three changes what a turn may do, and `PERMISSIONS` is the whole of
  * that — including why plan mode is a tool list and not `--permission-mode
@@ -138,7 +138,7 @@ type Live = {
   effort: ChatEffort | null
   /** The chat's toolbar as it stands, read by `permits` and by the `onAsk`
    * below at the moment of the call rather than when the session opened. */
-  options: WorktreeChatOptions
+  options: ChatOptions
   /** The permission whose sentence last went at the head of a message in this
    * session — see `headed`. Null until the first message, so a fresh session is
    * always told its mode. */
@@ -170,7 +170,7 @@ type Live = {
  */
 const IDLE_MS = 5 * 60 * 1000
 
-export type WorktreeChatSource = {
+export type ChatSource = {
   /** The directory a project names, or null when it has left the workspace —
    * what a chat runs in. */
   folderDir: (folderId: string) => Promise<string | null>
@@ -178,8 +178,8 @@ export type WorktreeChatSource = {
    * `options.profileId` at send time — see `ClaudeProfile`. */
   claudeProfiles: () => Promise<ClaudeProfile[]>
 
-  chats: () => Promise<WorktreeChat[]>
-  saveChats: (chats: WorktreeChat[]) => Promise<void>
+  chats: () => Promise<Chat[]>
+  saveChats: (chats: Chat[]) => Promise<void>
   readChat: (id: string) => Promise<AssistantMessage[]>
   writeChat: (id: string, messages: AssistantMessage[]) => Promise<void>
   deleteChat: (id: string) => Promise<void>
@@ -427,14 +427,14 @@ function permitting(allowed: string[] | undefined): (name: string) => boolean {
 const SYSTEM_PROMPT =
   "You are a chat in a project inside Visual Studio Claude, a desktop studio: this directory is the user's own working tree on whatever branch they have checked out, so edits and commands here change the files they are working in. There is no isolation to fall back on — prefer the smallest change that does the job, and say what you are about to do before doing anything wide-reaching."
 
-export class WorktreeChats {
+export class Chats {
   /** A turn per chat, keyed by chat id. Several chats can be answering at once,
    * which is the point of keying everything here by chat id. */
   private readonly live = new Map<string, Live>()
 
   /**
    * Which `CLAUDE_CONFIG_DIR`s the CLI has been started on each chat in during
-   * *this* run — see `WorktreeChat.startedIn`, of which this is the shape in
+   * *this* run — see `Chat.startedIn`, of which this is the shape in
    * memory.
    *
    * A write-through cache in front of `startedIn` on the record, and not a
@@ -511,17 +511,17 @@ export class WorktreeChats {
     {
       /** Kept beside the resolver so the line recording the decision can say
        * what was decided *about*: an answer on its own is a bare "Allowed". */
-      ask: WorktreeChatAsk
+      ask: ChatAsk
       answered: (decision: AskDecision) => void
     }
   >()
 
   constructor(
-    private readonly source: WorktreeChatSource,
-    private readonly emit: (event: WorktreeChatEvent) => void
+    private readonly source: ChatSource,
+    private readonly emit: (event: ChatEvent) => void
   ) {}
 
-  list(): Promise<WorktreeChat[]> {
+  list(): Promise<Chat[]> {
     return this.source.chats()
   }
 
@@ -534,7 +534,7 @@ export class WorktreeChats {
    * still true and is still how it behaves; what changed is that the tab is the
    * *renderer's* until the first message, so the `+` nobody used costs no row in
    * the project's list and no file on disk. See `unsaved` in
-   * `lib/worktree-chat/store.ts`.
+   * `lib/chat/store.ts`.
    *
    * So `seed` is the usual case rather than the exception: the chat has been on
    * screen, and its id, name and toolbar came from there. The id especially —
@@ -545,9 +545,9 @@ export class WorktreeChats {
    * before the first write landed would otherwise be two records of one chat,
    * and the second would overwrite the lines of the first.
    */
-  async create(place: ChatPlace, seed?: ChatSeed): Promise<WorktreeChat> {
-    let made: WorktreeChat | undefined
-    let held: WorktreeChat | undefined
+  async create(place: ChatPlace, seed?: ChatSeed): Promise<Chat> {
+    let made: Chat | undefined
+    let held: Chat | undefined
     await this.editChats((chats) => {
       held = seed && chats.find((chat) => chat.id === seed.id)
       if (held) return null
@@ -589,9 +589,7 @@ export class WorktreeChats {
    */
   private listing: Promise<unknown> = Promise.resolve()
 
-  private editChats(
-    edit: (chats: WorktreeChat[]) => WorktreeChat[] | null
-  ): Promise<void> {
+  private editChats(edit: (chats: Chat[]) => Chat[] | null): Promise<void> {
     const next = this.listing.then(async () => {
       const chats = await this.source.chats()
       const edited = edit(chats)
@@ -985,7 +983,7 @@ export class WorktreeChats {
    */
   private headed(
     live: Live,
-    options: WorktreeChatOptions,
+    options: ChatOptions,
     prompt: string,
     images: ChatImage[]
   ): AgentPrompt {
@@ -1014,7 +1012,7 @@ export class WorktreeChats {
   private async deliver(
     id: string,
     cwd: string,
-    options: WorktreeChatOptions,
+    options: ChatOptions,
     prompt: string,
     images: ChatImage[]
   ): Promise<void> {
@@ -1025,7 +1023,7 @@ export class WorktreeChats {
     const disabledTools = options.disabledTools ?? []
 
     // Looked up by id rather than trusted whole: a profile named on the record
-    // can have been renamed or deleted since — see `WorktreeChatOptions.
+    // can have been renamed or deleted since — see `ChatOptions.
     // profileId`. A missing id reads as null, the same as never having picked
     // one.
     //
@@ -1169,7 +1167,7 @@ export class WorktreeChats {
    * the picker on `Plan` takes effect on the call after it and needs nothing
    * sent anywhere.
    */
-  private retune(live: Live, options: WorktreeChatOptions): void {
+  private retune(live: Live, options: ChatOptions): void {
     live.options = options
 
     if (live.model !== options.model) {
@@ -1200,7 +1198,7 @@ export class WorktreeChats {
     const questions =
       request.toolName === ASK_TOOL ? asked(request.input) : null
 
-    const ask: WorktreeChatAsk = questions
+    const ask: ChatAsk = questions
       ? { id, chatId, kind: "questions", questions }
       : {
           id,
@@ -1243,7 +1241,7 @@ export class WorktreeChats {
    * and a transcript that shows a turn editing a file with no sign of anybody
    * allowing it is a transcript that is missing the reason.
    */
-  answer(askId: string, answer: WorktreeChatAnswer): void {
+  answer(askId: string, answer: ChatAnswer): void {
     const pending = this.asks.get(askId)
     if (!pending) return
 
@@ -1298,7 +1296,7 @@ export class WorktreeChats {
    * under a running session is the project, the profile and the MCP config;
    * those are picked up by the next message, which opens a new one.
    */
-  async setOptions(id: string, options: WorktreeChatOptions): Promise<void> {
+  async setOptions(id: string, options: ChatOptions): Promise<void> {
     await this.editChats((chats) =>
       chats.some((chat) => chat.id === id)
         ? chats.map((chat) => (chat.id === id ? { ...chat, options } : chat))
@@ -1326,7 +1324,7 @@ export class WorktreeChats {
   private async open(
     id: string,
     cwd: string,
-    options: WorktreeChatOptions,
+    options: ChatOptions,
     configDir: string | null,
     /** The chat's switched-off MCP tools — see `AgentSessionOptions.
      * disallowedTools`. */
@@ -2142,7 +2140,7 @@ export function asked(
  * is one path instead of a branch on `multiSelect` that could disagree with the
  * one in the pane.
  */
-export function decided(answer: WorktreeChatAnswer): AskDecision {
+export function decided(answer: ChatAnswer): AskDecision {
   if (answer.kind === "allow") {
     return { allow: true, remember: answer.always === true }
   }
@@ -2176,7 +2174,7 @@ export function decided(answer: WorktreeChatAnswer): AskDecision {
  * pane draws it as a note rather than as anybody's message, because it is
  * neither side speaking.
  */
-export function said(ask: WorktreeChatAsk, answer: WorktreeChatAnswer): string {
+export function said(ask: ChatAsk, answer: ChatAnswer): string {
   if (ask.kind === "questions") {
     if (answer.kind !== "answers") return "Question dismissed"
     return ask.questions
@@ -2190,7 +2188,7 @@ export function said(ask: WorktreeChatAsk, answer: WorktreeChatAnswer): string {
   const what = ask.summary ? `${ask.name}: ${ask.summary}` : ask.name
   if (answer.kind === "deny") return `Refused ${what}`
   // `always` only reads as "remembered" where there was a rule to remember —
-  // see `WorktreeChatAsk.always`.
+  // see `ChatAsk.always`.
   const remembered = answer.kind === "allow" && answer.always && ask.always
   return remembered
     ? `Allowed ${what}, and will not ask again`
@@ -2260,7 +2258,7 @@ function isSessionMissing(error: string): boolean {
  * chat nobody has spoken into is not given an empty array.
  */
 function startedDirs(
-  chat: WorktreeChat,
+  chat: Chat,
   dirs: Set<string> | undefined
 ): string[] | undefined {
   if (!dirs || dirs.size === 0) return chat.startedIn
@@ -2286,7 +2284,7 @@ function titleOf(text: string): string {
  * (`/tmp` is filed under `-private-tmp` on macOS). A session id is a UUID, so
  * the file name alone identifies it and the folder does not have to be derived.
  *
- * `""` is the default directory, the way it is on `WorktreeChat.startedIn`.
+ * `""` is the default directory, the way it is on `Chat.startedIn`.
  */
 async function transcriptIn(
   configDir: string,

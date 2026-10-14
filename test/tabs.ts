@@ -24,8 +24,8 @@ import { check, finish, section } from "./harness"
 const t1 = `${PREFIX.files}/w/src/users.ts`
 const t2 = `${PREFIX.files}/w/src/orders.ts`
 const t3 = `${PREFIX.files}/w/src/items.ts`
-const a1 = `${PREFIX.worktree}chat-1`
-const a2 = `${PREFIX.worktree}chat-2`
+const a1 = `${PREFIX.chat}chat-1`
+const a2 = `${PREFIX.chat}chat-2`
 const x1 = `${PREFIX.changes}root-1`
 
 const tab = (id: string) => ({ id })
@@ -129,7 +129,7 @@ check("neither does one in an empty strip", neighbour([], t1) === null)
 section("ids carry their panel")
 
 check("a file id names the files panel", kindOf(t1) === "files")
-check("a chat id names the worktree panel", kindOf(a1) === "worktree")
+check("a chat id names the chat panel", kindOf(a1) === "chat")
 check("a changes id names the changes panel", kindOf(x1) === "changes")
 check("an unprefixed id names none", kindOf("public.users") === null)
 

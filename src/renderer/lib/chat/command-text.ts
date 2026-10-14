@@ -97,7 +97,7 @@ export function parseCommand(
  * session the terminal is attached to, and there is no terminal here to swap.
  * Sent as a message it would be read as prose, and the transcript on screen —
  * which is this app's file, not the CLI's — would still be full. See
- * `clearWorktreeChat`, which is the half that has to close the session too.
+ * `clearChat`, which is the half that has to close the session too.
  *
  * `rename` is here because this app already owns what a chat is called: it is in
  * the tab and in the project's list, and the CLI renaming its own session

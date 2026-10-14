@@ -3,7 +3,7 @@ import {
   currentEntry,
   labelOf,
   outlineOf,
-} from "../src/renderer/lib/worktree-chat/outline"
+} from "../src/renderer/lib/chat/outline"
 import { check, finish, section } from "./harness"
 
 /**

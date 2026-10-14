@@ -11,7 +11,7 @@ import {
   type DirectoryChange,
   type TreeChange,
   type MenuCommand,
-  type WorktreeChatEvent,
+  type ChatEvent,
   type TerminalExit,
   type TerminalOutput,
   type UpdateProgress,
@@ -148,10 +148,9 @@ const api: DesktopApi = {
   claudeVersions: () => ipcRenderer.invoke(IPC.claudeVersions),
   claudeLogin: (configDir, cols, rows) =>
     ipcRenderer.invoke(IPC.claudeLogin, configDir, cols, rows),
-  listWorktreeChats: () => ipcRenderer.invoke(IPC.listWorktreeChats),
-  createWorktreeChat: (place, seed) =>
-    ipcRenderer.invoke(IPC.createWorktreeChat, place, seed),
-  readWorktreeChat: (id) => ipcRenderer.invoke(IPC.readWorktreeChat, id),
+  listChats: () => ipcRenderer.invoke(IPC.listChats),
+  createChat: (place, seed) => ipcRenderer.invoke(IPC.createChat, place, seed),
+  readChat: (id) => ipcRenderer.invoke(IPC.readChat, id),
   chatSpend: () => ipcRenderer.invoke(IPC.chatSpend),
   saveTextFile: (input) => ipcRenderer.invoke(IPC.saveTextFile, input),
   openChatWindow: (chatId) => ipcRenderer.invoke(IPC.openChatWindow, chatId),
@@ -162,23 +161,20 @@ const api: DesktopApi = {
     ipcRenderer.invoke(IPC.searchWorkspace, query, options, filter),
   replaceInFiles: (query, options, replacement, paths) =>
     ipcRenderer.invoke(IPC.replaceInFiles, query, options, replacement, paths),
-  deleteWorktreeChat: (id) => ipcRenderer.invoke(IPC.deleteWorktreeChat, id),
-  clearWorktreeChat: (id) => ipcRenderer.invoke(IPC.clearWorktreeChat, id),
-  renameWorktreeChat: (id, title) =>
-    ipcRenderer.invoke(IPC.renameWorktreeChat, id, title),
-  setWorktreeChatOptions: (id, options) =>
-    ipcRenderer.invoke(IPC.setWorktreeChatOptions, id, options),
-  answerWorktreeChatAsk: (askId, answer) =>
-    ipcRenderer.invoke(IPC.answerWorktreeChatAsk, askId, answer),
-  sendWorktreeChat: (id, prompt, images) =>
-    ipcRenderer.invoke(IPC.sendWorktreeChat, id, prompt, images),
-  editWorktreeChat: (id, at, prompt) =>
-    ipcRenderer.invoke(IPC.editWorktreeChat, id, at, prompt),
-  stopWorktreeChat: (id) => ipcRenderer.invoke(IPC.stopWorktreeChat, id),
-  onWorktreeChatEvent: (listener) =>
-    subscribe<WorktreeChatEvent>(IPC.worktreeChatEvent, listener),
-  onRevealWorktreeChat: (listener) =>
-    subscribe<string>(IPC.revealWorktreeChat, listener),
+  deleteChat: (id) => ipcRenderer.invoke(IPC.deleteChat, id),
+  clearChat: (id) => ipcRenderer.invoke(IPC.clearChat, id),
+  renameChat: (id, title) => ipcRenderer.invoke(IPC.renameChat, id, title),
+  setChatOptions: (id, options) =>
+    ipcRenderer.invoke(IPC.setChatOptions, id, options),
+  answerChatAsk: (askId, answer) =>
+    ipcRenderer.invoke(IPC.answerChatAsk, askId, answer),
+  sendChat: (id, prompt, images) =>
+    ipcRenderer.invoke(IPC.sendChat, id, prompt, images),
+  editChat: (id, at, prompt) =>
+    ipcRenderer.invoke(IPC.editChat, id, at, prompt),
+  stopChat: (id) => ipcRenderer.invoke(IPC.stopChat, id),
+  onChatEvent: (listener) => subscribe<ChatEvent>(IPC.chatEvent, listener),
+  onRevealChat: (listener) => subscribe<string>(IPC.revealChat, listener),
   readDrawing: (id) => ipcRenderer.invoke(IPC.readDrawing, id),
   writeDrawing: (id, scene) => ipcRenderer.invoke(IPC.writeDrawing, id, scene),
   writeDrawingSvg: (id, svg) =>

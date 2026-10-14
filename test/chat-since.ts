@@ -5,7 +5,7 @@ import {
   elapsed,
   since,
   timeOf,
-} from "../src/renderer/lib/worktree-chat/since"
+} from "../src/renderer/lib/chat/since"
 import { check, finish, section } from "./harness"
 
 /**

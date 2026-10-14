@@ -20,7 +20,7 @@ import { useProjects } from "@/lib/projects"
 import { useShells } from "@/lib/shell/store"
 import { useStudio } from "@/lib/store"
 import { useWorkspaceSearch } from "@/lib/workspace-search"
-import { useWorktreeChats } from "@/lib/worktree-chat/store"
+import { useChats } from "@/lib/chat/store"
 
 /**
  * The pane with nothing in it: one notice for the whole workbench rather than
@@ -59,9 +59,7 @@ export function NothingOpen() {
                 // its project is the active one.
                 useProjects.getState().setActive(project.id)
                 useShells.getState().showFor(project.id)
-                void useWorktreeChats
-                  .getState()
-                  .create({ folderId: project.id })
+                void useChats.getState().create({ folderId: project.id })
               }}
             />
             <Select

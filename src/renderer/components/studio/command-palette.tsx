@@ -21,7 +21,7 @@ import { usePalette } from "@/lib/palette"
 import { isStudioShortcut } from "@/lib/shortcuts"
 import { useStudio } from "@/lib/store"
 import { PREFIX } from "@/lib/tabs"
-import { useWorktreeChats } from "@/lib/worktree-chat/store"
+import { useChats } from "@/lib/chat/store"
 
 /**
  * One thing the palette can open.
@@ -363,7 +363,7 @@ function useEntries(query: string): Group[] {
     void loadIndex()
   }, [loadIndex])
 
-  const chats = useWorktreeChats((state) => state.chats)
+  const chats = useChats((state) => state.chats)
   const folders = useStudio((state) => state.folders)
 
   return useMemo(() => {
@@ -410,13 +410,13 @@ function useEntries(query: string): Group[] {
         (candidate) => candidate.id === chat.folderId
       )?.name
       return {
-        value: PREFIX.worktree + chat.id,
+        value: PREFIX.chat + chat.id,
         label: chat.title,
         hint: where,
         keywords: [chat.title, ...(where ? [where] : [])],
         icon: <MessageSquare className="size-3.5 shrink-0" />,
         open: async () => {
-          useWorktreeChats.getState().select(chat.id)
+          useChats.getState().select(chat.id)
         },
       }
     })

@@ -1,4 +1,4 @@
-import { quoteOf } from "../src/renderer/lib/worktree-chat/reply"
+import { quoteOf } from "../src/renderer/lib/chat/reply"
 import { check, finish, section } from "./harness"
 
 /** A selected run of the transcript, as the composer receives it. */

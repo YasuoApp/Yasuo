@@ -6,7 +6,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { useClaudeProfiles } from "@/lib/worktree-chat/claude-profiles"
+import { useClaudeProfiles } from "@/lib/chat/claude-profiles"
 import { TerminalView, type TerminalHandle } from "./terminal-view"
 
 /**

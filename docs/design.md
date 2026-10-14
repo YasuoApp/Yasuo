@@ -29,8 +29,8 @@ absolute path.
 ~/.vsclaude/
   manifest.json              the workspace, its folders, settings
   workspace/
-    worktree-chats.json      the chats, listed
-    worktree-chats/<id>.json one chat's lines
+    chats.json      the chats, listed
+    chats/<id>.json one chat's lines
     worktrees/<folderId>/    `git worktree` checkouts cut from a project
     claude-profiles/<slug>/  one Claude profile's `CLAUDE_CONFIG_DIR`
     note-files/              pictures dropped into a document or a chat
@@ -83,7 +83,7 @@ Three distances:
   question. Waiting wins over working.
 - **A shut project's row**: a count (`2`, `1!`, `2 · 1!`) — drawn only while
   shut, since open, the rows say it. `activityOf` in
-  `lib/worktree-chat/running.ts`, tested.
+  `lib/chat/running.ts`, tested.
 - **The rail**: a dot, counting every chat.
 
 A chat that answered while you read another is **unread**: a dot and a heavier
@@ -101,7 +101,7 @@ the next turn, and holding them back would take that away.
 
 A chat that goes **quiet**, **fails** or **stops to ask** rings an OS
 notification while the window is unfocused; clicking it opens the chat
-(`IPC.revealWorktreeChat`). `ChatNotices` in `main/notify.ts` turns the event
+(`IPC.revealChat`). `ChatNotices` in `main/notify.ts` turns the event
 stream into edges and is free of `electron` so `test/notify.ts` can hold it to
 them — the failures are ringing twice and swallowing a quiet. The title is read
 when the notice is due, since `retitle` renames a chat mid-turn. On by default
@@ -111,7 +111,7 @@ when the notice is due, since `retitle` renames a chat mid-turn. On by default
 
 The app's own icon carries a red number, the way Slack's does: how many chats
 **want you** — unread, or stopped on a question — counted once per chat
-(`badgeCount` in `lib/worktree-chat/unread.ts`, tested). A chat merely working
+(`badgeCount` in `lib/chat/unread.ts`, tested). A chat merely working
 is not in it: a badge that is never zero while anything runs is one nobody
 reads. The studio's window sends it (`IPC.setBadgeCount` → `app.setBadgeCount`),
 because `unread` is the renderer's — main knows a chat went quiet, not whether
@@ -166,7 +166,7 @@ works on the checkout as a project. Creating one also opens a chat in it.
 ### Editing a message
 
 A user bubble's **Edit** re-sends the message in its place and drops everything
-after it. The cut is made **in the CLI's session too**: `WorktreeChats.edit`
+after it. The cut is made **in the CLI's session too**: `Chats.edit`
 closes the session and resumes it at the entry before the message
 (`resumeSessionAt`), found in the CLI transcript by `main/chat-fork.ts`
 (tested). Messages are matched from the end by text — a mid-turn message is a
@@ -181,7 +181,7 @@ editing pictures.
 ## The chat is hosted, not tailed
 
 A chat is driven through `@anthropic-ai/claude-agent-sdk`
-(`main/claude-agent.ts`, the SDK runner; `main/worktree-chat.ts`, the policy).
+(`main/claude-agent.ts`, the SDK runner; `main/chat.ts`, the policy).
 The user's own `claude` is what runs — their install, their login, their MCP
 servers — located through their login shell.
 
@@ -216,7 +216,7 @@ the composer is live mid-answer; the CLI queues what is sent. `Stop` is an
 A chat's id **is** the CLI's session id; `started` on the record decides
 `sessionId` vs `resume`, and a turn refused as "already in use" is retried once
 as a resume. A chat is **written down by its first message**: the renderer mints
-the id and holds the tab in `unsaved`, and `createWorktreeChat` takes a
+the id and holds the tab in `unsaved`, and `createChat` takes a
 `ChatSeed`. It is **named** first by its opening sentence, then by the CLI's own
 `ai-title` read out of the session transcript (`retitle`) — the app runs no
 summarising turn of its own. `done` waits on that write.
@@ -227,10 +227,10 @@ A turn's **working is folded and its answer is not**: one line (`7 tool calls,
 13 messages, 1 subagent`, with a mark per kind of tool) over the calls, the
 thinking and the narration. Errors, refusals and the cost line are never
 folded. The slot under the fold holds the latest thing said; later calls join
-the fold above it. `lib/worktree-chat/activity.ts` is pure and tested.
+the fold above it. `lib/chat/activity.ts` is pure and tested.
 
 A tool row is **verb · object · outcome** for every tool (`rowOf` in
-`lib/worktree-chat/tool-row.ts`, tested), with the model's description on the
+`lib/chat/tool-row.ts`, tested), with the model's description on the
 hover line. Consecutive calls of one verb merge into one row of chips; failures,
 commands, agents and MCP calls never merge. Everything that opens uses the same
 chevron and the same rule. An edit's row shows `+3 −1` read off the call's
@@ -253,11 +253,11 @@ magnitude more. Figures come from `modelUsage` (subagents included); the time is
 measured in main around the turn; the **context** is a level, not a sum, taken
 from the last main-loop assistant message and sent live as its own event. The
 lines are `role: "usage"` lines of the conversation, and the chat's total under
-the composer is summed from them (`lib/worktree-chat/usage.ts`, tested).
+the composer is summed from them (`lib/chat/usage.ts`, tested).
 
 ### The composer's toolbar
 
-Per chat (`WorktreeChatOptions`): model, effort, permission, profile, MCP.
+Per chat (`ChatOptions`): model, effort, permission, profile, MCP.
 
 - **Models are asked of the user's CLI** (`supportedModels()` over the control
   channel — a process, no tokens; `main/agent-models.ts`). A new chat opens on
@@ -288,7 +288,7 @@ name on `allowedTools` auto-approves before `canUseTool`, and
 ### Asking
 
 An unpermitted call comes back through `canUseTool` as a card above the
-composer, and the promise `WorktreeChats.ask` returns **is** the pause — nothing
+composer, and the promise `Chats.ask` returns **is** the pause — nothing
 times it out; `finish` and `dispose` settle what is outstanding. Answering
 writes a `role: "ask"` line composed by main. `Always allow` echoes the SDK's
 own `suggestions`. **`AskUserQuestion`** reaches the user in every mode and is
@@ -319,7 +319,7 @@ Telegram's "shared media", beside the transcript: a column with `Media` (every
 picture, both sides', as a grid that opens a viewer with `←`/`→`), `Files`
 (what the chat wrote, once each, by its last write) and `Links` (web links said
 by either side, not tool output). Newest first, read off the lines on screen
-(`lib/worktree-chat/media.ts`) with nothing stored. Every item lands on the
+(`lib/chat/media.ts`) with nothing stored. Every item lands on the
 line it came from; a subagent's lands on its `Agent` row. It takes the same
 slot as the table of contents and the two are exclusive — two columns leave a
 narrow pane no transcript. That slot (`SideColumn`) is dragged wider by its
@@ -355,7 +355,7 @@ a missing method is not an error. Nothing is drawn for API-key accounts.
 ### Finding a line in the chat on screen
 
 `⌘F` is a find bar over the transcript (`chat-find.tsx`,
-`lib/worktree-chat/search.ts`): the query as typed, case ignored. Matches are
+`lib/chat/search.ts`): the query as typed, case ignored. Matches are
 painted with the **CSS Custom Highlight API** (`find-marks.ts`) — no DOM touched
 inside rendered markdown. `n of m` counts **occurrences**, read off message
 text so a match inside a shut fold still counts; the fold gets a ring. Only the
@@ -581,7 +581,7 @@ about. That is why the transcript's renderer is on `PluginApp` as
 ### Chat export, the first built-in plugin
 
 `Copy as Markdown`, `Export as Markdown…` and `Export as HTML…` were three items
-on a chat row's menu with their logic in `lib/worktree-chat/export*.ts`. They are
+on a chat row's menu with their logic in `lib/chat/export*.ts`. They are
 now `plugins/chat-export/`: the same three items in the same menu, contributed
 through `addChatMenuItem`, plus the same three in the palette for the chat on
 screen. Chosen first because it was already a self-contained errand — read a
@@ -627,7 +627,7 @@ server by name; an unlisted tool is still refused by `deciding`.
 
 ### Per chat, in the composer
 
-The composer's MCP menu (`worktree/chat-mcp.tsx`) lists the servers, asked of
+The composer's MCP menu (`chat/chat-mcp.tsx`) lists the servers, asked of
 the CLI in the project's directory (`mcpServerStatus()`, not cached, re-asked
 for up to 8 s while servers are pending — claude.ai connectors take ~4 s).
 Trouble sorts first; headers are never drawn.

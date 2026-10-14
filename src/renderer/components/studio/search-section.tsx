@@ -42,7 +42,7 @@ import { revealAt } from "@/lib/files/typescript"
 import { useProjects } from "@/lib/projects"
 import { useStudio } from "@/lib/store"
 import { useWorkspaceSearch, type SearchKind } from "@/lib/workspace-search"
-import { useWorktreeChats } from "@/lib/worktree-chat/store"
+import { useChats } from "@/lib/chat/store"
 import { FileIcon } from "./file-icon"
 import { IconButton } from "./icon-button"
 import { PanelHeader } from "./panel-header"
@@ -162,7 +162,7 @@ export function SearchSection() {
         offset: row.offset,
         length: row.length,
       })
-      useWorktreeChats.getState().select(row.chatId)
+      useChats.getState().select(row.chatId)
     } else revealAt(row.path, row.line, row.column, row.length)
   }
 

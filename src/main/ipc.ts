@@ -16,8 +16,8 @@ import {
   type SearchFilter,
   type SearchOptions,
   type WorkspaceSearch,
-  type WorktreeChatAnswer,
-  type WorktreeChatOptions,
+  type ChatAnswer,
+  type ChatOptions,
 } from "../shared/api"
 import type { PluginFile, PluginSource } from "../shared/plugins"
 import { pathFilterOf } from "../shared/search"
@@ -26,8 +26,8 @@ import { agentModels } from "./agent-models"
 import { claudeAccount } from "./claude-auth"
 import { claudeVersions } from "./claude-version"
 import { claudeBinary } from "./claude-bin"
-import { dataDir, migrateLegacyDataDir } from "./data-dir"
-import { WorktreeChats } from "./worktree-chat"
+import { dataDir, migrateChatFiles, migrateLegacyDataDir } from "./data-dir"
+import { Chats } from "./chat"
 import { findFavicon, MAX_FAVICON_BYTES } from "./favicon"
 import * as files from "./files"
 import { MAX_INDEXED_FILES } from "./files"
@@ -185,7 +185,7 @@ export type Handler = (caller: unknown, ...args: any[]) => unknown
 export function createIpc(host: Host): {
   handlers: Map<string, Handler>
   /** Exposed so a turn in flight can be killed on quit. */
-  worktreeChats: WorktreeChats
+  allChats: Chats
   terminals: TerminalManager
   tsServers: TsServers
   /** Both kinds of `fs.watch` — the tree's and the `Changes` list's. */
@@ -195,6 +195,7 @@ export function createIpc(host: Host): {
 } {
   // Before anything reads the tree: the store, the daemon's socket, the logs.
   migrateLegacyDataDir()
+  migrateChatFiles()
   const store = new Store()
 
   const handlers = new Map<string, Handler>()
@@ -218,9 +219,9 @@ export function createIpc(host: Host): {
   /**
    * A picked `profileId` as a `CLAUDE_CONFIG_DIR`, for a one-turn agent.
    *
-   * The same resolve `worktree-chat.ts` does at send time (`profileConfigDir`
+   * The same resolve `chat.ts` does at send time (`profileConfigDir`
    * there), asked here instead because a drafted message has no chat and no
-   * `WorktreeChats` record to resolve it on. Looked up by id
+   * `Chats` record to resolve it on. Looked up by id
    * rather than trusted from the renderer, same reason: a profile can be
    * renamed or deleted between the picker being drawn and the button being
    * pressed.
@@ -246,7 +247,7 @@ export function createIpc(host: Host): {
    * pressed by the person who reads its answer. See the top of
    * `one-turn-agent.ts`.
    */
-  const worktreeChats = new WorktreeChats(
+  const allChats = new Chats(
     {
       // Null rather than a throw for a folder that has left the workspace: the
       // caller turns "nowhere to run" into a line in the chat, and one path
@@ -256,16 +257,16 @@ export function createIpc(host: Host): {
       // Asked per turn rather than held — Settings can add, rename or delete a
       // profile between two messages in the same chat.
       claudeProfiles: () => store.listClaudeProfiles(),
-      chats: () => store.listWorktreeChats(),
-      saveChats: (chats) => store.saveWorktreeChats(chats),
-      readChat: (id) => store.readWorktreeChat(id),
-      writeChat: (id, messages) => store.writeWorktreeChat(id, messages),
-      deleteChat: (id) => store.deleteWorktreeChat(id),
+      chats: () => store.listChats(),
+      saveChats: (chats) => store.saveChats(chats),
+      readChat: (id) => store.readChat(id),
+      writeChat: (id, messages) => store.writeChat(id, messages),
+      deleteChat: (id) => store.deleteChat(id),
       writeImage: (fileName, bytes) => store.writeNoteFile(fileName, bytes),
       readImage: (fileName) => store.readNoteFile(fileName),
     },
     (event) => {
-      send(IPC.worktreeChatEvent, event)
+      send(IPC.chatEvent, event)
       const notice = notices.read(event)
       void announce(notice)
     }
@@ -298,7 +299,7 @@ export function createIpc(host: Host): {
     // its own window and being read there is one nobody needs calling back to.
     if (host.focused()) return
 
-    const chats = await worktreeChats.list()
+    const chats = await allChats.list()
     const chat = chats.find((entry) => entry.id === notice.chatId)
     // A chat with no row is one the `+` opened and nobody has spoken into, so
     // there is nothing to call it and nothing to call somebody back to.
@@ -442,15 +443,15 @@ export function createIpc(host: Host): {
     }
   )
 
-  handle(IPC.listWorktreeChats, () => worktreeChats.list())
+  handle(IPC.listChats, () => allChats.list())
 
-  handle(IPC.createWorktreeChat, (_event, place: ChatPlace, seed?: ChatSeed) =>
-    worktreeChats.create(place, seed)
+  handle(IPC.createChat, (_event, place: ChatPlace, seed?: ChatSeed) =>
+    allChats.create(place, seed)
   )
 
-  handle(IPC.readWorktreeChat, (_event, id: string) => worktreeChats.read(id))
+  handle(IPC.readChat, (_event, id: string) => allChats.read(id))
 
-  handle(IPC.chatSpend, () => worktreeChats.spend())
+  handle(IPC.chatSpend, () => allChats.spend())
 
   /*
    * A file the user names, which is the one write allowed outside the
@@ -518,7 +519,7 @@ export function createIpc(host: Host): {
       const chats =
         filter.kinds === "files"
           ? { chats: [], matches: 0 }
-          : await worktreeChats.search(
+          : await allChats.search(
               built.matcher,
               MAX_SEARCH_MATCHES,
               stale,
@@ -590,47 +591,40 @@ export function createIpc(host: Host): {
     }
   )
 
-  handle(IPC.deleteWorktreeChat, (_event, id: string) => {
+  handle(IPC.deleteChat, (_event, id: string) => {
     // Before the delete rather than after: a chat killed mid-turn emits no
     // `busy: false`, so the watcher would keep it as working for the rest of
     // the run and swallow the first quiet of whatever reused the id.
     notices.forget(id)
-    return worktreeChats.delete(id)
+    return allChats.delete(id)
   })
 
-  handle(IPC.clearWorktreeChat, (_event, id: string) => worktreeChats.clear(id))
+  handle(IPC.clearChat, (_event, id: string) => allChats.clear(id))
 
-  handle(IPC.renameWorktreeChat, (_event, id: string, title: string) =>
-    worktreeChats.rename(id, title)
+  handle(IPC.renameChat, (_event, id: string, title: string) =>
+    allChats.rename(id, title)
   )
 
-  handle(
-    IPC.setWorktreeChatOptions,
-    (_event, id: string, options: WorktreeChatOptions) =>
-      worktreeChats.setOptions(id, options)
+  handle(IPC.setChatOptions, (_event, id: string, options: ChatOptions) =>
+    allChats.setOptions(id, options)
   )
 
-  handle(
-    IPC.answerWorktreeChatAsk,
-    (_event, askId: string, answer: WorktreeChatAnswer) => {
-      worktreeChats.answer(askId, answer)
-    }
-  )
+  handle(IPC.answerChatAsk, (_event, askId: string, answer: ChatAnswer) => {
+    allChats.answer(askId, answer)
+  })
 
   handle(
-    IPC.sendWorktreeChat,
+    IPC.sendChat,
     (_event, id: string, prompt: string, images?: ChatImage[]) =>
-      worktreeChats.send(id, prompt, images ?? [])
+      allChats.send(id, prompt, images ?? [])
   )
 
-  handle(
-    IPC.editWorktreeChat,
-    (_event, id: string, at: number, prompt: string) =>
-      worktreeChats.edit(id, at, prompt)
+  handle(IPC.editChat, (_event, id: string, at: number, prompt: string) =>
+    allChats.edit(id, at, prompt)
   )
 
-  handle(IPC.stopWorktreeChat, (_event, id: string) => {
-    worktreeChats.stop(id)
+  handle(IPC.stopChat, (_event, id: string) => {
+    allChats.stop(id)
   })
 
   handle(IPC.getWorkspace, () => store.getWorkspace())
@@ -746,10 +740,10 @@ export function createIpc(host: Host): {
     if (failed) throw new Error(failed.error)
     if (branch) await deleteBranch(repo, branch)
 
-    for (const chat of await worktreeChats.list()) {
+    for (const chat of await allChats.list()) {
       if (chatRootId(chat) !== folderId) continue
       notices.forget(chat.id)
-      await worktreeChats.delete(chat.id)
+      await allChats.delete(chat.id)
     }
 
     return store.removeFolder(folderId)
@@ -1285,7 +1279,7 @@ export function createIpc(host: Host): {
       // No command: an interactive shell, which is the only thing a pty is
       // started for now. The agent CLIs used to be started here too, with
       // their flags built alongside — what runs one is the agent SDK in
-      // `worktree-chat.ts`, which spawns its own process and needs no pty.
+      // `chat.ts`, which spawns its own process and needs no pty.
       const picked = shellId
         ? (await installedShells()).find((profile) => profile.id === shellId)
         : undefined
@@ -1418,7 +1412,7 @@ export function createIpc(host: Host): {
 
   return {
     handlers,
-    worktreeChats,
+    allChats,
     terminals,
     tsServers,
     watchers,

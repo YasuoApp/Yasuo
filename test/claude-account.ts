@@ -4,7 +4,7 @@ import {
   accountCaption,
   accountLabel,
   accountLine,
-} from "../src/renderer/lib/worktree-chat/claude-profiles"
+} from "../src/renderer/lib/chat/claude-profiles"
 import { check, finish, section } from "./harness"
 
 /**

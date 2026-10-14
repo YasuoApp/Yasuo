@@ -48,7 +48,7 @@ import {
   type ChatPermission,
   type ClaudeAccount,
   type ClaudeProfile,
-  type WorktreeChatOptions,
+  type ChatOptions,
 } from "@shared/api"
 import {
   DropdownMenu,
@@ -69,24 +69,21 @@ import { iconFor } from "@/lib/files/icons"
 import { useFiles } from "@/lib/files/store"
 import { useSettings } from "@/lib/settings"
 import { cn } from "@/lib/utils"
-import {
-  accountLine,
-  useClaudeProfiles,
-} from "@/lib/worktree-chat/claude-profiles"
+import { accountLine, useClaudeProfiles } from "@/lib/chat/claude-profiles"
 import {
   defaultModelAlias,
   effortFor,
   orderedModels,
   useAgentModels,
-} from "@/lib/worktree-chat/models"
-import { useAgentCommands } from "@/lib/worktree-chat/commands"
+} from "@/lib/chat/models"
+import { useAgentCommands } from "@/lib/chat/commands"
 import {
   commandQuery,
   insertCommand,
   LOCAL_COMMANDS,
   rankCommands,
   type CommandQuery,
-} from "@/lib/worktree-chat/command-text"
+} from "@/lib/chat/command-text"
 import {
   attachedIn,
   dataUrlOf,
@@ -94,9 +91,9 @@ import {
   namedIn,
   readImage,
   withoutTag,
-} from "@/lib/worktree-chat/images"
-import { chatMentions, primeMentions } from "@/lib/worktree-chat/mentions"
-import { compact } from "@/lib/worktree-chat/usage"
+} from "@/lib/chat/images"
+import { chatMentions, primeMentions } from "@/lib/chat/mentions"
+import { compact } from "@/lib/chat/usage"
 import {
   bandOf,
   remainingOf,
@@ -105,7 +102,7 @@ import {
   windowLabel,
   windowSlices,
   WINDOW_TONES,
-} from "@/lib/worktree-chat/window"
+} from "@/lib/chat/window"
 import {
   insertMention,
   markMentions,
@@ -117,7 +114,7 @@ import {
   type MentionSegment,
   type PlainMention,
   type PlainMentionKind,
-} from "@/lib/worktree-chat/mention-text"
+} from "@/lib/chat/mention-text"
 import { IconButton } from "../icon-button"
 import { ImageThumb } from "./chat-images"
 import { McpMenu } from "./chat-mcp"
@@ -133,7 +130,7 @@ import { PlanUsageMeter } from "./chat-plan-usage"
  * menu without a release. What is picked goes to the CLI as the message and is
  * run by the CLI — with two exceptions, `/clear` and `/rename`, which are about
  * the conversation rather than the code and are this app's to answer; see
- * `lib/worktree-chat/command-text.ts`.
+ * `lib/chat/command-text.ts`.
  *
  * A mention is the path and nothing else — the turn runs in this checkout with
  * `Read`, so a path is already something the agent can open, and it is what the
@@ -141,7 +138,7 @@ import { PlanUsageMeter } from "./chat-plan-usage"
  *
  * What the menu leaves out is as deliberate as what it holds: `.git`,
  * `node_modules` and the rest are never indexed, and what the repository's own
- * `.gitignore` disowns is dropped on top of that (`lib/worktree-chat/
+ * `.gitignore` disowns is dropped on top of that (`lib/chat/
  * mentions.ts`).
  *
  * A row is the file type's own icon, the path, and an estimate of what reading
@@ -149,7 +146,7 @@ import { PlanUsageMeter } from "./chat-plan-usage"
  * `src/main` and `src/main/git.ts` look alike in a menu and are three orders of
  * magnitude apart in a context window. There was a composer whose `@` pasted the
  * context in, and one that listed the Database, API and Notes panels' names; see
- * `lib/worktree-chat/mention-text.ts` for why this one does neither.
+ * `lib/chat/mention-text.ts` for why this one does neither.
  *
  * The tint is drawn *behind* the text by a mirror of it, rather than by making
  * this a rich-text editor: the message is plain text on the wire and in the
@@ -244,7 +241,7 @@ export type ChatComposerHandle = {
    * where it is inside it. */
   insertPaths: (paths: string[]) => void
   /** Holds pictures for the message and writes an `[Image #n]` at the caret
-   * for each — see `lib/worktree-chat/images.ts`. */
+   * for each — see `lib/chat/images.ts`. */
   insertImages: (images: ChatImage[]) => void
   /**
    * Writes text at the caret, spaced off what is around it — a selection
@@ -281,15 +278,15 @@ export function ChatComposer({
   onStop: () => void
   placeholder?: string
   /** What the toolbar under the field is showing. */
-  options?: WorktreeChatOptions
+  options?: ChatOptions
   /**
    * A whole new set of them, on every change.
    *
    * Whole rather than a patch all the way down to the record — see
-   * `WorktreeChatOptions`. Optional so the composer still draws without an
+   * `ChatOptions`. Optional so the composer still draws without an
    * owner for the toolbar, in which case it is left off.
    */
-  onOptions?: (options: WorktreeChatOptions) => void
+  onOptions?: (options: ChatOptions) => void
   /**
    * The checkout the chat is in: where the file picker opens, and what a picked
    * path is written relative to.
@@ -1116,7 +1113,7 @@ export function ToolbarButton({
  * credits — so a picker written here could only be wrong in one of two
  * directions: offering a model the account cannot use, which fails a turn after
  * somebody has typed a message, or hiding one they are paying for. See
- * `lib/worktree-chat/models.ts` and `main/agent-models.ts`.
+ * `lib/chat/models.ts` and `main/agent-models.ts`.
  *
  * Each row is the CLI's own `displayName` over its own `description`, because
  * "which model" is a question about the trade-off and the trade-off is the
@@ -1673,7 +1670,7 @@ function Marks({
  * is one summarisation call, so there is no fraction of it to report, and a
  * determinate bar drawn there would be an animation pretending to measure
  * something. The window either side of it is measurable, and it is the thing
- * somebody is really watching — see `lib/worktree-chat/window.ts`.
+ * somebody is really watching — see `lib/chat/window.ts`.
  *
  * Read against the **auto-compact threshold** rather than the raw window
  * (`fractionOf`): on a 1M-context model the CLI compacts at 967k, so a bar drawn

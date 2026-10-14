@@ -104,7 +104,7 @@ export function registerIpc(
 
   /** The studio, scrolled to one chat — where a notification's click leads. */
   const revealChat = (chatId: string): void => {
-    showWindow()?.webContents.send(IPC.revealWorktreeChat, chatId)
+    showWindow()?.webContents.send(IPC.revealChat, chatId)
   }
 
   const showOpenDialog = (options: OpenDialogOptions) => {

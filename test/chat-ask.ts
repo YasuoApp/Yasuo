@@ -1,11 +1,5 @@
-import type { WorktreeChatAsk } from "../src/shared/api"
-import {
-  asked,
-  decided,
-  isMcpTool,
-  said,
-  titleFor,
-} from "../src/main/worktree-chat"
+import type { ChatAsk } from "../src/shared/api"
+import { asked, decided, isMcpTool, said, titleFor } from "../src/main/chat"
 import { check, finish, section } from "./harness"
 
 /**
@@ -139,7 +133,7 @@ check(
 
 section("the line it leaves in the conversation")
 
-const toolAsk: WorktreeChatAsk = {
+const toolAsk: ChatAsk = {
   id: "a1",
   chatId: "c1",
   kind: "tool",

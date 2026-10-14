@@ -18,7 +18,7 @@ import {
   previewReplacement,
   replaceIn,
 } from "../src/shared/search"
-import { hitAt, hitsIn } from "../src/renderer/lib/worktree-chat/search"
+import { hitAt, hitsIn } from "../src/renderer/lib/chat/search"
 import { check, finish, section } from "./harness"
 
 /**

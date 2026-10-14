@@ -20,30 +20,25 @@ import {
   chatOptions,
   type ChatPermission,
   type ChatPlace,
-  type WorktreeChatOptions,
+  type ChatOptions,
 } from "@shared/api"
 import { isStudioShortcut } from "@/lib/shortcuts"
 import { useStudio } from "@/lib/store"
 import { cn } from "@/lib/utils"
-import {
-  blockOf,
-  blocksOf,
-  replyOf,
-  splitSubagents,
-} from "@/lib/worktree-chat/activity"
-import { editedAfter } from "@/lib/worktree-chat/edit"
-import { useComposerBus } from "@/lib/worktree-chat/composer-bus"
-import { clearFind, paintFind, rectOfHit } from "@/lib/worktree-chat/find-marks"
-import { readImage } from "@/lib/worktree-chat/images"
-import { mediaOf } from "@/lib/worktree-chat/media"
-import { currentEntry, outlineOf } from "@/lib/worktree-chat/outline"
-import { quoteOf } from "@/lib/worktree-chat/reply"
-import { hitAt, hitsIn } from "@/lib/worktree-chat/search"
+import { blockOf, blocksOf, replyOf, splitSubagents } from "@/lib/chat/activity"
+import { editedAfter } from "@/lib/chat/edit"
+import { useComposerBus } from "@/lib/chat/composer-bus"
+import { clearFind, paintFind, rectOfHit } from "@/lib/chat/find-marks"
+import { readImage } from "@/lib/chat/images"
+import { mediaOf } from "@/lib/chat/media"
+import { currentEntry, outlineOf } from "@/lib/chat/outline"
+import { quoteOf } from "@/lib/chat/reply"
+import { hitAt, hitsIn } from "@/lib/chat/search"
 import { useWorkspaceSearch } from "@/lib/workspace-search"
-import { placeOf, useWorktreeChats } from "@/lib/worktree-chat/store"
-import { chatLine, totalOf, usageDetail } from "@/lib/worktree-chat/usage"
+import { placeOf, useChats } from "@/lib/chat/store"
+import { chatLine, totalOf, usageDetail } from "@/lib/chat/usage"
 import { IconButton } from "../icon-button"
-import { ChatAsk } from "./chat-ask"
+import { AskCard } from "./chat-ask"
 import { ChatFind } from "./chat-find"
 import { ChatMediaColumn } from "./chat-media"
 import { ChatOutline } from "./chat-outline"
@@ -53,14 +48,14 @@ import { ChatActivity, DayDivider } from "./chat-activity"
 import { ChatMessage, type MessageEdit, SubagentSteps } from "./chat-message"
 import { ChatAgents } from "./chat-agents"
 import { ChatSkeleton, ChatTranscriptSkeleton } from "./chat-skeleton"
-import { WorktreeWelcome } from "./worktree-welcome"
+import { ChatWelcome } from "./chat-welcome"
 
 /**
  * A project's chat: the pane the strip's chat tabs draw into.
  *
  * The conversation is hosted rather than tailed — one agent-SDK turn at a time
  * in the project's own directory, streamed back a message at a time (see
- * `main/worktree-chat.ts`). So this is the app's own chat UI rather than a
+ * `main/chat.ts`). So this is the app's own chat UI rather than a
  * reader: a session's chat view tails the transcript the interactive CLI
  * writes, and therefore cannot be anything else.
  *
@@ -71,7 +66,7 @@ import { WorktreeWelcome } from "./worktree-welcome"
  * One pane for every chat, keyed by which one the strip has selected — the tabs
  * above it are `lib/panels.ts`'s.
  */
-export function WorktreeChatPane({
+export function ChatPane({
   chatId,
   popped = false,
 }: {
@@ -82,9 +77,9 @@ export function WorktreeChatPane({
   chatId?: string
   popped?: boolean
 } = {}) {
-  const chats = useWorktreeChats((state) => state.chats)
-  const selectedId = useWorktreeChats((state) => state.selectedId)
-  const openIds = useWorktreeChats((state) => state.openIds)
+  const chats = useChats((state) => state.chats)
+  const selectedId = useChats((state) => state.selectedId)
+  const openIds = useChats((state) => state.openIds)
 
   const shown = chatId
     ? chats.find((chat) => chat.id === chatId)
@@ -223,34 +218,34 @@ function Conversation({
   title: string
   /** Null once the checkout or project a chat names has gone. */
   place: ChatPlace | null
-  options: WorktreeChatOptions
+  options: ChatOptions
   /** Drawn inside a chat's own window rather than the studio's pane. */
   popped?: boolean
 }) {
-  const messages = useWorktreeChats((state) => state.messages[chatId])
-  const reading = useWorktreeChats((state) => state.reading.includes(chatId))
-  const sending = useWorktreeChats((state) => state.sending.includes(chatId))
-  const startedAt = useWorktreeChats((state) => state.startedAt[chatId])
-  const agents = useWorktreeChats((state) => state.agents[chatId])
-  const context = useWorktreeChats((state) => state.context[chatId])
+  const messages = useChats((state) => state.messages[chatId])
+  const reading = useChats((state) => state.reading.includes(chatId))
+  const sending = useChats((state) => state.sending.includes(chatId))
+  const startedAt = useChats((state) => state.startedAt[chatId])
+  const agents = useChats((state) => state.agents[chatId])
+  const context = useChats((state) => state.context[chatId])
   // This run's measurement, else the one kept on the record — without the
   // fallback a restarted app drew no meter until the next turn ended.
-  const contextWindow = useWorktreeChats(
+  const contextWindow = useChats(
     (state) =>
       state.window[chatId] ??
       state.chats.find((chat) => chat.id === chatId)?.window
   )
-  const compacting = useWorktreeChats((state) => state.compacting[chatId])
-  const compactError = useWorktreeChats((state) => state.compactError[chatId])
-  const ask = useWorktreeChats((state) => state.asks[chatId])
+  const compacting = useChats((state) => state.compacting[chatId])
+  const compactError = useChats((state) => state.compactError[chatId])
+  const ask = useChats((state) => state.asks[chatId])
   /** The messages sent into this chat while it was already working, which the
    * CLI has queued behind the turn on screen — see `queued` in the store. */
-  const queued = useWorktreeChats((state) => state.queued[chatId])
-  const send = useWorktreeChats((state) => state.send)
-  const edit = useWorktreeChats((state) => state.edit)
-  const stop = useWorktreeChats((state) => state.stop)
-  const answer = useWorktreeChats((state) => state.answer)
-  const setOptions = useWorktreeChats((state) => state.setOptions)
+  const queued = useChats((state) => state.queued[chatId])
+  const send = useChats((state) => state.send)
+  const edit = useChats((state) => state.edit)
+  const stop = useChats((state) => state.stop)
+  const answer = useChats((state) => state.answer)
+  const setOptions = useChats((state) => state.setOptions)
   /**
    * This chat's unsent draft — what was typed and left, or a message written
    * *for* the user: the `Changes` pane's review, which `Ask AI to fix` puts in
@@ -261,13 +256,13 @@ function Conversation({
    * was written in, and the same field instance carried across a switch is how
    * one chat's half-written message came to sit under another one's.
    */
-  const seeded = useWorktreeChats((state) => state.drafts[chatId])
-  const seededImages = useWorktreeChats((state) => state.draftImages[chatId])
+  const seeded = useChats((state) => state.drafts[chatId])
+  const seededImages = useChats((state) => state.draftImages[chatId])
   /** Not written down yet — nothing on disk for a second window to read, so
    * the pop-out button waits for the first message. */
-  const unsaved = useWorktreeChats((state) => state.unsaved.includes(chatId))
-  const keepDraft = useWorktreeChats((state) => state.keepDraft)
-  const clearDraft = useWorktreeChats((state) => state.clearDraft)
+  const unsaved = useChats((state) => state.unsaved.includes(chatId))
+  const keepDraft = useChats((state) => state.keepDraft)
+  const clearDraft = useChats((state) => state.clearDraft)
 
   // Where the file picker opens and what a picked path is written relative to.
   // The record's own path rather than one built here, and undefined for a
@@ -332,7 +327,7 @@ function Conversation({
     at: number
     opened: number
   } | null>(null)
-  const showing = useStudio((state) => state.pane) === "worktree"
+  const showing = useStudio((state) => state.pane) === "chat"
 
   /** The key and the header's button: a second press with the bar up puts the
    * caret back in the field rather than doing nothing — see `opened`. */
@@ -560,7 +555,7 @@ function Conversation({
   const { own, steps } = useMemo(() => splitSubagents(lines), [lines])
   const blocks = useMemo(() => blocksOf(own), [own])
   /* Which message each user line is, counted the way main counts them for an
-     edit — see `editWorktreeChat`. By line id, since the blocks are drawn by id. */
+     edit — see `editChat`. By line id, since the blocks are drawn by id. */
   const ordinals = useMemo(() => {
     const at = new Map<string, number>()
     for (const line of own) if (line.role === "user") at.set(line.id, at.size)
@@ -916,7 +911,7 @@ function Conversation({
               // Where this chat is, which is what somebody with three checkouts of
               // one project open needs before they ask for anything.
               <div className="w-full max-w-md">
-                <WorktreeWelcome place={place} />
+                <ChatWelcome place={place} />
               </div>
             ) : (
               <div
@@ -990,7 +985,7 @@ function Conversation({
                 {/* At the end of the transcript rather than over it: it is the turn
                 asking, so it belongs where the turn had got to. */}
                 {ask && (
-                  <ChatAsk
+                  <AskCard
                     ask={ask}
                     onAnswer={(given) => answer(chatId, given)}
                   />

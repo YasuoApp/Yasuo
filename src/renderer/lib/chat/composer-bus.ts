@@ -1,7 +1,7 @@
 import { create } from "zustand"
 
 import { useProjects } from "../projects"
-import { useWorktreeChats } from "./store"
+import { useChats } from "./store"
 
 /**
  * The way something outside the chat pane puts words into its composer.
@@ -44,7 +44,7 @@ type BusState = {
 export const useComposerBus = create<BusState>((set, get) => {
   /** A delivery of `text` — empty for one that only shows the chat. */
   function address(text: string) {
-    const chats = useWorktreeChats.getState()
+    const chats = useChats.getState()
     const selected =
       chats.selectedId && chats.openIds.includes(chats.selectedId)
         ? chats.selectedId

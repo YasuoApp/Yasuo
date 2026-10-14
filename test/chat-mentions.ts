@@ -9,7 +9,7 @@ import {
   rankPlainMentions,
   type IndexedPath,
   type PlainMention,
-} from "../src/renderer/lib/worktree-chat/mention-text"
+} from "../src/renderer/lib/chat/mention-text"
 import { check, finish, section } from "./harness"
 
 /**

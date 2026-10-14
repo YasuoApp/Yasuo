@@ -37,7 +37,7 @@ type Entry = {
  * `prompts` are this app's own user lines from the one being edited to the
  * last, in order. They are matched against the transcript's prompts **from
  * the end**, each one required to contain this app's text: the CLI heads a
- * message with the mode's sentence (`headed` in `worktree-chat.ts`), and a
+ * message with the mode's sentence (`headed` in `chat.ts`), and a
  * pairing that drifted by one — a message the CLI folded, a slash command it
  * answered itself — has to be refused rather than cut the conversation at the
  * wrong turn. Throws with a sentence for the line in the chat when it cannot

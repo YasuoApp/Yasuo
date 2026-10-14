@@ -27,13 +27,13 @@ import { useDock } from "@/lib/dock"
 import { useStudio, RAIL_WIDTH, type Pane } from "@/lib/store"
 import { useProjects } from "@/lib/projects"
 import { useWorkspaceSearch } from "@/lib/workspace-search"
-import { useClaudeProfiles } from "@/lib/worktree-chat/claude-profiles"
-import { useWorktreeChats } from "@/lib/worktree-chat/store"
-import { badgeCount } from "@/lib/worktree-chat/unread"
+import { useClaudeProfiles } from "@/lib/chat/claude-profiles"
+import { useChats } from "@/lib/chat/store"
+import { badgeCount } from "@/lib/chat/unread"
 import { Dock } from "./dock"
 import { NavRail } from "./nav-rail"
 import { WorkspaceSidebar } from "./workspace-sidebar"
-import { WorktreeChatPane } from "./worktree/chat-pane"
+import { ChatPane } from "./chat/chat-pane"
 import { FileTree } from "./files/file-tree"
 import { ExplorerRail } from "./files/explorer-rail"
 import { ChangesPane } from "./files/changes-pane"
@@ -63,8 +63,8 @@ function paneView(pane: Pane) {
       return <FileWorkspace />
     case "changes":
       return <ChangesPane />
-    case "worktree":
-      return <WorktreeChatPane />
+    case "chat":
+      return <ChatPane />
   }
 }
 
@@ -94,7 +94,7 @@ export function Studio() {
     void useSettings.getState().restore()
     void useFiles.getState().restore()
     void useProjects.getState().restore()
-    void useWorktreeChats.getState().restore()
+    void useChats.getState().restore()
     void useClaudeProfiles.getState().refresh()
     // The studio's window only: a popped-out chat is a second page, and a
     // plugin started in both would answer every event twice.
@@ -103,7 +103,7 @@ export function Studio() {
 
   // A chat's turn runs in the main process and outlives the
   // pane being switched away from, so its lines are subscribed to here.
-  useEffect(() => useWorktreeChats.getState().listen(), [])
+  useEffect(() => useChats.getState().listen(), [])
 
   // The dock icon's red number. Here rather than in main because `unread` is
   // this window's — main knows a chat went quiet but not whether anybody has
@@ -111,17 +111,14 @@ export function Studio() {
   // popped-out chat keeps a store of its own, and two senders would fight.
   useEffect(() => {
     let shown = -1
-    const sync = ({
-      unread,
-      asks,
-    }: ReturnType<typeof useWorktreeChats.getState>) => {
+    const sync = ({ unread, asks }: ReturnType<typeof useChats.getState>) => {
       const count = badgeCount(unread, asks)
       if (count === shown) return
       shown = count
       void window.desktop.setBadgeCount(count)
     }
-    sync(useWorktreeChats.getState())
-    return useWorktreeChats.subscribe(sync)
+    sync(useChats.getState())
+    return useChats.subscribe(sync)
   }, [])
 
   // The appearance settings, written onto `<html>` as they change — here

@@ -44,10 +44,10 @@ import { locate, spawnEnvironment } from "./shell-env"
  * 3. Model, effort and permission can now change *without* a new process —
  *    `setModel`, `applyFlagSettings` and `permits`, which is consulted per call.
  *    What still cannot is `cwd` and `CLAUDE_CONFIG_DIR`: those are the CLI's own
- *    argument list, and `worktree-chat.ts` opens a new session when one of them
+ *    argument list, and `chat.ts` opens a new session when one of them
  *    moves.
  *
- * Apart from `worktree-chat.ts`, its one caller, because the part worth having
+ * Apart from `chat.ts`, its one caller, because the part worth having
  * on its own is the **driving**: what the SDK hands back moves between
  * versions, and a reader of it tangled into a store and a session id is one
  * nobody wants to re-read when it moves. What is *not* here is policy — which
@@ -138,7 +138,7 @@ export type AgentSessionOptions = {
   asksRules?: () => boolean
   /**
    * MCP tools the chat has switched off, as wire names or server prefixes
-   * — `WorktreeChatOptions.disabledTools`.
+   * — `ChatOptions.disabledTools`.
    *
    * The one thing this app still says about the CLI's tool list, and it goes
    * over as `disallowedTools` rather than being refused in-process like a mode's
@@ -146,14 +146,14 @@ export type AgentSessionOptions = {
    * for and offered, only to fail when used. This takes it out. It is part of
    * the cached prefix, which is why it changes only when somebody flips a
    * switch rather than per mode or per message — see `permits` and
-   * `signatureOf` in `worktree-chat.ts`.
+   * `signatureOf` in `chat.ts`.
    */
   disallowedTools?: string[]
   /**
    * How much the turn may do without being asked.
    *
    * A mode that ends by asking needs an `onAsk` below to answer it, or it is a
-   * turn that stalls: see `PERMISSIONS` in `worktree-chat.ts` for which of the
+   * turn that stalls: see `PERMISSIONS` in `chat.ts` for which of the
    * CLI's modes are paired with one and what each is for.
    */
   permissionMode?: string
@@ -1457,11 +1457,11 @@ export function collapse(text: string): string {
  * `claude`'s business rather than this app's: a chat on an older CLI still sends
  * `Task`, and a transcript on disk holds whichever was current when it was
  * written. So every test of it is a test of the pair, here and in
- * `lib/worktree-chat/activity.ts`, which is the renderer's copy of this fact —
+ * `lib/chat/activity.ts`, which is the renderer's copy of this fact —
  * the two processes never import each other.
  *
  * Getting this wrong is not cosmetic: the name is on `READ_TOOLS` and
- * `ALLOWED_TOOLS` in `worktree-chat.ts`, so a mode that did not know the new one
+ * `ALLOWED_TOOLS` in `chat.ts`, so a mode that did not know the new one
  * refused every handoff to a subagent.
  */
 export const AGENT_TOOLS = ["Agent", "Task"]
@@ -1598,7 +1598,7 @@ export function detailOf(text: string): string {
  * which is what makes this safe to put ahead of everything else in
  * `describeCall`: a CLI that renames the field or the statuses lands back on the
  * JSON argument the row drew before this existed, rather than on a checklist
- * with nothing in it. Same reasoning as `asked` in `worktree-chat.ts` — the tool
+ * with nothing in it. Same reasoning as `asked` in `chat.ts` — the tool
  * name says which kind of call it is, and this says whether the payload agrees.
  *
  * An item with no content is dropped rather than drawn as an empty line, and a

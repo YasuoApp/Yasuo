@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label"
 import { useProjects } from "@/lib/projects"
 import { useShells } from "@/lib/shell/store"
 import { useStudio } from "@/lib/store"
-import { useWorktreeChats } from "@/lib/worktree-chat/store"
+import { useChats } from "@/lib/chat/store"
 import type { WorkspaceFolder } from "@shared/api"
 
 /**
@@ -88,7 +88,7 @@ export function NewWorktreeDialog({
       if (created) {
         useProjects.getState().setActive(created)
         useShells.getState().showFor(created)
-        void useWorktreeChats.getState().create({ folderId: created })
+        void useChats.getState().create({ folderId: created })
       }
       onClose()
     } catch (failure) {

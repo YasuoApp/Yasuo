@@ -9,7 +9,7 @@ import {
   totalOf,
   usageDetail,
   usageLine,
-} from "../src/renderer/lib/worktree-chat/usage"
+} from "../src/renderer/lib/chat/usage"
 import { check, finish, section } from "./harness"
 
 /**

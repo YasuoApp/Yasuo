@@ -1,4 +1,4 @@
-import type { WorktreeChatEvent } from "../src/shared/api"
+import type { ChatEvent } from "../src/shared/api"
 import { ChatNotices, noticeText, type ChatNotice } from "../src/main/notify"
 import { check, finish, section } from "./harness"
 
@@ -16,28 +16,29 @@ import { check, finish, section } from "./harness"
  * checks the fields we already believed were there.
  */
 
-const busy = (chatId: string, working: boolean): WorktreeChatEvent => ({
+const busy = (chatId: string, working: boolean): ChatEvent => ({
   chatId,
   type: "busy",
   busy: working,
 })
 
-const done = (
-  chatId: string,
-  error: string | null = null
-): WorktreeChatEvent => ({ chatId, type: "done", error })
+const done = (chatId: string, error: string | null = null): ChatEvent => ({
+  chatId,
+  type: "done",
+  error,
+})
 
-const decision = (chatId: string): WorktreeChatEvent => ({
+const decision = (chatId: string): ChatEvent => ({
   chatId,
   type: "decision",
   text: "Allowed",
 })
 
 /** An ask carries the question, which nothing here reads — only that one is up.
- * Built through `as` rather than filling in a `WorktreeChatAsk` this test would
+ * Built through `as` rather than filling in a `ChatAsk` this test would
  * then have to keep up to date. */
-const asks = (chatId: string): WorktreeChatEvent =>
-  ({ chatId, type: "ask", ask: { chatId } }) as unknown as WorktreeChatEvent
+const asks = (chatId: string): ChatEvent =>
+  ({ chatId, type: "ask", ask: { chatId } }) as unknown as ChatEvent
 
 const same = (
   label: string,

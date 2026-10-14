@@ -38,7 +38,7 @@ export const RAIL_WIDTH = 36
  * a pane drawable at all, and a pane left out of it is one that can be selected
  * and never shown.
  */
-export const PANES: Pane[] = ["files", "changes", "worktree"]
+export const PANES: Pane[] = ["files", "changes", "chat"]
 
 /**
  * `section` is held as a plain string rather than a `Section` on the way in: a
@@ -97,7 +97,7 @@ function isRememberedStrip(value: unknown): value is RememberedStrip {
  * (`lib/shell/store.ts`), and the agent half of what it was is a project's
  * chat.
  */
-export type Pane = Section | "worktree" | "changes"
+export type Pane = Section | "chat" | "changes"
 
 /**
  * Which of the Explorer's two lists is showing: the project's files, or the
@@ -303,10 +303,14 @@ export const useStudio = create<StudioState>((set, get) => {
         // `terminal` is what an older build may have been left on, and there
         // is no such pane any more — Explorer is where its sidebar went. The
         // same narrowing catches `database` and `api`, which a build that still
-        // had those panels could have been shut on.
-        pane: PANES.includes(strip.pane as Pane)
-          ? (strip.pane as Pane)
-          : "files",
+        // had those panels could have been shut on. `worktree` is the chat
+        // pane's name from before it was renamed.
+        pane:
+          strip.pane === "worktree"
+            ? "chat"
+            : PANES.includes(strip.pane as Pane)
+              ? (strip.pane as Pane)
+              : "files",
         // A build that never wrote this had no way to close the sidebar, so
         // the absence means open rather than "unknown".
         sidebar: strip.sidebar ?? true,

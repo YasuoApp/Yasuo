@@ -50,24 +50,20 @@ import { RenameRow, useMenuFocusHandoff } from "../rename-row"
 import { SideRow } from "../side-row"
 import { NewWorktreeDialog } from "./new-worktree-dialog"
 import { useShells } from "@/lib/shell/store"
-import {
-  chatsOf,
-  ungroupedChats,
-  useWorktreeChats,
-} from "@/lib/worktree-chat/store"
-import type { WorkspaceFolder, WorktreeChat } from "@shared/api"
+import { chatsOf, ungroupedChats, useChats } from "@/lib/chat/store"
+import type { WorkspaceFolder, Chat } from "@shared/api"
 import { PLUGIN_ICON_COMPONENTS } from "@/lib/plugins/icons"
 import type { PluginChatMenuItem } from "@/lib/plugins/registry"
 import { usePlugins } from "@/lib/plugins/store"
-import { since } from "@/lib/worktree-chat/since"
+import { since } from "@/lib/chat/since"
 import {
   activityLabel,
   activityOf,
   activityTitle,
   isRunning,
   type ChatActivity,
-} from "@/lib/worktree-chat/running"
-import { unreadIn } from "@/lib/worktree-chat/unread"
+} from "@/lib/chat/running"
+import { unreadIn } from "@/lib/chat/unread"
 
 /**
  * One plugin's chat menu item. A throw is reported in the plugin's name rather
@@ -100,7 +96,7 @@ async function runChatMenuItem(
  * last week is found again, and a row for a chat that will leave no file if the
  * tab is shut is a row that disappears without anybody deleting it.
  */
-function saved(chats: WorktreeChat[], unsaved: string[]): WorktreeChat[] {
+function saved(chats: Chat[], unsaved: string[]): Chat[] {
   if (unsaved.length === 0) return chats
   return chats.filter((chat) => !unsaved.includes(chat.id))
 }
@@ -140,13 +136,13 @@ export function ProjectsSection() {
   const toggleFolder = useProjects((state) => state.toggleFolder)
 
   const folders = useStudio((state) => state.folders)
-  const chats = useWorktreeChats((state) => state.chats)
-  const unsaved = useWorktreeChats((state) => state.unsaved)
+  const chats = useChats((state) => state.chats)
+  const unsaved = useChats((state) => state.unsaved)
   // Read here as well as in `ProjectChats` so a shut project can say what is
   // happening inside it — see the `activity` prop on `ProjectRow`.
-  const sending = useWorktreeChats((state) => state.sending)
-  const asks = useWorktreeChats((state) => state.asks)
-  const unread = useWorktreeChats((state) => state.unread)
+  const sending = useChats((state) => state.sending)
+  const asks = useChats((state) => state.asks)
+  const unread = useChats((state) => state.unread)
 
   const listed = saved(chats, unsaved)
   const orphans = ungroupedChats(listed)
@@ -189,11 +185,7 @@ export function ProjectsSection() {
    * `covered` is the chats the row answers for while it is shut, which is not
    * the same question as which chats are filed under it.
    */
-  function project(
-    folder: WorkspaceFolder,
-    indent: number,
-    covered: WorktreeChat[]
-  ) {
+  function project(folder: WorkspaceFolder, indent: number, covered: Chat[]) {
     return (
       <ProjectRow
         name={folder.name}
@@ -211,7 +203,7 @@ export function ProjectsSection() {
         // their own dot.
         unread={unreadIn(covered, unread)}
         onNewChat={() =>
-          void useWorktreeChats.getState().create({ folderId: folder.id })
+          void useChats.getState().create({ folderId: folder.id })
         }
         onNewWorktree={() => setBranching(folder)}
         // Pointing the dock first is what makes the `+`'s own `add` open the
@@ -448,7 +440,7 @@ export function ProjectsSection() {
                   .getState()
                   .removeWorktree(folder.id)
                   // Its chats went with it, main-side.
-                  .then(() => useWorktreeChats.getState().refresh())
+                  .then(() => useChats.getState().refresh())
                   .catch((error: unknown) =>
                     setFailure(
                       error instanceof Error ? error.message : String(error)
@@ -872,18 +864,18 @@ function ProjectChats({
    * 2 for the chats of a checkout. */
   indent?: number
 }) {
-  const chats = useWorktreeChats((state) => state.chats)
-  const unsaved = useWorktreeChats((state) => state.unsaved)
-  const selectedId = useWorktreeChats((state) => state.selectedId)
-  const sending = useWorktreeChats((state) => state.sending)
+  const chats = useChats((state) => state.chats)
+  const unsaved = useChats((state) => state.unsaved)
+  const selectedId = useChats((state) => state.selectedId)
+  const sending = useChats((state) => state.sending)
   // Which chats are stopped on a question — see the note in `tab-items.tsx`
   // about why that is not the same thing as one that is working.
-  const asks = useWorktreeChats((state) => state.asks)
-  // Which have answered since anybody looked — see `lib/worktree-chat/unread.ts`.
-  const unread = useWorktreeChats((state) => state.unread)
-  const select = useWorktreeChats((state) => state.select)
-  const remove = useWorktreeChats((state) => state.remove)
-  const rename = useWorktreeChats((state) => state.rename)
+  const asks = useChats((state) => state.asks)
+  // Which have answered since anybody looked — see `lib/chat/unread.ts`.
+  const unread = useChats((state) => state.unread)
+  const select = useChats((state) => state.select)
+  const remove = useChats((state) => state.remove)
+  const rename = useChats((state) => state.rename)
   const chatMenuItems = usePlugins((state) => state.chatMenuItems)
 
   /** Which chat's name is a field right now. In place, the way every other
@@ -892,7 +884,7 @@ function ProjectChats({
   /** Which chat the delete confirmation is up for. Here rather than on the
    * row, for the reason `removing` is on the section: a dialog inside the row
    * would be unmounted by the deletion it is confirming. */
-  const [deleting, setDeleting] = useState<WorktreeChat | null>(null)
+  const [deleting, setDeleting] = useState<Chat | null>(null)
   const menuFocus = useMenuFocusHandoff()
 
   /** Whether the list runs past `CHAT_LIMIT`. Per project and in memory: a

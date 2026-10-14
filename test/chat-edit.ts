@@ -1,9 +1,9 @@
 import type { AssistantMessage } from "../src/shared/api"
-import { editedAfter } from "../src/renderer/lib/worktree-chat/edit"
+import { editedAfter } from "../src/renderer/lib/chat/edit"
 import { check, finish, section } from "./harness"
 
 /**
- * What an edited message leaves behind — `lib/worktree-chat/edit.ts`. The
+ * What an edited message leaves behind — `lib/chat/edit.ts`. The
  * bubble names these before the edit is sent, since the edit cuts the
  * conversation and not the working tree.
  */

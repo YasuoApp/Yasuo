@@ -14,7 +14,7 @@ import path from "node:path"
 import type {
   AssistantMessage,
   ClaudeProfile,
-  WorktreeChat,
+  Chat,
   WorkspaceFolder,
   WorkspaceRecord,
 } from "../shared/api"
@@ -65,13 +65,14 @@ export const CLAUDE_PROFILES_DIR = "claude-profiles"
  * are a file of its own, the split the notes have and for the same reason: a
  * turn rewrites one chat rather than all of them.
  *
- * The file is still called `worktree-chats.json`: chats lived in `git worktree`
- * checkouts once, and renaming the file would lose every chat already written.
+ * Both were `worktree-chats` once, from when chats lived in `git worktree`
+ * checkouts; `migrateChatFiles` in `data-dir.ts` moves a workspace written
+ * under that name.
  */
-export const WORKTREE_CHATS_FILE = "worktree-chats.json"
+export const CHATS_FILE = "chats.json"
 
 /** Where each of those chats' lines live, one `<id>.json` per chat. */
-export const WORKTREE_CHATS_DIR = "worktree-chats"
+export const CHATS_DIR = "chats"
 
 /**
  * Where drawings are kept, one `<id>.excalidraw` per drawing.
@@ -405,19 +406,19 @@ export class Store {
     return path.join(this.workspaceDir, CLAUDE_PROFILES_DIR)
   }
 
-  listWorktreeChats(): Promise<WorktreeChat[]> {
-    return this.readList(WORKTREE_CHATS_FILE)
+  listChats(): Promise<Chat[]> {
+    return this.readList(CHATS_FILE)
   }
 
-  saveWorktreeChats(chats: WorktreeChat[]): Promise<void> {
-    return this.writeList(WORKTREE_CHATS_FILE, chats)
+  saveChats(chats: Chat[]): Promise<void> {
+    return this.writeList(CHATS_FILE, chats)
   }
 
   /** Empty for a chat with nothing said in it, and for a half-written file: a
    * chat is a log, not a document, so a broken one is worth an empty pane
    * rather than an error in front of every other chat. */
-  async readWorktreeChat(id: string): Promise<AssistantMessage[]> {
-    const raw = await this.readOwnFile(this.worktreeChatPath(id))
+  async readChat(id: string): Promise<AssistantMessage[]> {
+    const raw = await this.readOwnFile(this.chatPath(id))
     if (!raw.trim()) return []
     try {
       const parsed: unknown = JSON.parse(raw)
@@ -427,19 +428,16 @@ export class Store {
     }
   }
 
-  writeWorktreeChat(id: string, messages: AssistantMessage[]): Promise<void> {
-    return this.writeOwnFile(
-      this.worktreeChatPath(id),
-      JSON.stringify(messages)
-    )
+  writeChat(id: string, messages: AssistantMessage[]): Promise<void> {
+    return this.writeOwnFile(this.chatPath(id), JSON.stringify(messages))
   }
 
-  deleteWorktreeChat(id: string): Promise<void> {
-    return this.deleteOwnFiles([this.worktreeChatPath(id)])
+  deleteChat(id: string): Promise<void> {
+    return this.deleteOwnFiles([this.chatPath(id)])
   }
 
-  private worktreeChatPath(id: string): string {
-    return path.join(this.workspaceDir, WORKTREE_CHATS_DIR, `${ownId(id)}.json`)
+  private chatPath(id: string): string {
+    return path.join(this.workspaceDir, CHATS_DIR, `${ownId(id)}.json`)
   }
 
   /** A drawing's scene, or "" for one that has never been saved. */

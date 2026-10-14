@@ -82,7 +82,7 @@ reaches the contract through the `@shared/*` alias; `@/*` is `src/renderer`.
 
 `main.ts` creates the window and calls `registerIpc()` (`electron-ipc.ts`);
 `ipc.ts` owns every handler and the long-lived managers (`Store`,
-`TerminalManager`, `WorktreeChats`) as **`createIpc(host)`**, a table keyed by
+`TerminalManager`, `Chats`) as **`createIpc(host)`**, a table keyed by
 channel that **does not import `electron`**, so the tests can import it.
 What needs Electron itself — dialogs, windows, the dock badge, the trash,
 notifications — is `main/host.ts`, implemented by `electron-ipc.ts`. A handler
@@ -108,10 +108,10 @@ imports may reach `electron`.
   notification: quiet (**not** `done` — a message sent mid-turn is queued behind
   it), a failure, a question. Free of `electron` so `test/notify.ts` can import
   it; `ipc.ts` rings the bell, only while the window is unfocused, and the click
-  comes back as `IPC.revealWorktreeChat`.
+  comes back as `IPC.revealChat`.
 - **There is no menu bar tray** any more — the app's **dock icon carries a red
   badge** instead, Slack's way: chats unread or stopped on a question
-  (`badgeCount` in `lib/worktree-chat/unread.ts`), sent by the studio's window
+  (`badgeCount` in `lib/chat/unread.ts`), sent by the studio's window
   alone through `IPC.setBadgeCount` to `app.setBadgeCount`, because `unread` is
   the renderer's. `docs/design.md` § The dock badge, § The menu bar, removed.
 - **`files.ts`** — every `files:*` call goes through `insideAny`, which is what
@@ -153,17 +153,17 @@ imports may reach `electron`.
   `typescript`, and nothing if it has none.
 - **`mcp-servers.ts`** — which MCP servers the user's own `claude` has, asked of
   it over the SDK's control channel (`mcpServerStatus()`) in a project's own
-  directory, for the composer's MCP menu (`worktree/chat-mcp.tsx` — there is
+  directory, for the composer's MCP menu (`chat/chat-mcp.tsx` — there is
   no Settings › MCP any more), plus `removeMcpServer`, which
   runs the CLI's own `claude mcp remove`. **This app serves no MCP server of its
   own**: the three that served the Database, API and Notes panels are deleted —
   see `docs/design.md`. What it does still say about MCP is which _tools_ a chat
-  may call — **per chat**, `WorktreeChatOptions.disabledTools`, handed over as
+  may call — **per chat**, `ChatOptions.disabledTools`, handed over as
   `disallowedTools`.
 
 - **`plan-usage.ts`** — how much of the claude.ai plan's five-hour and
   seven-day windows an account has used, for the composer's usage meter
-  (`worktree/chat-plan-usage.tsx`). Asked the way the MCP listing is — a
+  (`chat/chat-plan-usage.tsx`). Asked the way the MCP listing is — a
   `claude` and no tokens, one control request — under the chat's profile's
   `CLAUDE_CONFIG_DIR`, held a minute per account. The request is the SDK's
   `usage_EXPERIMENTAL_…`, so `readPlanUsage` narrows everything
@@ -187,7 +187,7 @@ learnings…`, its dialog, `main/learnings.ts`, `shared/learnings.ts` and the
 
 - **`content-search.ts`** — the left column's Search (`Find in files`): a query
   with `Aa` / `ab` / `.*` over every file under the workspace's folders and what
-  was said in every chat (`WorktreeChats.search`), one channel
+  was said in every chat (`Chats.search`), one channel
   (`search:workspace`) whose **generation** in `ipc.ts` stops an older search
   typed past. A walk and a read per search, nothing indexed; capped at 2,000
   matches. A `SearchFilter` scopes it (kinds, one project, include/exclude
@@ -200,15 +200,15 @@ learnings…`, its dialog, `main/learnings.ts`, `shared/learnings.ts` and the
 - **`chat-digest.ts`** — `spendRows`, the **usage dashboard's** fold (tokens,
   not dollars — `docs/design.md` § The usage dashboard counts tokens): one row
   per usage line, with the chat's title and the line's `at`. Pure and free of
-  `electron` (`test/chat-digest.ts`); `WorktreeChats.spend` holds the lines and
+  `electron` (`test/chat-digest.ts`); `Chats.spend` holds the lines and
   the cache, and deliberately does **not** go through `read`, which would keep
   every transcript in the workspace resident. The per-chat `ChatDigest`, its
   `chatDigests` channel and the system bar's running total are **deleted**
   (`docs/design.md` § What the chats have cost, removed). Searching what a chat
   **said** is not here and is not main's: it is asked of the conversation on
-  screen, whose lines the renderer already holds (`lib/worktree-chat/search.ts`).
+  screen, whose lines the renderer already holds (`lib/chat/search.ts`).
 
-- **Every chat line carries `at`** (ISO), stamped in `WorktreeChats.append`,
+- **Every chat line carries `at`** (ISO), stamped in `Chats.append`,
   the one writer; lines from before it have none and draw no time. There is
   **no per-chat budget** any more — the toolbar's `Budget`, `budgetUsd` and
   `checkBudget` are deleted (`docs/design.md` § A chat's budget, removed).
@@ -241,9 +241,9 @@ learnings…`, its dialog, `main/learnings.ts`, `shared/learnings.ts` and the
   outside the roots — a save dialog names the destination — for a chat's
   export.
 
-### `worktree-chat.ts` + `claude-agent.ts` — the `claude` a conversation runs on
+### `chat.ts` + `claude-agent.ts` — the `claude` a conversation runs on
 
-`worktree-chat.ts` is the policy, `claude-agent.ts` the SDK runner under it. A
+`chat.ts` is the policy, `claude-agent.ts` the SDK runner under it. A
 chat is `@anthropic-ai/claude-agent-sdk`, not a `spawn` of `claude -p`. Five
 things are not visible from the option names:
 
@@ -301,7 +301,7 @@ every call `canUseTool` sees, ask rules included (`asksRules`) — the CLI's own
 settings have already approved the rest. Its other half is `mergeShellEnv` in
 `shell-env.ts`: a spawned `claude` gets the login shell's whole env, not only
 PATH. `Ask` is the mode that stops: an unpermitted call comes back through
-`canUseTool` as a card above the composer, and the promise `WorktreeChats.ask`
+`canUseTool` as a card above the composer, and the promise `Chats.ask`
 returns **is** the pause — nothing times it out. `Edits` stops too, for an MCP
 tool alone (`asks` on `PERMISSIONS` is a predicate): refusing one there meant a
 Figma frame the plain CLI fetches after one prompt. `endTurn` and `dispose` both
@@ -332,8 +332,8 @@ what every message used to.
 
 A chat's id **is** the CLI's session id, so whether a session opens with
 `sessionId` or `resume` is `started` on the record rather than a `Set` in the
-process. A chat's lines are `workspace/worktree-chats/<id>.json`, listed in
-`workspace/worktree-chats.json`. The cwd resolve is deliberately **not** a
+process. A chat's lines are `workspace/chats/<id>.json`, listed in
+`workspace/chats.json`. The cwd resolve is deliberately **not** a
 fallback chain: a chat whose folder has left the workspace finishes with a line
 saying so rather than running its next turn in whichever directory is readable.
 
@@ -341,12 +341,12 @@ That id is also how a chat gets its **name**. `append` calls it the first thing
 asked in it; `retitle` then replaces that with the CLI's own `ai-title`, read out
 of the session transcript — the app produces no summary of its own, because a
 turn nobody asked for is what `CLAUDE.md` refuses. It is the one read of that
-file (`worktree-chat.ts` says why), it never touches a chat the user has named,
+file (`chat.ts` says why), it never touches a chat the user has named,
 and `done` waits on it so the listing's re-read cannot race the write.
 
 **A chat is written down by its first message, not by the `+`.** The tab opens
 at once — the renderer mints the id (which is the session id) and holds the chat
-in `unsaved` — and `createWorktreeChat` is called from `send`, carrying a
+in `unsaved` — and `createChat` is called from `send`, carrying a
 `ChatSeed` of whatever the tab picked up meanwhile: its id, its name, its
 toolbar. So a `+` nobody spoke into leaves no row and no file. `create` used to
 take a `save` option for a caller that recorded the id elsewhere — the deleted
@@ -362,7 +362,7 @@ configures none and so has no name for one; an unlisted tool is still refused by
 
 A switched-off tool is a **wire** name (`mcp__claude_ai_ClickUp__clickup_search`),
 not the name the listing shows: the CLI normalises a server's configured name
-into it, so `wireServer` in `lib/worktree-chat/mcp-servers.ts` is what an entry
+into it, so `wireServer` in `lib/chat/mcp-servers.ts` is what an entry
 has to be built through or it matches nothing. Verified against the CLI's `init`
 frame: two named tools disallowed are two tools **absent from the model's list**,
 not refused on use.
@@ -370,7 +370,7 @@ not refused on use.
 ## Renderer (`src/renderer/`)
 
 React 19 + Vite + Tailwind v4. `components/studio/` is split by panel
-(`worktree`, `api`, `db`, `note`, `files`), and each panel's logic and zustand
+(`chat`, `project`, `note`, `files`), and each panel's logic and zustand
 store live in the matching `lib/` directory, with `lib/store.ts` holding the
 studio-wide state and `lib/workspace.ts` the thin repo over the workspace calls.
 `components/ui/` is shadcn/ui — add to it with the CLI (`bunx shadcn@latest add
@@ -387,13 +387,13 @@ and with them the panel windows they were the only users of, so there is one
 window again (`docs/design.md` § Database and API, removed).
 A project's rows say what is happening in them — a spinner, a shield for a chat
 stopped on a question, and a count on the project's own row **while it is shut**
-(`activityOf` in `lib/worktree-chat/running.ts`, tested; waiting wins over
+(`activityOf` in `lib/chat/running.ts`, tested; waiting wins over
 working, since both are true while a card is up). Out of the window, that is a
 notification — see `main/notify.ts`.
 Those all say what is happening **now** and go dark together, so a chat that has
 answered while somebody was reading another one is marked **unread** — a dot and
 a heavier title on the row and on the tab, off `marksUnread` in
-`lib/worktree-chat/unread.ts` (tested). Same rule as the notice, **quiet not
+`lib/chat/unread.ts` (tested). Same rule as the notice, **quiet not
 `done`**; read is selected-and-focused; nothing is written down, since unread is
 this run's attention. Its count is kept out of `ChatActivity` deliberately —
 that shape counts what is happening. Unread plus waiting is the dock badge.
@@ -401,7 +401,7 @@ A message sent into a chat that was **already working** is marked `Queued` on it
 own line until the running turn ends (`queued` in the store, cleared on `done`) —
 in memory like `unread`, and a mark rather than a cancel: holding it back in main
 would take away the fold into the next turn that the queue is for.
-A user bubble's **Edit** (`WorktreeChats.edit`, `IPC.editWorktreeChat`) cuts the
+A user bubble's **Edit** (`Chats.edit`, `IPC.editChat`) cuts the
 **CLI's session** too, not only the lines: the next open resumes at the entry
 before the message (`resumeSessionAt`), found in the CLI's transcript by
 `main/chat-fork.ts` (`test/chat-fork.ts`). Messages are addressed by **ordinal
@@ -409,7 +409,7 @@ among the main loop's user lines**, never by id — the renderer's optimistic li
 has an id main never wrote. Files are not put back (`docs/design.md` § Editing a
 message); a reply's one Copy is on its turn's cost line (`replyOf`).
 `⌘F` opens a **find bar over the transcript** (`chat-find.tsx`, matching in
-`lib/worktree-chat/search.ts`) — a bar and not a palette group, since the results
+`lib/chat/search.ts`) — a bar and not a palette group, since the results
 are the conversation behind it. The matched **text** is painted through the CSS
 Custom Highlight API (`find-marks.ts`), which is the only way to mark a run of
 characters inside rendered markdown without wrapping it in an element React owns;
@@ -565,22 +565,22 @@ app minted, only while `isUntitledBranch` still holds, never one the user named.
 
 ### Pure halves, where the tests are
 
-Logic worth testing is split out from the drawing: `lib/worktree-chat/activity.ts`
-(`test/chat-activity.ts`), `lib/worktree-chat/usage.ts` (`test/chat-usage.ts`),
+Logic worth testing is split out from the drawing: `lib/chat/activity.ts`
+(`test/chat-activity.ts`), `lib/chat/usage.ts` (`test/chat-usage.ts`),
 `lib/tabs.ts` (`test/tabs.ts`), `lib/files/roots.ts` (`test/file-roots.ts`),
-`lib/worktree-chat/running.ts` (`test/chat-running.ts`) with `main/notify.ts`'s
+`lib/chat/running.ts` (`test/chat-running.ts`) with `main/notify.ts`'s
 own `ChatNotices` (`test/notify.ts`),
-`lib/worktree-chat/tool-row.ts` — a tool call as `verb · object · outcome`,
+`lib/chat/tool-row.ts` — a tool call as `verb · object · outcome`,
 and an open fold's rows with like calls merged (`test/tool-row.ts`),
-`lib/worktree-chat/unread.ts` (`test/chat-unread.ts`),
-`lib/worktree-chat/reply.ts` — a selected run of the transcript as the quote
+`lib/chat/unread.ts` (`test/chat-unread.ts`),
+`lib/chat/reply.ts` — a selected run of the transcript as the quote
 the `Reply` button beside it types into the composer (`chat-reply.tsx`,
 `test/chat-reply.ts`),
 `main/chat-digest.ts`'s `spendRows` (`test/chat-digest.ts`),
-`lib/worktree-chat/search.ts` (`test/chat-search.ts`),
-`lib/worktree-chat/outline.ts` — the chat's table of contents, one entry per
+`lib/chat/search.ts` (`test/chat-search.ts`),
+`lib/chat/outline.ts` — the chat's table of contents, one entry per
 user message (`test/chat-outline.ts`),
-`lib/worktree-chat/images.ts`'s `attachedIn` — a picture dropped or pasted into
+`lib/chat/images.ts`'s `attachedIn` — a picture dropped or pasted into
 the composer is read as base64 at once and written as `[Image #n]`, because a
 macOS screenshot's temporary file is gone by the time a path to it is read; at
 send each is also kept as a note file and the user line names it, so the
@@ -594,13 +594,13 @@ by `lib/editor-conflicts.ts` in the file editor (`test/conflicts.ts`),
 `lib/project-tree.ts` (`test/project-tree.ts`),
 `lib/files/git-diff.ts` with `main/git.ts`'s own `fileDiff` (`test/git-diff.ts`),
 `lib/files/diff-copy.ts` (`test/diff-copy.ts`),
-`lib/files/block-doc.ts`, `lib/worktree-chat/mention-text.ts`
-(`test/chat-mentions.ts`), `lib/worktree-chat/mcp-servers.ts` with
+`lib/files/block-doc.ts`, `lib/chat/mention-text.ts`
+(`test/chat-mentions.ts`), `lib/chat/mcp-servers.ts` with
 `main/mcp-servers.ts`'s own `readServer` (`test/mcp-servers.ts`),
-`lib/worktree-chat/claude-profiles.ts`'s `accountLabel` / `accountCaption` with
+`lib/chat/claude-profiles.ts`'s `accountLabel` / `accountCaption` with
 `main/claude-auth.ts`'s own `readAuthStatus` and `main/claude-profiles.ts`'s
 naming of a profile's directory (`test/claude-account.ts`),
-`lib/worktree-chat/plan-usage.ts` — the usage meter's words, with
+`lib/chat/plan-usage.ts` — the usage meter's words, with
 `main/plan-usage.ts`'s own `readPlanUsage` (`test/plan-usage.ts`),
 `plugins/usage/src/spend.ts` — the usage dashboard's grouping by day, project,
 model and chat (`test/chat-spend.ts`), `plugins/chat-export/src/markdown.ts` — a chat as
@@ -611,7 +611,7 @@ registered and taking it back (`test/plugin-registry.ts`, with `main/plugins.ts`
 in `test/plugins.ts` and `main/plugin-install.ts` in `test/plugin-install.ts`). Put new logic on that side of the line.
 
 A terminal selection is put into the chat's composer from outside the pane
-through `lib/worktree-chat/composer-bus.ts`:
+through `lib/chat/composer-bus.ts`:
 a delivery addressed to a chat, which the pane drawing that chat types in.
 Code blocks in a reply are coloured by `lib/markdown/highlight.ts`, the editor's
 grammar walked once into `.tok-*` spans rather than a CodeMirror per fence.

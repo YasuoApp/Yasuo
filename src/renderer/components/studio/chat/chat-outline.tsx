@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react"
 import { X } from "lucide-react"
 
 import { cn } from "@/lib/utils"
-import type { OutlineEntry } from "@/lib/worktree-chat/outline"
+import type { OutlineEntry } from "@/lib/chat/outline"
 import { IconButton } from "../icon-button"
 import { SideColumn } from "./side-column"
 

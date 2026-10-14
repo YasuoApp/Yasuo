@@ -505,7 +505,7 @@ type AssistantLine =
    * reason every other line is one: a chat holds several turns and each of them
    * cost its own amount, and a total on the record could not say which turn ran
    * on Opus and which on Haiku. Summing the lines is how a chat's total is got
-   * (`lib/worktree-chat/usage.ts`), which also means a chat written before this
+   * (`lib/chat/usage.ts`), which also means a chat written before this
    * existed reads back as a chat with nothing to say about its cost rather than
    * as one that cost nothing.
    */
@@ -659,10 +659,10 @@ export type AssistantEvent =
    * The turn has stopped and is waiting to be answered.
    *
    * The turn is *paused* here, not ended: the CLI is holding the tool call, and
-   * it stays held until `answerWorktreeChatAsk` names this ask. Nothing else
+   * it stays held until `answerChatAsk` names this ask. Nothing else
    * arrives for this chat in the meantime.
    */
-  | { type: "ask"; ask: WorktreeChatAsk }
+  | { type: "ask"; ask: ChatAsk }
   /**
    * An ask has been answered, and this is the line recording it.
    *
@@ -679,7 +679,7 @@ export type AssistantEvent =
    * two are not the same thing arriving twice: this is a line `append` writes to
    * the chat's file, `done` is the turn ending. Drawing the line from `done` as
    * well meant one failure appearing twice — see `finish` in
-   * `main/worktree-chat.ts`.
+   * `main/chat.ts`.
    */
   | { type: "error"; text: string }
   /** The turn is over, one way or the other. `error` is set when it failed —
@@ -783,7 +783,7 @@ export type AssistantEvent =
    * The only event here that changes the **listing** rather than the pane. The
    * name is not the turn's to produce: the CLI writes one into its own
    * transcript, off the first message, and nothing on the message stream
-   * carries it — see `retitle` in `main/worktree-chat.ts`, which reads it out.
+   * carries it — see `retitle` in `main/chat.ts`, which reads it out.
    *
    * It arrives just ahead of `done`, whose re-read of the listing carries the
    * same name, so this is not usually what draws it. It is what draws it on a
@@ -860,7 +860,7 @@ export type ChatAskQuestion = {
  * like `sending` in the renderer's own store, and for the same reason: what is
  * on the other end is a process, not a record.
  */
-export type WorktreeChatAsk = {
+export type ChatAsk = {
   /**
    * Unique per request.
    *
@@ -908,7 +908,7 @@ export type WorktreeChatAsk = {
  * Answers are arrays even for a question that takes one, so the shape does not
  * depend on `multiSelect` — one place to join them instead of two to get wrong.
  */
-export type WorktreeChatAnswer =
+export type ChatAnswer =
   | { kind: "allow"; always?: boolean }
   | { kind: "deny" }
   | { kind: "answers"; answers: Record<string, string[]> }
@@ -1049,7 +1049,7 @@ export type TerminalShell = {
  * time in the project's own directory, with the app holding the messages. There
  * used to be a session panel that did the opposite — the interactive CLI in a
  * pty, with a chat view tailing its transcript — and this is what replaced it.
- * See `main/worktree-chat.ts`.
+ * See `main/chat.ts`.
  *
  * `id` is also the CLI session id, so the record and the conversation the CLI
  * resumes name the same thing.
@@ -1183,7 +1183,7 @@ export type ChatWindowSlice = {
  *
  * **Measured of a live session.** The numbers describe the process the chat is
  * talking to, which is why it arrives as an event. The last one is also kept on
- * the record (`WorktreeChat.window`) so a restart does not blank the meter.
+ * the record (`Chat.window`) so a restart does not blank the meter.
  */
 export type ChatWindow = {
   /** Estimated tokens in use. May exceed `maxTokens`: the SDK sends it
@@ -1315,7 +1315,7 @@ export function chatEfforts(
  *
  * `plan` and `read` are read-only, `edits` is what a chat opens on, `full` asks
  * nothing at all, and `ask` is the one that stops and puts the question on
- * screen. See `PERMISSIONS` in `main/worktree-chat.ts` for what each one
+ * screen. See `PERMISSIONS` in `main/chat.ts` for what each one
  * actually runs as.
  *
  * `ask` was impossible until the turn moved to the agent SDK: a `claude -p`
@@ -1344,7 +1344,7 @@ export type ChatPermission = (typeof CHAT_PERMISSIONS)[number]
  * install (`~/.claude-group/<name>`, say, instead of the default `~/.claude`).
  *
  * Kept as a workspace-wide list rather than a single setting because the point
- * is *choosing between* identities per chat — see `WorktreeChatOptions.profileId`
+ * is *choosing between* identities per chat — see `ChatOptions.profileId`
  * — the same reason `HttpEnvironment` is a list and not one active host.
  */
 export type ClaudeProfile = {
@@ -1421,7 +1421,7 @@ export type ClaudeAccount = {
  * once cannot half-arrive, and a `null` here means "whatever the user's own
  * `claude` does" rather than "unchanged".
  */
-export type WorktreeChatOptions = {
+export type ChatOptions = {
   /** `--model`, or null for whichever model that `claude` is configured on. */
   model: string | null
   /** `--effort`, or null for the CLI's own default. */
@@ -1440,7 +1440,7 @@ export type WorktreeChatOptions = {
    * account the user's own `claude` is already signed into.
    *
    * A profile named here that no longer exists (deleted in Settings since the
-   * chat last ran) reads the same as null: `worktree-chat.ts` looks it up by
+   * chat last ran) reads the same as null: `chat.ts` looks it up by
    * id at send time and falls back rather than failing a turn over a picker
    * choice that outlived the thing it pointed at.
    */
@@ -1457,7 +1457,7 @@ export type WorktreeChatOptions = {
    * rather than expanded. A **wire** name, note, not the configured one: the CLI
    * normalises a server's name into it (`claude.ai ClickUp` →
    * `claude_ai_ClickUp`), which is `wireServer` in
-   * `lib/worktree-chat/mcp-servers.ts`.
+   * `lib/chat/mcp-servers.ts`.
    *
    * **Per chat**, switched from the composer's toolbar. It was a workspace
    * setting (`mcp.disabledTools`, still on disk and read by nothing), on the
@@ -1491,7 +1491,7 @@ export type WorktreeChatOptions = {
  * `effort` is `DEFAULT_CHAT_EFFORT` rather than null, and that is the one of
  * these that changed most recently — see the constant.
  */
-export const DEFAULT_CHAT_OPTIONS: WorktreeChatOptions = {
+export const DEFAULT_CHAT_OPTIONS: ChatOptions = {
   model: "default",
   effort: DEFAULT_CHAT_EFFORT,
   permission: "edits",
@@ -1508,9 +1508,7 @@ export const DEFAULT_CHAT_OPTIONS: WorktreeChatOptions = {
  * chat whose toolbar says one thing while its turn runs as another is the one
  * failure worth writing a function to make impossible.
  */
-export function chatOptions(
-  options?: WorktreeChatOptions | null
-): WorktreeChatOptions {
+export function chatOptions(options?: ChatOptions | null): ChatOptions {
   if (!options) return DEFAULT_CHAT_OPTIONS
   return {
     model: options.model ?? null,
@@ -1547,7 +1545,7 @@ export function chatOptions(
  * `undefined`. Falling back to the default is the one answer that is safe in
  * both directions — it is the least a chat can be on that is still useful.
  */
-function readPermission(options: WorktreeChatOptions): ChatPermission {
+function readPermission(options: ChatOptions): ChatPermission {
   if (options.permission && CHAT_PERMISSIONS.includes(options.permission)) {
     return options.permission
   }
@@ -1570,7 +1568,7 @@ export type ChatPlace = {
 
 /**
  * A chat that has been on screen for a while, being written down for the first
- * time — see `createWorktreeChat`.
+ * time — see `createChat`.
  *
  * Everything here is something that can have happened to a tab before its first
  * message: the toolbar moved, `/rename` was typed. Without them, writing the
@@ -1582,7 +1580,7 @@ export type ChatSeed = {
   id: string
   /** `"Untitled"` unless the tab was named before anything was said in it. */
   title?: string
-  options?: WorktreeChatOptions
+  options?: ChatOptions
 }
 
 /**
@@ -1597,7 +1595,7 @@ export function chatRootId(chat: { folderId?: string }): string | null {
   return chat.folderId ?? null
 }
 
-export type WorktreeChat = {
+export type Chat = {
   id: string
   /**
    * The project it belongs to, and the directory its turns run in.
@@ -1639,7 +1637,7 @@ export type WorktreeChat = {
    * Optional like `started`, and read together with it: a chat written before
    * this field has no list, and `started === true` is then all there is to go
    * on — resume, the way it always did, and let `isSessionMissing` in
-   * `worktree-chat.ts` catch the profile that never had it.
+   * `chat.ts` catch the profile that never had it.
    */
   startedIn?: string[]
   /**
@@ -1650,7 +1648,7 @@ export type WorktreeChat = {
    * `DEFAULT_CHAT_OPTIONS` — which is exactly how those turns already ran.
    * Read it through `chatOptions`, never directly.
    */
-  options?: WorktreeChatOptions
+  options?: ChatOptions
   /**
    * The last `window` event this chat's session sent, kept so a restarted app
    * has a meter before the next turn measures again.
@@ -1668,7 +1666,7 @@ export type WorktreeChat = {
 
 /** One of those events, tagged with the chat it belongs to: several chats can
  * be answering at once, so a listener has to know which one this is. */
-export type WorktreeChatEvent = AssistantEvent & { chatId: string }
+export type ChatEvent = AssistantEvent & { chatId: string }
 
 /**
  * A picture going out with a message, as bytes rather than as a path.
@@ -1828,7 +1826,7 @@ export type ChatSpend = {
  * Searching what was *said* in a chat is not in this contract, and that is the
  * shape of the feature rather than an omission: it is asked of the conversation
  * on screen, whose lines the renderer already holds — see
- * `lib/worktree-chat/search.ts`. A search of every chat would have been a walk
+ * `lib/chat/search.ts`. A search of every chat would have been a walk
  * of every transcript on disk per keystroke, and a channel to carry it.
  */
 
@@ -1965,7 +1963,7 @@ export type DesktopApi = {
    * the directory have to exist before the first prompt — so one made with the
    * branch field left empty is on a `vsclaude/untitled-…` branch until this. It
    * renames **that branch** and the project with it, off the title the CLI wrote
-   * for the conversation (`retitle` in `main/worktree-chat.ts`), which is why it
+   * for the conversation (`retitle` in `main/chat.ts`), which is why it
    * costs no turn of its own.
    *
    * Resolves with `null` for everything that is not that narrow case — an
@@ -2411,13 +2409,13 @@ export type DesktopApi = {
   ) => Promise<string>
   /** Every chat in every project — the listing; the lines are read one chat
    * at a time. */
-  listWorktreeChats: () => Promise<WorktreeChat[]>
+  listChats: () => Promise<Chat[]>
   /**
    * A chat in a project's own working tree, written down.
    *
    * **Called on the first thing said in a chat, not on the `+` that opened it.**
    * The tab still appears at once — the renderer makes the chat there and holds
-   * it (`unsaved` in `lib/worktree-chat/store.ts`) — but a `+` somebody thought
+   * it (`unsaved` in `lib/chat/store.ts`) — but a `+` somebody thought
    * better of used to leave an `Untitled` row in the project's list and a file
    * on disk for ever, and there is nothing in an unused chat worth keeping.
    *
@@ -2426,11 +2424,8 @@ export type DesktopApi = {
    * CLI's session id, and one minted here instead would be a different chat to
    * the one on screen.
    */
-  createWorktreeChat: (
-    place: ChatPlace,
-    seed?: ChatSeed
-  ) => Promise<WorktreeChat>
-  readWorktreeChat: (id: string) => Promise<AssistantMessage[]>
+  createChat: (place: ChatPlace, seed?: ChatSeed) => Promise<Chat>
+  readChat: (id: string) => Promise<AssistantMessage[]>
   /**
    * Every turn's tokens across every chat — see `ChatSpend`. Folded from lines
    * already in memory where there are any, and off disk for the rest.
@@ -2492,7 +2487,7 @@ export type DesktopApi = {
     replacement: string,
     paths: string[]
   ) => Promise<ReplaceResult>
-  deleteWorktreeChat: (id: string) => Promise<void>
+  deleteChat: (id: string) => Promise<void>
   /**
    * Empties a chat and closes the CLI behind it — the composer's `/clear`.
    *
@@ -2506,44 +2501,34 @@ export type DesktopApi = {
    *
    * A turn in flight is ended by the close, the way `delete` ends one.
    */
-  clearWorktreeChat: (id: string) => Promise<void>
+  clearChat: (id: string) => Promise<void>
   /** What a chat is called. Its title is the first thing asked in it until
    * somebody names it, and a name is what it is found by later. An empty one is
    * ignored rather than blanking the row. */
-  renameWorktreeChat: (id: string, title: string) => Promise<void>
+  renameChat: (id: string, title: string) => Promise<void>
   /**
    * The model, effort and permission for one chat.
    *
-   * Its own call rather than an argument to `sendWorktreeChat`, because the
+   * Its own call rather than an argument to `sendChat`, because the
    * toolbar is used before anything is sent: somebody picks Haiku and then
    * types, and a choice that only landed with a message would be a control that
    * looks set and is not.
    */
-  setWorktreeChatOptions: (
-    id: string,
-    options: WorktreeChatOptions
-  ) => Promise<void>
+  setChatOptions: (id: string, options: ChatOptions) => Promise<void>
   /**
-   * Answers what a turn stopped to ask — see `WorktreeChatAsk`.
+   * Answers what a turn stopped to ask — see `ChatAsk`.
    *
    * Named by ask id rather than by chat, even though a chat has at most one
    * pending at a time: the card is on screen while the turn is paused, and an
    * answer that arrived for the question before it would otherwise be applied
    * to this one. An id nothing is waiting on is ignored.
    */
-  answerWorktreeChatAsk: (
-    askId: string,
-    answer: WorktreeChatAnswer
-  ) => Promise<void>
+  answerChatAsk: (askId: string, answer: ChatAnswer) => Promise<void>
   /**
    * Sends one message. `images` are the pictures pasted or dropped into it,
    * each standing where its `[Image #n]` is in `prompt`.
    */
-  sendWorktreeChat: (
-    id: string,
-    prompt: string,
-    images?: ChatImage[]
-  ) => Promise<void>
+  sendChat: (id: string, prompt: string, images?: ChatImage[]) => Promise<void>
   /**
    * Sends message `at` again as `prompt`, with every line after it gone — the
    * bubble's Edit. `at` counts the chat's user lines, from 0; the message's
@@ -2553,14 +2538,12 @@ export type DesktopApi = {
    * the chat is working, and when the CLI's copy of the conversation does not
    * have the message (compacted away, or never sent).
    */
-  editWorktreeChat: (id: string, at: number, prompt: string) => Promise<void>
+  editChat: (id: string, at: number, prompt: string) => Promise<void>
   /** Kills the turn in flight. There is nothing gentler in print mode. */
-  stopWorktreeChat: (id: string) => Promise<void>
+  stopChat: (id: string) => Promise<void>
   /** Every chat's events, tagged with the chat. Returns an
    * unsubscribe. */
-  onWorktreeChatEvent: (
-    listener: (event: WorktreeChatEvent) => void
-  ) => () => void
+  onChatEvent: (listener: (event: ChatEvent) => void) => () => void
   /**
    * A chat somebody asked to be taken to, by clicking its notification.
    *
@@ -2569,7 +2552,7 @@ export type DesktopApi = {
    * already has the chat; what it does not have is the click, which happened in
    * the OS rather than in the window. Returns an unsubscribe.
    */
-  onRevealWorktreeChat: (listener: (chatId: string) => void) => () => void
+  onRevealChat: (listener: (chatId: string) => void) => () => void
 
   /**
    * One drawing's scene, as the text of its `.excalidraw` file — Excalidraw's
@@ -2615,7 +2598,7 @@ export type DesktopApi = {
    *
    * The user's own login shell, and the only thing this starts: the agent CLIs
    * used to be kinds of session here, and what runs one now is a project's chat
-   * (`main/worktree-chat.ts`) rather than a pty the renderer asked for.
+   * (`main/chat.ts`) rather than a pty the renderer asked for.
    *
    * The folder is named by **id** rather than by path, so main resolves the
    * directory from its own record: a path handed over by the renderer would be
@@ -2844,10 +2827,10 @@ export const IPC = {
   claudeAccount: "claude-profiles:account",
   claudeVersions: "claude:versions",
   claudeLogin: "claude-profiles:login",
-  listWorktreeChats: "worktree-chats:list",
-  createWorktreeChat: "worktree-chats:create",
-  readWorktreeChat: "worktree-chats:read",
-  chatSpend: "worktree-chats:spend",
+  listChats: "chats:list",
+  createChat: "chats:create",
+  readChat: "chats:read",
+  chatSpend: "chats:spend",
   saveTextFile: "files:save-text",
   openChatWindow: "window:open-chat",
   setAlwaysOnTop: "window:set-always-on-top",
@@ -2855,16 +2838,16 @@ export const IPC = {
   setBadgeCount: "app:set-badge-count",
   searchWorkspace: "search:workspace",
   replaceInFiles: "search:replace",
-  deleteWorktreeChat: "worktree-chats:delete",
-  clearWorktreeChat: "worktree-chats:clear",
-  renameWorktreeChat: "worktree-chats:rename",
-  setWorktreeChatOptions: "worktree-chats:options",
-  answerWorktreeChatAsk: "worktree-chats:answer",
-  sendWorktreeChat: "worktree-chats:send",
-  editWorktreeChat: "worktree-chats:edit",
-  stopWorktreeChat: "worktree-chats:stop",
-  worktreeChatEvent: "worktree-chats:event",
-  revealWorktreeChat: "worktree-chats:reveal",
+  deleteChat: "chats:delete",
+  clearChat: "chats:clear",
+  renameChat: "chats:rename",
+  setChatOptions: "chats:options",
+  answerChatAsk: "chats:answer",
+  sendChat: "chats:send",
+  editChat: "chats:edit",
+  stopChat: "chats:stop",
+  chatEvent: "chats:event",
+  revealChat: "chats:reveal",
   readDrawing: "drawings:read",
   writeDrawing: "drawings:write",
   writeDrawingSvg: "drawings:write-svg",

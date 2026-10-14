@@ -7,7 +7,7 @@ import { useProjects } from "./projects"
 import { useSettings } from "./settings"
 import { PANES, useStudio, type Pane } from "./store"
 import { arrange, bare, kindOf, neighbour, orderWhere, PREFIX } from "./tabs"
-import { useWorktreeChats } from "./worktree-chat/store"
+import { useChats } from "./chat/store"
 
 /**
  * The five panels' tabs, addressed alike.
@@ -83,8 +83,8 @@ const fileActive = (state: FilesState): string | null =>
     : null
 
 /** The chat the strip has selected. */
-const worktreeChatActive = (
-  state: ReturnType<typeof useWorktreeChats.getState>
+const chatActive = (
+  state: ReturnType<typeof useChats.getState>
 ): string | null =>
   state.selectedId && state.openIds.includes(state.selectedId)
     ? state.selectedId
@@ -109,8 +109,8 @@ const fileRootOf = (filePath: string): string | null =>
 
 /** The place a chat is in. A chat's root id *is* a `FileRoot.id` — both are
  * the project's folder id — so no translation is needed. */
-const worktreeChatRootOf = (id: string): string | null => {
-  const chat = useWorktreeChats
+const chatRootOf = (id: string): string | null => {
+  const chat = useChats
     .getState()
     .chats.find((candidate) => candidate.id === id)
   return chat ? chatRootId(chat) : null
@@ -144,15 +144,15 @@ const PANELS: Record<Pane, PanelTabs> = {
     reorder: (ids) => useFiles.getState().reorder(ids),
     rootOf: fileRootOf,
   },
-  worktree: {
-    open: () => useWorktreeChats.getState().openIds,
-    active: () => worktreeChatActive(useWorktreeChats.getState()),
-    select: (id) => useWorktreeChats.getState().select(id),
-    close: (id) => useWorktreeChats.getState().close(id),
-    closeOthers: (id) => useWorktreeChats.getState().closeOthers(id),
-    closeAll: () => useWorktreeChats.getState().closeAll(),
-    reorder: (ids) => useWorktreeChats.getState().reorder(ids),
-    rootOf: worktreeChatRootOf,
+  chat: {
+    open: () => useChats.getState().openIds,
+    active: () => chatActive(useChats.getState()),
+    select: (id) => useChats.getState().select(id),
+    close: (id) => useChats.getState().close(id),
+    closeOthers: (id) => useChats.getState().closeOthers(id),
+    closeAll: () => useChats.getState().closeAll(),
+    reorder: (ids) => useChats.getState().reorder(ids),
+    rootOf: chatRootOf,
   },
 }
 
@@ -390,7 +390,7 @@ function usePanelActive(pane: Pane): string | null {
   return {
     files: useFiles(fileActive),
     changes: useChanges(changesActive),
-    worktree: useWorktreeChats(worktreeChatActive),
+    chat: useChats(chatActive),
   }[pane]
 }
 
@@ -426,8 +426,8 @@ function useScope() {
 export function useHasOpenTabs(): boolean {
   useScope()
   useFiles((state) => state.openIds)
-  useWorktreeChats((state) => state.openIds)
-  useWorktreeChats((state) => state.chats)
+  useChats((state) => state.openIds)
+  useChats((state) => state.chats)
 
   // Every pane in `PANES`, and the reason this is worth saying: a panel left out
   // of that list can never be drawn. The workbench only shows a pane once the

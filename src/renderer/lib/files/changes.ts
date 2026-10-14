@@ -221,7 +221,7 @@ export const useChanges = create<ChangesState>((set, get) => ({
      * A tab in the strip is scoped to its root (`rootOf` in `lib/panels.ts`), so
      * selecting one has to move the context to that root or the tab would be
      * selected and out of scope in the same breath. `useFiles.reveal` and
-     * `useWorktreeChats.select` do this for their own tabs already.
+     * `useChats.select` do this for their own tabs already.
      */
     if (useStudio.getState().folders.some((folder) => folder.id === rootId)) {
       useProjects.getState().setActive(rootId)

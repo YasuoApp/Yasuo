@@ -1,7 +1,7 @@
 import {
   chatOptions,
   DEFAULT_CHAT_EFFORT,
-  type WorktreeChatOptions,
+  type ChatOptions,
 } from "../src/shared/api"
 import { check, finish, section } from "./harness"
 
@@ -67,20 +67,20 @@ section("the plan toggle this replaced")
 
 check(
   "a chat left in plan mode comes back in it",
-  chatOptions({ model: null, effort: null, plan: true } as WorktreeChatOptions)
+  chatOptions({ model: null, effort: null, plan: true } as ChatOptions)
     .permission === "plan"
 )
 
 check(
   "a chat with the toggle off is on the default rather than read-only",
-  chatOptions({ model: null, effort: null, plan: false } as WorktreeChatOptions)
+  chatOptions({ model: null, effort: null, plan: false } as ChatOptions)
     .permission === "edits"
 )
 
 check(
   "the legacy field is never handed back, so nothing can read it by accident",
-  chatOptions({ model: null, effort: null, plan: true } as WorktreeChatOptions)
-    .plan === undefined
+  chatOptions({ model: null, effort: null, plan: true } as ChatOptions).plan ===
+    undefined
 )
 
 check(
@@ -100,7 +100,7 @@ check(
   chatOptions({
     model: null,
     effort: null,
-    permission: "yolo" as WorktreeChatOptions["permission"],
+    permission: "yolo" as ChatOptions["permission"],
   }).permission === "edits"
 )
 
