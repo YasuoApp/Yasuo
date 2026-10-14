@@ -164,14 +164,14 @@ function UserMessage({
           is happening to it — and a line that changed shape when the turn ahead
           of it ended would move the transcript under the reader.
 
-          It says `Queued` rather than counting down or naming the turn ahead:
-          the CLI folds everything waiting into the next turn at once, so
-          "second in line" would be a claim about an order that does not exist.
+          It says `Queued` rather than "behind the turn above": the CLI folds a
+          waiting message into the running turn at its next step, between one
+          tool call and the next, so it rarely waits for the answer to finish.
         */}
       {queued && (
         <p className="flex items-center justify-end gap-1 pt-0.5 pr-1 text-[0.65rem] text-muted-foreground">
           <Hourglass aria-hidden className="size-2.5 shrink-0" />
-          Queued behind the turn above
+          Queued for the next step
         </p>
       )}
     </div>

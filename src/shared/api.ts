@@ -739,6 +739,13 @@ export type AssistantEvent =
    */
   | { type: "busy"; busy: boolean }
   /**
+   * The oldest message sent mid-turn has been taken in by the CLI — usually
+   * folded into the running turn at its next step, well before `done`. What
+   * takes the `Queued` mark off a line; see `onDequeued` in
+   * `main/claude-agent.ts`.
+   */
+  | { type: "dequeued" }
+  /**
    * What the turn cost, once it is over.
    *
    * Its own event arriving just before `done` rather than a field on it,

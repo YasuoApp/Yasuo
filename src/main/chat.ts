@@ -1471,6 +1471,9 @@ export class Chats {
         onAgents: (agents) => {
           if (current()) this.emit({ chatId: id, type: "agents", agents })
         },
+        onDequeued: () => {
+          if (current()) this.emit({ chatId: id, type: "dequeued" })
+        },
         onTurn: (error) => {
           if (current()) this.endTurn(id, error)
         },
