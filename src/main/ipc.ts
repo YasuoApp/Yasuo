@@ -51,6 +51,7 @@ import {
   fileBytesAtHead,
   fileDiff,
   lineHistory,
+  push,
   stage,
   unstage,
   upstream,
@@ -75,7 +76,7 @@ import {
 } from "./plugins"
 import { draftCommitMessage } from "./one-turn-agent"
 import type { Host } from "./host"
-import { expandHome, quote } from "./shell-env"
+import { expandHome, quote, spawnEnvironment } from "./shell-env"
 import { systemUsage } from "./system-usage"
 import { PLUGIN_DATA_DIR, PLUGINS_DIR, Store, WORKSPACE_DIR } from "./store"
 import { installedShells } from "./shells"
@@ -888,6 +889,16 @@ export function createIpc(host: Host): {
    */
   handle(IPC.gitCommit, async (_event, folderId: string, message: string) =>
     commit(await store.resolveFolderDir(folderId), message)
+  )
+
+  /*
+   * The branch pushed, never prompting — `push` in `git.ts` has why. The env
+   * is the login shell's merged in, as a spawned `claude` gets: an ssh agent
+   * exported in a profile is what lets a passphrase-protected key push here at
+   * all.
+   */
+  handle(IPC.gitPush, async (_event, folderId: string) =>
+    push(await store.resolveFolderDir(folderId), await spawnEnvironment())
   )
 
   /*
