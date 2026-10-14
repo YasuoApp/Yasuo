@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useState } from "react"
+import { useCallback, useEffect, useLayoutEffect, useState } from "react"
 import { Search } from "lucide-react"
 import {
   ResizableHandle,
@@ -72,6 +72,10 @@ function paneView(pane: Pane) {
  * workbench, or gone. */
 type Launch = "splash" | "closing" | "done"
 
+/** The longest the launch screen holds out for the `claude` check. Past a
+ * login shell's usual second or two, and well short of its 10s timeout. */
+const SETUP_WAIT_MS = 4000
+
 export function Studio() {
   const workspaceLoaded = useStudio((state) => state.loaded)
   const storageError = useStudio((state) => state.storageError)
@@ -139,10 +143,33 @@ export function Studio() {
    * goes first and the tour waits on it, since a tour of chats is no use to a
    * machine that cannot have one yet. */
   const setup = useClaudeSetup()
-  const [setupSkipped, setSetupSkipped] = useState(false)
-  const setupStep =
-    setup.step === "install" || setup.step === "signIn" ? setup.step : null
-  const settingUp = launch === "done" && !setupSkipped && setupStep !== null
+  const [setupClosed, setSetupClosed] = useState(false)
+  const closeSetup = useCallback(() => setSetupClosed(true), [])
+  // The first launch walks the whole screen, welcome included, even with
+  // `claude` installed and signed in; later ones only stop for what is missing.
+  const firstRun = settingsLoaded && !onboarded
+  const setupNeeded = setup.step === "install" || setup.step === "signIn"
+  // Mounted under the splash's fade rather than after it, so the launch screen
+  // crosses straight to this one instead of showing the workbench for a frame
+  // between them.
+  const settingUp =
+    launch !== "splash" && !setupClosed && (firstRun || setupNeeded)
+
+  /*
+   * The splash waits on the `claude` check as well as the manifest: the check
+   * goes through a login shell and usually lands a second or two after the
+   * manifest, which used to be long enough to show the studio and then cover it
+   * with the setup screen. Capped, because that shell can take its whole
+   * timeout — past `SETUP_WAIT_MS` the workbench opens and the setup screen, if
+   * it is needed, comes over it as it used to.
+   */
+  const [setupWaitedOut, setSetupWaitedOut] = useState(false)
+  useEffect(() => {
+    const timer = setTimeout(() => setSetupWaitedOut(true), SETUP_WAIT_MS)
+    return () => clearTimeout(timer)
+  }, [])
+  const ready =
+    loaded && settingsLoaded && (setup.step !== "checking" || setupWaitedOut)
   const touring =
     launch === "done" &&
     settingsLoaded &&
@@ -173,7 +200,7 @@ export function Studio() {
    * bug.
    */
   useEffect(() => {
-    if (!loaded) return
+    if (!ready) return
 
     const left = Math.max(0, SPLASH_ASSEMBLE_MS - splashElapsed())
     const toClosing = setTimeout(() => setLaunch("closing"), left)
@@ -182,7 +209,7 @@ export function Studio() {
       clearTimeout(toClosing)
       clearTimeout(toDone)
     }
-  }, [loaded])
+  }, [ready])
 
   // A failure has nothing to wait for and nothing to celebrate: it replaces
   // the launch screen outright rather than fading in behind it.
@@ -191,14 +218,21 @@ export function Studio() {
   return (
     <>
       {launch !== "splash" && <Workbench />}
-      {launch !== "done" && <Splash closing={launch === "closing"} />}
-      {settingUp && setupStep && (
+      {/* Ahead of the splash, so the splash fades out over it. */}
+      {settingUp && (
         <ClaudeSetup
-          step={setupStep}
+          firstRun={firstRun}
+          step={setup.step}
           versions={setup.versions}
           checking={setup.checking}
           onRecheck={() => void setup.recheck()}
-          onSkip={() => setSetupSkipped(true)}
+          onDone={closeSetup}
+        />
+      )}
+      {launch !== "done" && (
+        <Splash
+          closing={launch === "closing"}
+          status={loaded ? "Looking for Claude Code…" : undefined}
         />
       )}
       {touring && <OnboardingTour onDone={() => setOnboarded(true)} />}

@@ -103,7 +103,7 @@ export function Splash({
       )}
     >
       <div className="flex flex-col items-center gap-7">
-        <Mark />
+        <StudioMark />
 
         <div className="flex flex-col items-center gap-1.5">
           {/* The gradient is barely there in either theme; it is what keeps
@@ -126,8 +126,14 @@ export function Splash({
   )
 }
 
-/** The studio in miniature, drawn at the size of a large app icon. */
-function Mark() {
+/**
+ * The studio in miniature, drawn at the size of a large app icon.
+ *
+ * Exported for the setup screen's welcome page, which comes after the splash
+ * and so finds every `step` long past: there it is the finished picture, with
+ * only the glow and the sweep still moving.
+ */
+export function StudioMark() {
   return (
     <div className="relative">
       {/*
