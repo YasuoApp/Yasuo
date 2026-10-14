@@ -136,7 +136,9 @@ imports may reach `electron`.
   `commitFileDiff` to open a commit into the checkout's one diff tab, both
   sides out of the object store; nothing written (`docs/design.md` § Commits). **`blame` is the second**, one per file
   with the editor's buffer on stdin, for the current-line annotation
-  (`lib/editor-git-blame.ts`, § Who last changed a line). Amend, branch and
+  (`lib/editor-git-blame.ts`, § Who last changed a line), and
+  `lineHistory` (`git log -L`) the card's list of every commit that changed
+  that line. Amend, branch and
   push stay out — that is
   the git client the dock's shell already is. `discard`
   answers with the paths it could not restore instead of deleting them: they go

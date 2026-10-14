@@ -93,6 +93,8 @@ const api: DesktopApi = {
   imageAtHead: (filePath) => ipcRenderer.invoke(IPC.imageAtHead, filePath),
   gitBlame: (filePath, text) =>
     ipcRenderer.invoke(IPC.gitBlame, filePath, text),
+  gitLineHistory: (filePath, hash, path, line) =>
+    ipcRenderer.invoke(IPC.gitLineHistory, filePath, hash, path, line),
 
   listDirectory: (dirPath) => ipcRenderer.invoke(IPC.listDirectory, dirPath),
   readTextFile: (filePath) => ipcRenderer.invoke(IPC.readTextFile, filePath),

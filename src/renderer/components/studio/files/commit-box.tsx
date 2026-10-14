@@ -42,9 +42,10 @@ export function CommitBox({ root }: { root: FileRoot }) {
 
   return (
     <div className="flex flex-col gap-1.5 border-b border-border/60 px-3 py-2">
-      {/* `rounded-lg` is the textarea's own, which the ring inherits. */}
+      {/* `rounded-lg` is the textarea's own, which the ring inherits; the
+          border is the textarea's too, so the ring does not reach past it. */}
       <div
-        className="border-run rounded-lg"
+        className="border-run rounded-lg [--run-edge:0px]"
         data-running={drafting || undefined}
       >
         <Textarea

@@ -226,6 +226,10 @@ export type GitCommitFileDiff = {
  */
 export type GitBlame = {
   lines: (string | null)[]
+  /** Where each line was in the commit `lines` names for it — the line and
+   * the file as that commit had them, which is what `gitLineHistory` starts
+   * from. Null where `lines` is. */
+  sources: ({ line: number; path: string } | null)[]
   commits: Record<string, GitBlameCommit>
   /** The file from the repository's root, `/`-separated — what a forge's
    * `blob/<hash>/…` URL takes. */
@@ -243,6 +247,33 @@ export type GitBlameCommit = {
   date: string
   /** The message's first line. */
   summary: string
+}
+
+/**
+ * One commit that changed a line, out of `git log -L` — see `lineHistory` in
+ * `main/git.ts`. The blame card's history, newest first.
+ */
+export type GitLineCommit = {
+  hash: string
+  author: string
+  email: string
+  /** The author date, ISO 8601. */
+  date: string
+  subject: string
+  /** The message past its first line, trimmed; empty for a one-line one. */
+  body: string
+  /** The file as this commit named it, from the repository's root. */
+  path: string
+  /** Where a rename in this commit came from. */
+  from?: string
+  /** Where the line's change starts in the file as this commit left it. */
+  line: number
+  /** The line's rows as this commit replaced them, and as it left them. */
+  before: string[]
+  after: string[]
+  /** The whole commit against its first parent; null for a merge, which
+   * `--shortstat` says nothing about. */
+  stat: { files: number; added: number; removed: number } | null
 }
 
 export type GitChange = {
@@ -2194,6 +2225,17 @@ export type DesktopApi = {
    * `fileDiff`.
    */
   gitBlame: (filePath: string, text: string) => Promise<GitBlame | null>
+  /**
+   * The commits that changed one line, newest first, starting at the one
+   * `gitBlame` named for it — `hash`, and the line and path out of
+   * `GitBlame.sources`. `filePath` is only the gate, like `gitBlame`'s.
+   */
+  gitLineHistory: (
+    filePath: string,
+    hash: string,
+    path: string,
+    line: number
+  ) => Promise<GitLineCommit[]>
 
   getSetting: (key: string) => Promise<string | null>
   setSetting: (key: string, value: string) => Promise<void>
@@ -2847,6 +2889,7 @@ export const IPC = {
   fileDiff: "git:file-diff",
   imageAtHead: "git:image-at-head",
   gitBlame: "git:blame",
+  gitLineHistory: "git:line-history",
   getSetting: "settings:get",
   setSetting: "settings:set",
   listDirectory: "files:list",

@@ -11,6 +11,7 @@ import type {
   GitCommitFile,
   GitCommitFileDiff,
   GitFileState,
+  GitLineCommit,
   GitStatusEntry,
   GitUpstream,
 } from "../shared/api"
@@ -564,14 +565,19 @@ const UNCOMMITTED = /^0{40}$/
  */
 export function parseBlame(out: string): Omit<GitBlame, "webUrl" | "path"> {
   const lines: (string | null)[] = []
+  const sources: GitBlame["sources"] = []
   const commits: Record<string, GitBlameCommit> = {}
-  let current: { hash: string; final: number } | null = null
+  /** Per commit, not in `fields`: `filename` is printed again for a commit
+   * seen before when it touched the file under two names, and `fields` by then
+   * belongs to whichever commit was new last. */
+  const paths: Record<string, string> = {}
+  let current: { hash: string; source: number; final: number } | null = null
   let fields: Record<string, string> = {}
 
   for (const row of out.split("\n")) {
     if (row.startsWith("\t")) {
       if (!current) continue
-      const { hash, final } = current
+      const { hash, source, final } = current
       if (!UNCOMMITTED.test(hash) && !commits[hash]) {
         const time = Number(fields["author-time"])
         commits[hash] = {
@@ -584,14 +590,21 @@ export function parseBlame(out: string): Omit<GitBlame, "webUrl" | "path"> {
           summary: fields.summary ?? "",
         }
       }
-      lines[final - 1] = UNCOMMITTED.test(hash) ? null : hash
+      const committed = !UNCOMMITTED.test(hash)
+      lines[final - 1] = committed ? hash : null
+      sources[final - 1] =
+        committed && paths[hash] ? { line: source, path: paths[hash] } : null
       current = null
       continue
     }
 
-    const header = /^([0-9a-f]{40}) \d+ (\d+)/.exec(row)
+    const header = /^([0-9a-f]{40}) (\d+) (\d+)/.exec(row)
     if (header) {
-      current = { hash: header[1]!, final: Number(header[2]) }
+      current = {
+        hash: header[1]!,
+        source: Number(header[2]),
+        final: Number(header[3]),
+      }
       // A commit's fields are printed once, on its first line; a later line of
       // the same commit has a bare header and keeps what was read then.
       if (!commits[header[1]!]) fields = {}
@@ -599,12 +612,161 @@ export function parseBlame(out: string): Omit<GitBlame, "webUrl" | "path"> {
     }
 
     const space = row.indexOf(" ")
-    if (space > 0) fields[row.slice(0, space)] = row.slice(space + 1)
+    if (space <= 0) continue
+    const key = row.slice(0, space)
+    if (key === "filename" && current)
+      paths[current.hash] = row.slice(space + 1)
+    else fields[key] = row.slice(space + 1)
   }
 
   // A buffer git was handed may end without a newline, and a line it never
   // reached is not a line anybody committed.
-  return { lines: Array.from(lines, (hash) => hash ?? null), commits }
+  return {
+    lines: Array.from(lines, (hash) => hash ?? null),
+    sources: Array.from(sources, (source) => source ?? null),
+    commits,
+  }
+}
+
+/** How far back the blame card's history goes. `-L` walks the whole history
+ * to find each one, so this is also what bounds the wait. */
+const LINE_HISTORY_LIMIT = 30
+
+/**
+ * The commits that changed one line, newest first — `git log -L` from the
+ * commit `blame` named for the line, at the line and path that commit had, so
+ * the walk starts from history and an unsaved buffer cannot throw it off.
+ *
+ * The patch is kept rather than `-s`: it is where each commit's name for the
+ * file comes from (`-L` follows a rename, and `--name-only` is refused beside
+ * it), and its `-`/`+` rows are the line as each commit found and left it. The
+ * whole commit's size is a second call over the hashes found, since `-L`
+ * refuses `--shortstat` too.
+ *
+ * Run from the repository's top: `-L`'s path is read against the working
+ * directory, and a folder can be a directory inside its repository.
+ */
+export async function lineHistory(
+  dir: string,
+  hash: string,
+  file: string,
+  line: number
+): Promise<GitLineCommit[]> {
+  if (!HASH.test(hash) || !isRepoPath(file)) return []
+  if (!Number.isInteger(line) || line < 1) return []
+
+  let top: string
+  let out: string
+  try {
+    top = (await git(dir, ["rev-parse", "--show-toplevel"])).trim()
+    out = await git(top, [
+      "-c",
+      "core.quotepath=false",
+      "log",
+      `-n${LINE_HISTORY_LIMIT}`,
+      `-L${line},${line}:${file}`,
+      "--no-color",
+      "--no-ext-diff",
+      "--no-show-signature",
+      `--format=${RECORD}%H${UNIT}%an${UNIT}%ae${UNIT}%aI${UNIT}%B${UNIT}`,
+      hash,
+    ])
+  } catch {
+    return []
+  }
+
+  const commits = parseLineHistory(out, file)
+  if (commits.length === 0) return commits
+
+  const stats = await git(top, [
+    "log",
+    "--no-walk=unsorted",
+    "--no-ext-diff",
+    "--shortstat",
+    `--format=${RECORD}%H`,
+    ...commits.map((commit) => commit.hash),
+  ]).catch(() => "")
+  const byHash = parseShortStats(stats)
+  return commits.map((commit) => ({
+    ...commit,
+    stat: byHash.get(commit.hash) ?? null,
+  }))
+}
+
+/** How many of the line's rows a commit's change is drawn with, each side —
+ * the range is one line, but a commit that rewrote the block around it is
+ * one hunk of all of it. */
+const LINE_ROWS = 6
+
+/**
+ * `git log -L` with the format above, read: per commit the fields, then its
+ * patch — the `---`/`+++` names, and the hunk's `-`/`+` rows.
+ *
+ * Exported for `test/git-blame.ts`.
+ */
+export function parseLineHistory(out: string, file: string): GitLineCommit[] {
+  const commits: GitLineCommit[] = []
+  for (const record of out.split(RECORD)) {
+    const [hash, author, email, date, message, patch] = record.split(UNIT)
+    if (!hash || !HASH.test(hash) || patch === undefined) continue
+
+    const text = (message ?? "").trim()
+    const newline = text.indexOf("\n")
+    let before: string | null = null
+    let after: string | null = null
+    let at = 0
+    const removed: string[] = []
+    const added: string[] = []
+    let inHunk = false
+    for (const row of patch.split("\n")) {
+      if (row.startsWith("@@")) {
+        // `@@ -12,3 +14,2 @@`: where the hunk sits in the file the commit
+        // left, the one a forge's link to it is to be scrolled to.
+        if (!inHunk) at = Number(/\+(\d+)/.exec(row)?.[1] ?? 0)
+        inHunk = true
+      } else if (!inHunk && row.startsWith("--- "))
+        before = row === "--- /dev/null" ? null : row.replace(/^--- a\//, "")
+      else if (!inHunk && row.startsWith("+++ "))
+        after = row.replace(/^\+\+\+ b\//, "")
+      else if (inHunk && row.startsWith("-")) removed.push(row.slice(1))
+      else if (inHunk && row.startsWith("+")) added.push(row.slice(1))
+    }
+
+    const path = after ?? file
+    commits.push({
+      hash,
+      author: author ?? "",
+      email: email ?? "",
+      date: date ?? "",
+      subject: newline < 0 ? text : text.slice(0, newline),
+      body: newline < 0 ? "" : text.slice(newline + 1).trim(),
+      path,
+      ...(before && before !== path ? { from: before } : {}),
+      line: at,
+      before: removed.slice(0, LINE_ROWS),
+      after: added.slice(0, LINE_ROWS),
+      stat: null,
+    })
+  }
+  return commits
+}
+
+/** `--shortstat` after `%H`: ` 3 files changed, 12 insertions(+), 4
+ * deletions(-)`, with either count left out when it is nothing. */
+function parseShortStats(out: string): Map<string, GitLineCommit["stat"]> {
+  const stats = new Map<string, GitLineCommit["stat"]>()
+  for (const record of out.split(RECORD)) {
+    const [hash, ...rest] = record.trim().split("\n")
+    const line = rest.join(" ")
+    const files = /(\d+) files? changed/.exec(line)
+    if (!hash || !files) continue
+    stats.set(hash.trim(), {
+      files: Number(files[1]),
+      added: Number(/(\d+) insertions?/.exec(line)?.[1] ?? 0),
+      removed: Number(/(\d+) deletions?/.exec(line)?.[1] ?? 0),
+    })
+  }
+  return stats
 }
 
 /**

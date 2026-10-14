@@ -4,7 +4,7 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import { promisify } from "node:util"
 
-import { blame, webUrlOf } from "../src/main/git"
+import { blame, lineHistory, webUrlOf } from "../src/main/git"
 import {
   ago,
   annotationOf,
@@ -12,6 +12,8 @@ import {
   fileUrl,
   issueNumbers,
   messageParts,
+  statText,
+  trailersOf,
 } from "../src/renderer/lib/files/git-blame"
 import { check, finish, section } from "./harness"
 
@@ -70,7 +72,81 @@ try {
     check("names the file from the root", answer.path === "file.ts")
     check("an uncommitted line is null", commitAt(answer, 1) === null)
     check("past the end is undefined", commitAt(answer, 9) === undefined)
+    check(
+      "sources are the lines as their commits had them",
+      JSON.stringify(answer.sources) ===
+        JSON.stringify([
+          null,
+          { line: 1, path: "file.ts" },
+          { line: 2, path: "file.ts" },
+          { line: 3, path: "file.ts" },
+        ]),
+      answer.sources
+    )
   }
+
+  section("line history")
+
+  // `two` rewritten, then the file renamed with it rewritten again: three
+  // commits that changed line 2, the last under another name.
+  await writeFile(file, "one\nTWO\nthree\n")
+  await git(root, "commit", "-am", "shout\n\nBecause it matters. See #4.")
+  await git(root, "mv", "file.ts", "moved.ts")
+  await writeFile(path.join(root, "moved.ts"), "one\nTwo!\nthree\n")
+  await git(root, "commit", "-am", "move")
+  const moved = path.join(root, "moved.ts")
+  const blamed = await blame(root, moved, "one\nTwo!\nthree\n")
+  const source = blamed?.sources[1]
+  const head = blamed?.lines[1]
+  check("the line's source", source?.path === "moved.ts" && source.line === 2)
+
+  const history =
+    source && head
+      ? await lineHistory(root, head, source.path, source.line)
+      : []
+  check(
+    "newest first, back to where the line began",
+    JSON.stringify(history.map((commit) => commit.subject)) ===
+      JSON.stringify(["move", "shout", "first (#12)"]),
+    history.map((commit) => commit.subject)
+  )
+  const [move, shout, origin] = history
+  check("starts at the blamed commit", move?.hash === head)
+  check(
+    "the line as it was and became",
+    move?.before[0] === "TWO" && move.after[0] === "Two!",
+    move
+  )
+  check(
+    "the file as each commit named it",
+    move?.path === "moved.ts" && origin?.path === "file.ts",
+    history.map((c) => c.path)
+  )
+  check(
+    "the body apart from the subject",
+    shout?.body === "Because it matters. See #4.",
+    shout?.body
+  )
+  check("the line in that commit", shout?.line === 2, shout?.line)
+  check(
+    "the whole commit's size",
+    shout?.stat?.files === 1 &&
+      shout.stat.added === 1 &&
+      shout.stat.removed === 1,
+    shout?.stat
+  )
+  check(
+    "a first commit's line has nothing before it",
+    origin?.before.length === 0 && origin.after[0] === "two"
+  )
+  check(
+    "a bad hash is nothing",
+    (await lineHistory(root, "--all", "moved.ts", 2)).length === 0
+  )
+  check(
+    "a bad path is nothing",
+    (await lineHistory(root, head ?? "", "../x", 2)).length === 0
+  )
 
   const untracked = path.join(root, "new.ts")
   await writeFile(untracked, "x\n")
@@ -128,6 +204,39 @@ check(
   ) === "Ada, 2 months ago • feat: x"
 )
 check("an uncommitted line", annotationOf(null, now).includes("Not committed"))
+const trailed = trailersOf(
+  "Why it matters.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nSigned-off-by: Ada"
+)
+check(
+  "trailers come off the body",
+  trailed.text === "Why it matters." &&
+    JSON.stringify(trailed.trailers) ===
+      JSON.stringify([
+        {
+          key: "Co-Authored-By",
+          name: "Claude Opus 5.5",
+          email: "noreply@anthropic.com",
+        },
+        { key: "Signed-off-by", name: "Ada", email: "" },
+      ]),
+  trailed
+)
+check(
+  "a body that is only trailers",
+  trailersOf("Co-Authored-By: Claude <c@a.com>").text === ""
+)
+check(
+  "prose with a colon is not a trailer block",
+  trailersOf("First.\n\nThis is: prose, and more prose\nover two lines.")
+    .trailers.length === 0
+)
+check(
+  "a commit's size",
+  statText({ files: 3, added: 12, removed: 4 }) ===
+    "3 files changed · +12 −4" &&
+    statText({ files: 1, added: 0, removed: 2 }) === "1 file changed · +0 −2" &&
+    statText(null) === ""
+)
 
 const parts = messageParts("feat: add (#27) and #3", "https://github.com/a/b")
 check(

@@ -252,9 +252,16 @@
  * commit message while `claude` drafts it (`commit-box.tsx`). The spinner on
  * the button says work is happening; this says where the answer will land.
  *
+ * Also the ask card while it waits on an answer (`chat-ask.tsx`), and the
+ * search and replace fields while a slow search or a replace runs
+ * (`search-section.tsx`).
+ *
  * The ring is a pseudo-element over the box's own 1px border, a conic gradient
  * masked down to that border, so the box underneath keeps its background, focus
- * ring and size. What turns is the gradient's start angle, registered with
+ * ring and size. An absolute child starts inside its parent's border, so the
+ * ring reaches out by `--run-edge` to lie on it; a wrapper with no border of
+ * its own around a box that has one sets that to `0px`. What turns is the
+ * gradient's start angle, registered with
  * `@property` so it interpolates — an unregistered custom property would jump.
  * Like the shimmer it repaints, and what it repaints is one thin outline.
  */
@@ -277,7 +284,7 @@
 .border-run[data-running]::after {
   content: "";
   position: absolute;
-  inset: 0;
+  inset: calc(-1 * var(--run-edge, 1px));
   padding: 1px;
   border-radius: inherit;
   pointer-events: none;

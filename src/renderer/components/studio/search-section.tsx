@@ -62,6 +62,25 @@ import { SIDE_ROW_SHAPE, sideRowIndent } from "./side-row"
  * The rows are one flat list (`rowsOf`) drawn in order, so the arrow keys walk
  * exactly what is on screen and nothing has to know how deep a row is nested.
  */
+/**
+ * `on`, but only once it has stayed on for `ms`. Most searches answer inside a
+ * frame or two, and a ring that lit for one of those read as a flicker rather
+ * than as work; this lets it say so only for the search worth waiting on.
+ */
+function useLate(on: boolean, ms = 200) {
+  const [late, setLate] = useState(false)
+  useEffect(() => {
+    if (!on) return
+    const timer = setTimeout(() => setLate(true), ms)
+    // Reset as it goes off, so the next run waits its `ms` again.
+    return () => {
+      clearTimeout(timer)
+      setLate(false)
+    }
+  }, [on, ms])
+  return on && late
+}
+
 export function SearchSection() {
   const query = useWorkspaceSearch((state) => state.query)
   const options = useWorkspaceSearch((state) => state.options)
@@ -245,6 +264,9 @@ export function SearchSection() {
     }
   }
 
+  const slowSearch = useLate(searching)
+  const slowReplace = useLate(replacing)
+
   const replaceable = replaceOpen && fileMatches > 0 && !replacing
   const filtered = scope.include.trim() !== "" || scope.exclude.trim() !== ""
 
@@ -279,7 +301,10 @@ export function SearchSection() {
           </IconButton>
 
           <div className="min-w-0 flex-1 space-y-1">
-            <div className="flex h-7 items-center rounded-md border bg-background pr-0.5 focus-within:ring-1 focus-within:ring-ring">
+            <div
+              className="border-run flex h-7 items-center rounded-md border bg-background pr-0.5 focus-within:ring-1 focus-within:ring-ring"
+              data-running={slowSearch || undefined}
+            >
               <input
                 ref={field}
                 value={query}
@@ -330,7 +355,10 @@ export function SearchSection() {
             </div>
 
             {replaceOpen && (
-              <div className="flex h-7 items-center rounded-md border bg-background pr-0.5 focus-within:ring-1 focus-within:ring-ring">
+              <div
+                className="border-run flex h-7 items-center rounded-md border bg-background pr-0.5 focus-within:ring-1 focus-within:ring-ring"
+                data-running={slowReplace || undefined}
+              >
                 <input
                   value={replacement}
                   onChange={(event) => setReplacement(event.target.value)}

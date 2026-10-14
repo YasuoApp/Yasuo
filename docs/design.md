@@ -742,10 +742,23 @@ dock's shell is the git client.
 ### Who last changed a line
 
 The caret line's blame is drawn faintly after it, with a card on hover:
-author, date, summary, hash and forge links (`lib/editor-git-blame.ts`,
-`main/git.ts`'s `blame`). One `git blame --porcelain` per file with the buffer
-on stdin, laid over the line rather than in it. No avatars, no forge API, no
-diff. `Ask in chat` types the commit into the composer, unsent.
+author, date, the whole message, the commit's size, the line's own `-`/`+`
+rows, hash and forge links (`lib/editor-git-blame.ts`,
+`components/studio/files/blame-card.tsx`, `main/git.ts`'s `blame`). One
+`git blame --porcelain` per file with the buffer on stdin, laid over the line
+rather than in it, and never cut: on a line that reaches the edge the words go
+past it, behind a horizontal scrollbar, since trimming them to the room left
+hid them — and the card — on exactly the long lines.
+
+The card also lists **the line's history** — `git log -L` from the blamed
+commit, at the line and path that commit had (`GitBlame.sources`), so an
+unsaved buffer cannot throw the walk off; `lineHistory`, capped at 30, asked
+once when the card opens. Stepping down that list is GitLens's "blame before
+this change" without a git call per step. `Open this commit's diff` puts the
+selected commit's version of the file in the checkout's diff tab, the one the
+`Commits` view opens into — the diff in the app, not drawn inside the card. No
+avatars, no forge API. `Ask in chat` types the commit into the composer,
+unsent.
 
 ### Committing
 

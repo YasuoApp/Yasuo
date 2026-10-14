@@ -30,7 +30,7 @@ import {
 } from "@/lib/files/typescript"
 import { useSettings } from "@/lib/settings"
 
-import { mountBlameActions } from "./blame-actions"
+import { mountBlameCard } from "./blame-card"
 
 /**
  * One open file, in CodeMirror.
@@ -104,7 +104,7 @@ export default function CodeMirrorFileEditor({
       // `lib/files/editor-selection.ts`.
       selectionToChat(initial.path),
       gitBlameConf.of(
-        initial.blameOn ? gitBlame(initial.path, mountBlameActions) : []
+        initial.blameOn ? gitBlame(initial.path, mountBlameCard) : []
       ),
       EditorView.updateListener.of((update) => {
         if (!update.docChanged) return
@@ -171,7 +171,7 @@ export default function CodeMirrorFileEditor({
     blameWas.current = blameOn
     viewRef.current?.dispatch({
       effects: gitBlameConf.reconfigure(
-        blameOn ? gitBlame(path, mountBlameActions) : []
+        blameOn ? gitBlame(path, mountBlameCard) : []
       ),
     })
   }, [blameOn, path])
