@@ -162,6 +162,39 @@ export type GitUpstream = {
   webUrl: string | null
 }
 
+/** What the New worktree dialog offers — see `worktreeOptions` in
+ * `main/worktrees.ts`. */
+export type WorktreeOptions = {
+  /** Local branches, newest commit first. */
+  branches: string[]
+  /** Remote ones as git abbreviates them — `origin/feature/sso`. */
+  remotes: string[]
+  /** The main checkout's branch: what an empty base cuts from. */
+  current: string | null
+  /** `bun install` and the like, off the lock file at the root, or null. */
+  setup: string | null
+  /** Whether the repository has a `.worktreeinclude` to copy files by. */
+  includes: boolean
+}
+
+/**
+ * How far one checkout has moved — see `worktreeStatus` in
+ * `main/worktrees.ts`. Drawn on its row and asked again before removing it.
+ */
+export type WorktreeStatus = {
+  branch: string | null
+  /** What `ahead` and `behind` count against: the branch it was cut from, or
+   * the main checkout's. */
+  base: string | null
+  /** Uncommitted entries, untracked included. */
+  changed: number
+  ahead: number | null
+  behind: number | null
+  /** Commits on this branch and on no other branch or remote — what deleting
+   * the branch loses. */
+  unique: number
+}
+
 /**
  * One file a commit changed — see `commitFiles` in `main/git.ts`. Paths are the
  * repository's own, `/`-separated, since the file may no longer be on disk.
@@ -1939,23 +1972,34 @@ export type DesktopApi = {
    * `git worktree add` under this app's data directory, then the same
    * `addFolder` the dialog uses — see `main/worktrees.ts`, which opens with why
    * this is not the worktree *layer* that was deleted. An existing branch is
-   * checked out rather than refused. Rejects with git's own sentence, the way
-   * `addFolder` rejects with the store's: the dialog that asked is where it can
-   * be corrected.
+   * checked out rather than refused, and `base` — a branch to cut from, empty
+   * for the main checkout's — applies only to a branch this creates. The
+   * repository's `.worktreeinclude` matches are copied in before it resolves.
+   * Rejects with git's own sentence, the way `addFolder` rejects with the
+   * store's: the dialog that asked is where it can be corrected.
    */
   addWorktree: (input: {
     folderId: string
     branch: string
     name: string
+    base?: string
   }) => Promise<WorkspaceRecord>
   /**
-   * The checkout itself, removed, and the project dropped with it.
-   *
-   * The **branch is left alone** — it is the work. Rejects for a folder that is
-   * not a checkout at all, which is the renderer asking about a project it
-   * should not have offered this for.
+   * The checkout itself, removed, its chats and the project dropped with it,
+   * and its branch too when `deleteBranch` says so — the dialog asks, after
+   * saying how many commits exist on that branch alone (`worktreeStatus`).
+   * Rejects for a folder that is not a checkout at all, which is the renderer
+   * asking about a project it should not have offered this for.
    */
-  removeWorktree: (folderId: string) => Promise<WorkspaceRecord>
+  removeWorktree: (
+    folderId: string,
+    options: { deleteBranch: boolean }
+  ) => Promise<WorkspaceRecord>
+  /** What the New worktree dialog offers for a project — its branches, a
+   * setup command. */
+  worktreeOptions: (folderId: string) => Promise<WorktreeOptions>
+  /** How far a checkout has moved, or null for a folder that is not one. */
+  worktreeStatus: (folderId: string) => Promise<WorktreeStatus | null>
   /**
    * Names a checkout nobody has named yet, after the chat running in it.
    *
@@ -2768,6 +2812,8 @@ export const IPC = {
   addWorktree: "workspace:add-worktree",
   removeWorktree: "workspace:remove-worktree",
   nameWorktree: "workspace:name-worktree",
+  worktreeOptions: "workspace:worktree-options",
+  worktreeStatus: "workspace:worktree-status",
   pickDirectory: "workspace:pick-directory",
   pickFiles: "workspace:pick-files",
   clipboardImagePath: "files:clipboard-image-path",

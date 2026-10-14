@@ -44,6 +44,9 @@ export type Shell = {
    * tab named `vite` stays `vite` whatever it `cd`s into. Null for the
    * automatic name. */
   name: string | null
+  /** A line typed into the shell once it starts — a new worktree's setup
+   * command — and never again: a restart is a plain shell. */
+  command: string | null
 }
 
 type ShellState = {
@@ -84,6 +87,10 @@ type ShellState = {
   /** The `+`: another shell, in the target project, beside the ones open —
    * the default one, or the one picked from the menu beside it. */
   add: (shellId?: string) => void
+  /** A shell in `folderId` that types `command` as it starts, in the dock and
+   * on screen — a new worktree's `bun install`, run where it can be watched
+   * and stopped rather than behind anybody's back. */
+  run: (folderId: string, command: string) => void
   /** Asks main which shells there are, once. */
   loadInstalled: () => void
   select: (id: string) => void
@@ -164,7 +171,11 @@ export const useShells = create<ShellState>((set, get) => {
     )
   }
 
-  function start(folderId: string, shellId: string | null = null) {
+  function start(
+    folderId: string,
+    shellId: string | null = null,
+    command: string | null = null
+  ) {
     const shell: Shell = {
       id: crypto.randomUUID(),
       folderId,
@@ -173,6 +184,7 @@ export const useShells = create<ShellState>((set, get) => {
       exited: false,
       cwd: null,
       name: null,
+      command,
     }
     set({ shells: [...get().shells, shell], activeId: shell.id })
   }
@@ -217,6 +229,12 @@ export const useShells = create<ShellState>((set, get) => {
       useDock.getState().show()
     },
 
+    run(folderId, command) {
+      set({ target: folderId })
+      start(folderId, null, command)
+      useDock.getState().show()
+    },
+
     loadInstalled() {
       if (get().installed) return
       void window.desktop
@@ -239,7 +257,12 @@ export const useShells = create<ShellState>((set, get) => {
       set({
         shells: get().shells.map((shell) =>
           shell.id === id
-            ? { ...shell, attempt: shell.attempt + 1, exited: false }
+            ? {
+                ...shell,
+                attempt: shell.attempt + 1,
+                exited: false,
+                command: null,
+              }
             : shell
         ),
         activeId: id,

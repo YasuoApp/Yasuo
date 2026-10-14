@@ -153,9 +153,27 @@ works on the checkout as a project. Creating one also opens a chat in it.
   (`nameWorktree`, off the CLI's own `ai-title`, so it costs no turn). That
   `git branch -m` is the one branch write in the app, refused unless
   `isUntitledBranch` still holds.
-- **An existing branch is checked out** rather than refused.
-- **Removing one deletes the directory** (forced), and says so; the branch and
-  its commits stay. `git worktree remove` runs before the folder is dropped.
+- **An existing branch is checked out** rather than refused — one only on a
+  remote too, through git's DWIM, rather than shadowed by a fresh `-b` off HEAD.
+- **`From` picks the base** a new branch is cut from (the main checkout's when
+  empty), offered from the repository's branches. It is cut `--no-track` and
+  recorded as `branch.<name>.vsclaudeBase` in the repository's config — git's
+  own place for a fact about a branch, which `branch -m` carries and `branch -D`
+  drops — rather than in anything of this app's.
+- **Setting a checkout up**: the repository's `.worktreeinclude` (Claude Code's
+  name, `.gitignore` syntax) lists ignored files — `.env`, a local config — that
+  are copied in; listed-but-not-ignored ones are not, being somebody's work in
+  progress. A `Setup` command, prefilled off the lock file (`setupCommandFor`),
+  runs in a **dock shell** in the checkout, where it can be watched and stopped,
+  never in the background.
+- **A checkout's row says how far it has moved** — ahead/behind its base and
+  how many files are uncommitted (`worktreeStatus`), re-read off the folder's git
+  status signal, and nothing at all when it is level and clean.
+- **Removing one deletes the directory** (forced). The dialog asks git first and
+  warns about uncommitted files and about commits that exist on that branch
+  **alone** (`rev-list HEAD --not` every other branch and remote). Deleting the
+  branch is a box, ticked only when it would lose nothing. `git worktree
+remove` runs before the folder is dropped.
 - **Whether a folder is a checkout is asked of git** (`worktreeRepo`, with
   `realpath` on both sides), never written down — so one made in your own shell
   behaves the same.

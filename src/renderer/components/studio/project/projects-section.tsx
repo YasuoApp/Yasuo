@@ -49,6 +49,8 @@ import { RenameDialog } from "../rename-dialog"
 import { RenameRow, useMenuFocusHandoff } from "../rename-row"
 import { SideRow } from "../side-row"
 import { NewWorktreeDialog } from "./new-worktree-dialog"
+import { RemoveWorktreeDialog } from "./remove-worktree-dialog"
+import { useWorktreeStatus, WorktreeMarks } from "./worktree-status"
 import { useShells } from "@/lib/shell/store"
 import { chatsOf, ungroupedChats, useChats } from "@/lib/chat/store"
 import type { WorkspaceFolder, Chat } from "@shared/api"
@@ -408,51 +410,24 @@ export function ProjectsSection() {
         />
       )}
 
-      <AlertDialog
-        open={unchecking !== null}
-        onOpenChange={(next) => {
-          if (!next) setUnchecking(null)
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Remove this worktree?</AlertDialogTitle>
-            {/*
-              The one gesture in the app that deletes a directory, so it says
-              what goes. No paths: an absolute one under
-              `workspace/worktrees/<uuid>` has nowhere to break and pushed the
-              dialog's grid wider than its card.
-            */}
-            <AlertDialogDescription>
-              The checkout, its branch and every chat in it are deleted.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              variant="destructive"
-              onClick={() => {
-                const folder = unchecking
-                setUnchecking(null)
-                if (!folder) return
-                setFailure(null)
-                void useStudio
-                  .getState()
-                  .removeWorktree(folder.id)
-                  // Its chats went with it, main-side.
-                  .then(() => useChats.getState().refresh())
-                  .catch((error: unknown) =>
-                    setFailure(
-                      error instanceof Error ? error.message : String(error)
-                    )
-                  )
-              }}
-            >
-              Remove
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {unchecking && (
+        <RemoveWorktreeDialog
+          folder={unchecking}
+          onClose={() => setUnchecking(null)}
+          // Not caught: a refusal is the dialog's to show, beside the Remove
+          // that can be pressed again.
+          onRemove={async (options) => {
+            await useStudio.getState().removeWorktree(unchecking.id, options)
+            // Its chats went with it, main-side. Awaited so they leave the
+            // column with the dialog, but not a failure of the removal: the
+            // checkout is already gone, and Remove again would only be refused.
+            await useChats
+              .getState()
+              .refresh()
+              .catch(() => {})
+          }}
+        />
+      )}
 
       {/* Under the list rather than in a toast: git refusing to remove a
           checkout is about one of the rows above, and it stays until the next
@@ -605,6 +580,12 @@ function ProjectRow({
   // says which project this is faster than its name does. Not for a checkout,
   // whose branch mark is saying something a picture would not.
   const favicon = useProjectIcon(indent > 0 ? null : folderId)
+  // Whether this row is a checkout is git's answer, not the indent's: one whose
+  // repository is not in the workspace sits at the top level.
+  const checkout = useStudio((state) =>
+    folderId ? !!state.worktrees[folderId] : false
+  )
+  const worktree = useWorktreeStatus(checkout ? folderId : null)
 
   const running = activity !== null && isRunning(activity)
   // Only where the row has nothing more immediate to say. A project with a turn
@@ -660,6 +641,15 @@ function ProjectRow({
           />
         )}
         <span className="min-w-0 flex-1 truncate text-left">{name}</span>
+
+        {/* Before the activity marks, and hidden on hover with them: the
+            row's buttons land on this same edge. */}
+        {worktree && (
+          <WorktreeMarks
+            status={worktree}
+            className="group-hover/project:invisible"
+          />
+        )}
 
         {/*
           The count, at the end the chat rows put their age at, so a shut

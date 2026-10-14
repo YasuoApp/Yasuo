@@ -237,6 +237,7 @@ type StudioState = {
     folderId: string
     branch: string
     name: string
+    base?: string
   }) => Promise<string | null>
   /**
    * Names a checkout after the chat running in it, once that chat has a title
@@ -249,9 +250,12 @@ type StudioState = {
    * broken one.
    */
   nameWorktree: (folderId: string, title: string) => Promise<void>
-  /** The checkout removed and the project dropped. The **branch stays** — it is
-   * the work. */
-  removeWorktree: (folderId: string) => Promise<void>
+  /** The checkout removed and the project dropped; its branch only when
+   * `deleteBranch` says so — the branch is the work. */
+  removeWorktree: (
+    folderId: string,
+    options: { deleteBranch: boolean }
+  ) => Promise<void>
 }
 
 /**
@@ -451,8 +455,8 @@ export const useStudio = create<StudioState>((set, get) => {
       if (workspace) await load(workspace.folders)
     },
 
-    async removeWorktree(folderId) {
-      prune((await repo.removeWorktree(folderId)).folders)
+    async removeWorktree(folderId, options) {
+      prune((await repo.removeWorktree(folderId, options)).folders)
     },
   }
 })

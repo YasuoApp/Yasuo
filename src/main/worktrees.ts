@@ -1,7 +1,9 @@
-import { execFile } from "node:child_process"
-import { realpath } from "node:fs/promises"
+import { execFile, spawn } from "node:child_process"
+import { copyFile, mkdir, readdir, realpath, stat } from "node:fs/promises"
 import path from "node:path"
 import { promisify } from "node:util"
+
+import type { WorktreeOptions, WorktreeStatus } from "../shared/api"
 
 const run = promisify(execFile)
 
@@ -179,7 +181,8 @@ export function worktreeDir(
 }
 
 /**
- * Adds a checkout of `repo` at `dir`, on a new branch off the current HEAD.
+ * Adds a checkout of `repo` at `dir`, on a new branch off `base` or the
+ * current HEAD.
  *
  * Answers with a sentence rather than throwing for the failures that are
  * ordinary — "not a git repository", "that branch is already checked out" — and
@@ -189,14 +192,24 @@ export function worktreeDir(
  * A branch that already exists is **checked out** rather than an error: coming
  * back to work started last week is the same gesture as starting it, and a
  * refusal would leave somebody creating the worktree in a shell and adding the
- * folder by hand. That is what the second attempt without `-b` is for.
+ * folder by hand. That includes one that exists only on a remote — git's own
+ * DWIM makes the local branch tracking it — which `-b` tried first would have
+ * shadowed with a fresh branch off HEAD. `base` only ever applies to a branch
+ * this call creates.
+ *
+ * `--no-track` beside a base: git would otherwise make `origin/main` the new
+ * branch's upstream, and a `git push` from the checkout would then refuse
+ * because the names differ. The base is recorded as `baseKey` instead, which
+ * is what `worktreeStatus` counts ahead and behind against.
  */
 export async function addWorktree(input: {
   repo: string
   dir: string
   branch: string
+  base?: string
 }): Promise<{ dir: string } | { error: string }> {
   const { repo, dir, branch } = input
+  const base = input.base?.trim() || null
 
   try {
     await run("git", ["rev-parse", "--git-dir"], {
@@ -207,25 +220,46 @@ export async function addWorktree(input: {
     return { error: `${repo} is not a git repository.` }
   }
 
-  try {
-    await run("git", ["worktree", "add", "-b", branch, dir], {
-      cwd: repo,
-      windowsHide: true,
-    })
-    return { dir }
-  } catch (first) {
+  const [local, remotes] = await Promise.all([
+    git(repo, ["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`]),
+    git(repo, [
+      "for-each-ref",
+      "--format=%(refname)",
+      `refs/remotes/*/${branch}`,
+    ]),
+  ])
+  // Exactly one remote, as git's DWIM requires: two would be a guess.
+  const existing = !!local || remotes.split("\n").filter(Boolean).length === 1
+
+  if (existing) {
     try {
       await run("git", ["worktree", "add", dir, branch], {
         cwd: repo,
         windowsHide: true,
       })
       return { dir }
-    } catch (second) {
-      return {
-        error: gitSaid(second) || gitSaid(first) || "git worktree failed.",
-      }
+    } catch (error) {
+      return { error: gitSaid(error) || "git worktree failed." }
     }
   }
+
+  // What the branch is cut from, named — the main checkout's branch when the
+  // field was left empty, since `HEAD` would mean nothing a week later.
+  const from = base ?? (await git(repo, ["branch", "--show-current"]))
+
+  try {
+    await run(
+      "git",
+      base
+        ? ["worktree", "add", "--no-track", "-b", branch, dir, base]
+        : ["worktree", "add", "-b", branch, dir],
+      { cwd: repo, windowsHide: true }
+    )
+  } catch (error) {
+    return { error: gitSaid(error) || "git worktree failed." }
+  }
+  if (from) await git(repo, ["config", baseKey(branch), from])
+  return { dir }
 }
 
 /**
@@ -331,6 +365,241 @@ async function resolved(target: string): Promise<string> {
     return await realpath(target)
   } catch {
     return path.resolve(target)
+  }
+}
+
+/**
+ * Where a checkout's base is written: `branch.<name>.vsclaudeBase` in the
+ * repository's own config.
+ *
+ * Git's own place for what a branch is relative to, and the one place a fact
+ * about a branch follows it: `git branch -m` moves the section — so a checkout
+ * named after its first chat keeps its base — and `git branch -D` drops it.
+ */
+export function baseKey(branch: string): string {
+  return `branch.${branch}.vsclaudeBase`
+}
+
+/**
+ * The file listing which of a repository's **ignored** files a new checkout
+ * gets a copy of — `.env`, a local config — in `.gitignore` syntax.
+ *
+ * The name Claude Code's own worktrees read, so a repository set up for one is
+ * set up for the other. Only ignored files are taken: a tracked one is already
+ * in the checkout, and an untracked one nobody ignored is work in progress
+ * that belongs to the checkout it was made in.
+ */
+export const INCLUDE_FILE = ".worktreeinclude"
+
+/**
+ * Copies `INCLUDE_FILE`'s matches from the main checkout into `dir`, and
+ * answers with the paths copied.
+ *
+ * Best effort and never an error: the checkout already exists by now, and a
+ * missing `.env` is something the setup command or the user will say out loud.
+ * A file already there is left alone.
+ */
+export async function copyIncluded(repo: string, dir: string) {
+  const include = path.join(repo, INCLUDE_FILE)
+  if (!(await exists(include))) return []
+
+  let listed = ""
+  try {
+    // `-o -i` against the include file alone: every untracked file it matches,
+    // ignored or not. Walks `node_modules` once — under a second here — which
+    // is why it is only run for a repository that asked.
+    listed = (
+      await run(
+        "git",
+        ["ls-files", "-z", "-o", "-i", `--exclude-from=${include}`],
+        { cwd: repo, windowsHide: true, maxBuffer: 64 * 1024 * 1024 }
+      )
+    ).stdout
+  } catch {
+    return []
+  }
+  const matched = listed.split("\0").filter(Boolean)
+  if (matched.length === 0) return []
+
+  const ignored = await checkIgnored(repo, matched)
+  const copied: string[] = []
+  for (const relative of ignored) {
+    const target = path.join(dir, relative)
+    if (await exists(target)) continue
+    try {
+      await mkdir(path.dirname(target), { recursive: true })
+      await copyFile(path.join(repo, relative), target)
+      copied.push(relative)
+    } catch {
+      // One unreadable file is not a reason to skip the rest.
+    }
+  }
+  return copied
+}
+
+/** Which of `paths` git ignores, asked on stdin so a long list is not a long
+ * command line. Exit 1 is git saying "none of them". */
+function checkIgnored(repo: string, paths: string[]): Promise<string[]> {
+  return new Promise((resolve) => {
+    const child = spawn("git", ["check-ignore", "-z", "--stdin"], {
+      cwd: repo,
+      windowsHide: true,
+    })
+    let out = ""
+    child.stdout.on("data", (chunk: Buffer) => (out += chunk.toString()))
+    child.on("error", () => resolve([]))
+    child.on("close", () => resolve(out.split("\0").filter(Boolean)))
+    child.stdin.end(paths.join("\0") + "\0")
+  })
+}
+
+/**
+ * The command a new checkout of a project probably wants run before anything
+ * works in it, read off the lock file at its root — or null.
+ *
+ * A suggestion for the dialog's field and nothing more: it is shown, it can be
+ * cleared, and it runs in a dock shell somebody can watch, never behind the
+ * user's back. First match wins, so a repository carrying two lock files gets
+ * the one listed first here.
+ */
+export function setupCommandFor(names: Iterable<string>): string | null {
+  const present = new Set(names)
+  for (const [file, command] of SETUP_COMMANDS)
+    if (present.has(file)) return command
+  return null
+}
+
+const SETUP_COMMANDS: [string, string][] = [
+  ["bun.lock", "bun install"],
+  ["bun.lockb", "bun install"],
+  ["pnpm-lock.yaml", "pnpm install"],
+  ["yarn.lock", "yarn install"],
+  ["package-lock.json", "npm install"],
+  ["uv.lock", "uv sync"],
+  ["poetry.lock", "poetry install"],
+  ["Gemfile.lock", "bundle install"],
+  ["composer.lock", "composer install"],
+]
+
+/**
+ * What the New worktree dialog offers: the branches there are, newest first, to
+ * check out or to cut from; the branch the main checkout is on, which is what
+ * an empty base means; a setup command; and whether `INCLUDE_FILE` exists.
+ */
+export async function worktreeOptions(repo: string): Promise<WorktreeOptions> {
+  const [refs, current, names] = await Promise.all([
+    git(repo, [
+      "for-each-ref",
+      "--sort=-committerdate",
+      "--count=300",
+      "--format=%(refname)",
+      "refs/heads",
+      "refs/remotes",
+    ]),
+    git(repo, ["branch", "--show-current"]),
+    readdir(repo).catch(() => [] as string[]),
+  ])
+  const listed = refs.split("\n")
+  const under = (prefix: string) =>
+    listed
+      // `origin/HEAD` is a pointer, not a branch anybody means.
+      .filter((ref) => ref.startsWith(prefix) && !ref.endsWith("/HEAD"))
+      .map((ref) => ref.slice(prefix.length))
+  return {
+    branches: under("refs/heads/"),
+    remotes: under("refs/remotes/"),
+    current: current || null,
+    setup: setupCommandFor(names),
+    includes: names.includes(INCLUDE_FILE),
+  }
+}
+
+/**
+ * How far a checkout has moved, or null for a folder that is not one: what is
+ * uncommitted, how far ahead and behind its base, and how many commits exist
+ * on its branch **alone** — the ones `git branch -D` would lose.
+ *
+ * The base is `BASE_KEY` when this app made the branch, and otherwise the main
+ * checkout's branch, which is what a checkout made in a shell is normally cut
+ * from. Ahead and behind are null when there is nothing to count against.
+ */
+export async function worktreeStatus(
+  dir: string
+): Promise<WorktreeStatus | null> {
+  const repo = await worktreeRepo(dir)
+  if (!repo) return null
+
+  const branch = (await git(dir, ["branch", "--show-current"])) || null
+  const [porcelain, recorded, mainBranch] = await Promise.all([
+    git(dir, ["status", "--porcelain"]),
+    branch ? git(dir, ["config", "--get", baseKey(branch)]) : "",
+    git(repo, ["branch", "--show-current"]),
+  ])
+  const base = recorded || mainBranch || null
+
+  let ahead: number | null = null
+  let behind: number | null = null
+  if (base && base !== branch) {
+    const counts = await git(dir, [
+      "rev-list",
+      "--left-right",
+      "--count",
+      `${base}...HEAD`,
+    ])
+    const [left, right] = counts.split(/\s+/).map(Number)
+    if (
+      left !== undefined &&
+      right !== undefined &&
+      Number.isFinite(left) &&
+      Number.isFinite(right)
+    ) {
+      behind = left
+      ahead = right
+    }
+  }
+
+  // Every other branch and every remote, so a commit already pushed or already
+  // merged does not count as one this removal would take.
+  const unique = Number(
+    await git(dir, [
+      "rev-list",
+      "--count",
+      "HEAD",
+      "--not",
+      // Without `refs/heads/`: an exclude before `--branches` is matched
+      // against the short name, and the full one silently excludes nothing.
+      ...(branch ? [`--exclude=${branch}`] : []),
+      "--branches",
+      "--remotes",
+    ])
+  )
+
+  return {
+    branch,
+    base,
+    changed: porcelain.split("\n").filter(Boolean).length,
+    ahead,
+    behind,
+    unique: Number.isFinite(unique) ? unique : 0,
+  }
+}
+
+async function exists(target: string): Promise<boolean> {
+  try {
+    await stat(target)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Stdout, trimmed, or the empty string for anything git refused — every read
+ * here has an ordinary answer for "could not say". */
+async function git(cwd: string, args: string[]): Promise<string> {
+  try {
+    return (await run("git", args, { cwd, windowsHide: true })).stdout.trim()
+  } catch {
+    return ""
   }
 }
 

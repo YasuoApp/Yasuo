@@ -85,13 +85,16 @@ import { DirectoryWatchers, RootWatchers } from "./watch"
 import {
   addWorktree,
   branchFromTitle,
+  copyIncluded,
   deleteBranch,
   isUntitledBranch,
   removeWorktree,
   renameBranch,
   untitledBranch,
   worktreeDir,
+  worktreeOptions,
   worktreeRepo,
+  worktreeStatus,
 } from "./worktrees"
 
 /** What `imageDataUrl` recognises as a picture. */
@@ -669,7 +672,7 @@ export function createIpc(host: Host): {
     IPC.addWorktree,
     async (
       _event,
-      input: { folderId: string; branch: string; name: string }
+      input: { folderId: string; branch: string; name: string; base?: string }
     ) => {
       // An empty field is deliberate and is the interesting case: the checkout
       // goes on a placeholder branch and is named after the first chat that runs
@@ -679,8 +682,11 @@ export function createIpc(host: Host): {
       const repo = await store.resolveFolderDir(input.folderId)
       const dir = worktreeDir(store.workspaceFilesDir, input.folderId, branch)
 
-      const made = await addWorktree({ repo, dir, branch })
+      const made = await addWorktree({ repo, dir, branch, base: input.base })
       if ("error" in made) throw new Error(made.error)
+      // Before the folder is added, so the first chat and the dock's setup
+      // command find the `.env` already there.
+      await copyIncluded(repo, made.dir)
 
       // The branch, when the field was left empty: a project row reading
       // `vsclaude/untitled-a1b2c3` for the minute before the first turn names it
@@ -721,7 +727,7 @@ export function createIpc(host: Host): {
   })
 
   /*
-   * And back out, all of it: the checkout, its branch, the chats run in it,
+   * And back out: the checkout, its branch if asked, the chats run in it,
    * then the project. A worktree row has no `Remove project`, so this is the
    * one way out, and anything it left behind would have no row to reach it.
    *
@@ -730,24 +736,40 @@ export function createIpc(host: Host): {
    * to find. The repository is asked for rather than remembered — see
    * `worktreeRepo`.
    */
-  handle(IPC.removeWorktree, async (_event, folderId: string) => {
-    const dir = await store.resolveFolderDir(folderId)
-    const repo = await worktreeRepo(dir)
-    if (!repo) throw new Error(`${dir} is not a git worktree checkout.`)
-    const branch = await currentBranch(dir)
+  handle(
+    IPC.removeWorktree,
+    async (_event, folderId: string, options: { deleteBranch: boolean }) => {
+      const dir = await store.resolveFolderDir(folderId)
+      const repo = await worktreeRepo(dir)
+      if (!repo) throw new Error(`${dir} is not a git worktree checkout.`)
+      const branch = await currentBranch(dir)
 
-    const failed = await removeWorktree(repo, dir)
-    if (failed) throw new Error(failed.error)
-    if (branch) await deleteBranch(repo, branch)
+      const failed = await removeWorktree(repo, dir)
+      if (failed) throw new Error(failed.error)
+      // Only when asked: the dialog has said how many commits live on this
+      // branch alone, and keeping it is how somebody removes a checkout without
+      // removing the work. A detached HEAD reads as `detached @ …`, which is
+      // no branch to delete.
+      if (options?.deleteBranch && branch && !branch.startsWith("detached @"))
+        await deleteBranch(repo, branch)
 
-    for (const chat of await allChats.list()) {
-      if (chatRootId(chat) !== folderId) continue
-      notices.forget(chat.id)
-      await allChats.delete(chat.id)
+      for (const chat of await allChats.list()) {
+        if (chatRootId(chat) !== folderId) continue
+        notices.forget(chat.id)
+        await allChats.delete(chat.id)
+      }
+
+      return store.removeFolder(folderId)
     }
+  )
 
-    return store.removeFolder(folderId)
-  })
+  handle(IPC.worktreeOptions, async (_event, folderId: string) =>
+    worktreeOptions(await store.resolveFolderDir(folderId))
+  )
+
+  handle(IPC.worktreeStatus, async (_event, folderId: string) =>
+    worktreeStatus(await store.resolveFolderDir(folderId))
+  )
 
   handle(IPC.gitBranch, async (_event, folderId: string) =>
     currentBranch(await store.resolveFolderDir(folderId))
