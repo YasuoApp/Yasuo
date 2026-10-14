@@ -77,12 +77,29 @@ export function marksUnread(
 }
 
 /** How many of a set of chats have something unread in them — what a shut
- * project's row draws. Kept out of `ChatActivity` on purpose: that shape is
- * shared with the menu bar's tray, which counts what is *happening*, and an
- * unread chat is one where nothing is happening any more. */
+ * project's row draws. Kept out of `ChatActivity` on purpose: that shape
+ * counts what is *happening*, and an unread chat is one where nothing is
+ * happening any more. */
 export function unreadIn(
   chats: WorktreeChat[],
   unread: Record<string, true>
 ): number {
   return chats.filter((chat) => unread[chat.id] === true).length
+}
+
+/**
+ * The number on the dock icon: how many chats want the user, the way Slack's
+ * badge counts what is waiting to be read.
+ *
+ * Unread **and** stopped on a question — the two things a chat can be holding
+ * for somebody — counted once per chat. A chat merely working is not in it:
+ * that is a spinner's business, and a badge that is never zero while anything
+ * runs is a badge nobody reads. Chats rather than messages, because a turn is
+ * one thing to go and look at however many lines it wrote.
+ */
+export function badgeCount(
+  unread: Record<string, true>,
+  asks: Record<string, unknown>
+): number {
+  return new Set([...Object.keys(unread), ...Object.keys(asks)]).size
 }

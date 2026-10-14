@@ -1,17 +1,10 @@
 /**
  * How many chats are working, how many have stopped to ask, and how that reads.
  *
- * Shared for the reason `@shared/tree` is: two surfaces draw this count and
- * they must not disagree. The sidebar's project row draws it inside the window
- * (`lib/worktree-chat/running.ts`, which re-exports all of this) and the menu
- * bar's tray draws it outside (`main/tray.ts`) — a `2 · 1!` on a row and a
- * `2 · 1` in the menu bar would be two readings of the same four conversations,
- * and the one somebody checks the other against.
- *
- * Counting *which* chats are which stays on each side, because the two sides
- * hold different things: the renderer has the listing and its store, main has
- * a watcher over the event stream. What is shared is the shape they both
- * produce and the words both draw.
+ * Drawn by the sidebar's project row and the rail
+ * (`lib/worktree-chat/running.ts`, which re-exports all of this). It is under
+ * `shared/` because the menu bar's tray used to draw it from main too; that is
+ * deleted — `docs/design.md` § The menu bar, removed.
  */
 
 /**
@@ -58,9 +51,8 @@ export function activityLabel(activity: ChatActivity): string {
   return parts.join(" · ")
 }
 
-/** The same thing said out loud, for the row's `title`, for a screen reader and
- * for the tray's tooltip — where the width the label was compressed for does
- * not apply. */
+/** The same thing said out loud, for the row's `title` and a screen reader —
+ * where the width the label was compressed for does not apply. */
 export function activityTitle(activity: ChatActivity): string {
   const parts: string[] = []
   if (activity.working > 0) parts.push(`${activity.working} answering`)

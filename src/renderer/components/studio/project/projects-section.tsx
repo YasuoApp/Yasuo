@@ -562,11 +562,9 @@ function ProjectRow({
    * How many of this project's chats have answered since anybody looked, or 0
    * when the row is not the one saying so.
    *
-   * Beside `activity` rather than inside it: `ChatActivity` is shared with the
-   * menu bar's tray, which counts what is *happening*, and a chat that has
-   * something unread in it is one where nothing is happening any more. Folding
-   * this into that count would make the number on this row and the number in
-   * the menu bar two readings of the same chats.
+   * Beside `activity` rather than inside it: `ChatActivity` counts what is
+   * *happening*, and a chat that has something unread in it is one where
+   * nothing is happening any more.
    */
   unread: number
   onToggle: () => void

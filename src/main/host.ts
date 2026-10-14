@@ -1,6 +1,6 @@
 /**
  * Everything `ipc.ts` needs from Electron itself — a native dialog, a window to
- * pin, an icon in the menu bar — and nothing that reads or writes the
+ * pin, a badge on the dock icon — and nothing that reads or writes the
  * workspace. `electron-ipc.ts` implements it.
  *
  * Free of `electron`, like the rest of what `ipc.ts` imports, so the tests can
@@ -56,8 +56,9 @@ export type Host = {
   setAlwaysOnTop: (caller: unknown, on: boolean) => void
   isAlwaysOnTop: (caller: unknown) => boolean
 
-  /** The menu bar's count. */
-  tray: ActivityTray | null
+  /** The number on the app's own icon — the dock's red badge on macOS, the
+   * launcher's count on Linux. Zero clears it. */
+  setBadgeCount: (count: number) => void
 
   /** This build's version, for the update check. */
   version: string
@@ -76,16 +77,4 @@ export type Host = {
     appMemory: number
     appProcesses: number
   }
-}
-
-/** What `ipc.ts` does with the menu bar's icon — `ChatTray`'s public half, so
- * this file need not import the class (and Electron with it). */
-export type ActivityTray = {
-  readonly shown: boolean
-  setShown: (shown: boolean) => void
-  update: (
-    pending: { working: string[]; waiting: string[] },
-    chats: { id: string; title: string }[]
-  ) => void
-  destroy: () => void
 }

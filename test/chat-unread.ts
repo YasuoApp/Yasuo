@@ -1,5 +1,6 @@
 import type { WorktreeChat, WorktreeChatEvent } from "../src/shared/api"
 import {
+  badgeCount,
   isWatched,
   marksUnread,
   unreadIn,
@@ -152,6 +153,21 @@ section("what a shut project's row counts")
   check(
     "a chat in another project is not counted here",
     unreadIn(three, { z: true }) === 0
+  )
+}
+
+section("what the dock's badge counts")
+{
+  check("nothing wanted is no badge", badgeCount({}, {}) === 0)
+  check("an unread chat counts", badgeCount({ a: true }, {}) === 1)
+  check("a question up counts", badgeCount({}, { b: {} }) === 1)
+  check(
+    "a chat both unread and asking is one thing to look at",
+    badgeCount({ a: true }, { a: {} }) === 1
+  )
+  check(
+    "and different chats add up",
+    badgeCount({ a: true, c: true }, { b: {} }) === 3
   )
 }
 

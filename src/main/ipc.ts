@@ -4,7 +4,6 @@ import path from "node:path"
 
 import {
   CHAT_NOTIFICATIONS_KEY,
-  CHAT_TRAY_KEY,
   chatRootId,
   IPC,
   type ChatImage,
@@ -180,7 +179,6 @@ export function createIpc(host: Host): {
   tsServers: TsServers
   /** Both kinds of `fs.watch` — the tree's and the `Changes` list's. */
   watchers: { closeAll: () => void }
-  startTray: () => Promise<void>
   noteFilePath: (fileName: string) => string
   pluginFilePath: (id: string, file: PluginFile) => string
 } {
@@ -259,60 +257,10 @@ export function createIpc(host: Host): {
       send(IPC.worktreeChatEvent, event)
       const notice = notices.read(event)
       void announce(notice)
-      // Every event, not just the ones worth a banner: the count in the menu
-      // bar is a state and not an interruption, so a `busy` that rings nothing
-      // still moves it.
-      void refreshTray()
     }
   )
 
   const notices = new ChatNotices()
-
-  /**
-   * The count in the menu bar, off the same watcher the notifications are.
-   *
-   * See `tray.ts` for what it is for. The host builds it — it is Electron's —
-   * but it is fed from here,
-   * because this is where the events are. It cannot be *shown* until the app is
-   * ready — a `Tray` before then throws — which is what `startTray` below is
-   * for.
-   */
-  const tray = host.tray
-
-  /**
-   * Which draw of the tray is the current one.
-   *
-   * The listing is read from disk, so two events a few milliseconds apart are
-   * two awaits that can land in either order — and the one that lands second
-   * wins the icon. Without this the count sticks on whatever the slower read
-   * was counting, which looks exactly like a chat that never finished.
-   */
-  let trayDraw = 0
-
-  /** Redraws the tray, if it is in the strip at all. */
-  const refreshTray = async (): Promise<void> => {
-    if (!tray?.shown) return
-    const draw = ++trayDraw
-    const pending = notices.pending()
-    // Only for the names in the menu, so an idle machine reads no files.
-    const running = pending.working.length + pending.waiting.length > 0
-    const chats = running ? await worktreeChats.list() : []
-    if (draw !== trayDraw) return
-    tray.update(pending, chats)
-  }
-
-  /**
-   * Puts the icon in the strip, or takes it out, to match the setting.
-   *
-   * Called once the app is ready and again whenever that setting changes. Off
-   * by default is the wrong default here for the reason it is wrong for
-   * notifications — see `CHAT_TRAY_KEY` — so an unset key reads as on.
-   */
-  const applyTraySetting = async (): Promise<void> => {
-    if (!tray) return
-    tray.setShown((await store.getSetting(CHAT_TRAY_KEY)) !== "off")
-    await refreshTray()
-  }
 
   /**
    * Rings the OS notification a chat's event turned out to deserve.
@@ -522,6 +470,10 @@ export function createIpc(host: Host): {
 
   handle(IPC.isAlwaysOnTop, (caller) => host.isAlwaysOnTop(caller))
 
+  handle(IPC.setBadgeCount, (_event, count: number) => {
+    host.setBadgeCount(count)
+  })
+
   /*
    * The left column's Search. `searching` is the generation: each call takes
    * the next one, and an older call still walking sees it has moved and stops,
@@ -574,8 +526,6 @@ export function createIpc(host: Host): {
     // `busy: false`, so the watcher would keep it as working for the rest of
     // the run and swallow the first quiet of whatever reused the id.
     notices.forget(id)
-    // The deleted chat may have been the one the strip was counting.
-    void refreshTray()
     return worktreeChats.delete(id)
   })
 
@@ -732,7 +682,6 @@ export function createIpc(host: Host): {
       notices.forget(chat.id)
       await worktreeChats.delete(chat.id)
     }
-    void refreshTray()
 
     return store.removeFolder(folderId)
   })
@@ -1187,13 +1136,9 @@ export function createIpc(host: Host): {
 
   handle(IPC.getSetting, (_event, key: string) => store.getSetting(key))
 
-  handle(IPC.setSetting, async (_event, key: string, value: string) => {
-    await store.setSetting(key, value)
-    // The one setting with something of this process' own hanging off it: the
-    // switch has to put the icon in the menu bar or take it out there and then,
-    // since nothing else here re-reads it.
-    if (key === CHAT_TRAY_KEY) await applyTraySetting()
-  })
+  handle(IPC.setSetting, (_event, key: string, value: string) =>
+    store.setSetting(key, value)
+  )
 
   handle(IPC.readDrawing, (_event, id: string) => store.readDrawing(id))
 
@@ -1367,10 +1312,6 @@ export function createIpc(host: Host): {
     terminals,
     tsServers,
     watchers,
-    /** Shows the menu bar's icon if the setting has not switched it off.
-     * Separate from building it because `registerIpc` runs at module scope and
-     * a `Tray` constructed before `whenReady` throws. */
-    startTray: () => applyTraySetting(),
     /** For the `note-file://` handler, which is not an IPC call and so cannot
      * reach the store any other way — see `serveNoteFiles`. */
     noteFilePath: (fileName: string) => store.noteFilePath(fileName),

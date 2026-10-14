@@ -27,6 +27,7 @@ import { useProjects } from "@/lib/projects"
 import { useWorkspaceSearch } from "@/lib/workspace-search"
 import { useClaudeProfiles } from "@/lib/worktree-chat/claude-profiles"
 import { useWorktreeChats } from "@/lib/worktree-chat/store"
+import { badgeCount } from "@/lib/worktree-chat/unread"
 import { Dock } from "./dock"
 import { NavRail } from "./nav-rail"
 import { WorkspaceSidebar } from "./workspace-sidebar"
@@ -101,6 +102,25 @@ export function Studio() {
   // A chat's turn runs in the main process and outlives the
   // pane being switched away from, so its lines are subscribed to here.
   useEffect(() => useWorktreeChats.getState().listen(), [])
+
+  // The dock icon's red number. Here rather than in main because `unread` is
+  // this window's — main knows a chat went quiet but not whether anybody has
+  // looked at it since — and here rather than in `ChatWindow` because a
+  // popped-out chat keeps a store of its own, and two senders would fight.
+  useEffect(() => {
+    let shown = -1
+    const sync = ({
+      unread,
+      asks,
+    }: ReturnType<typeof useWorktreeChats.getState>) => {
+      const count = badgeCount(unread, asks)
+      if (count === shown) return
+      shown = count
+      void window.desktop.setBadgeCount(count)
+    }
+    sync(useWorktreeChats.getState())
+    return useWorktreeChats.subscribe(sync)
+  }, [])
 
   // The appearance settings, written onto `<html>` as they change — here
   // rather than in the dialog that edits them, so a restored setting is
