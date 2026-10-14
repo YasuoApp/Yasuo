@@ -15,6 +15,7 @@ import { useFiles } from "@/lib/files/store"
 import { isStudioShortcut } from "@/lib/shortcuts"
 import { useStudio } from "@/lib/store"
 import { SECTION_ACCENT } from "../section-marks"
+import { CommitDiff } from "./commit-diff"
 import { FilePane } from "./file-workspace"
 
 /**
@@ -50,6 +51,9 @@ export function ChangesPane() {
 
   const path = useChanges((state) =>
     rootId ? (state.selectedPath[rootId] ?? null) : null
+  )
+  const commitFile = useChanges((state) =>
+    rootId ? (state.commitFile[rootId] ?? null) : null
   )
   const count = useChanges((state) =>
     rootId ? state.byRoot[rootId]?.length : undefined
@@ -111,6 +115,10 @@ export function ChangesPane() {
         detail="The project this tab was opened for is no longer in the workspace. Close the tab, or pick a file under Changes in the Explorer."
       />
     )
+  }
+
+  if (commitFile) {
+    return <CommitDiff folderId={root.folderId} target={commitFile} />
   }
 
   return path ? (

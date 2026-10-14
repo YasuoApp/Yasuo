@@ -53,6 +53,13 @@ type ChangesState = {
   selectedId: string | null
   /** Which file the tab is showing the diff of, per root. */
   selectedPath: Record<string, string | null>
+  /**
+   * Or which file **of a commit**, per root — a row under a commit opened in
+   * the `Commits` view. The same one tab, so reading a commit is as many clicks
+   * as reading the working tree and no more tabs. Whichever of the two was
+   * picked last is the one drawn: picking one clears the other.
+   */
+  commitFile: Record<string, CommitFileTarget | null>
 
   /**
    * Reads one root now.
@@ -110,6 +117,18 @@ type ChangesState = {
   /** Both at once: the file to show, and the tab to show it in. What a row in
    * the Explorer's `Changes` list does. */
   openPath: (rootId: string, path: string) => void
+  /** A commit's file, in the root's diff tab. */
+  openCommitFile: (rootId: string, target: CommitFileTarget) => void
+}
+
+/** One file of one commit, as the diff tab is asked to draw it. */
+export type CommitFileTarget = {
+  hash: string
+  shortHash: string
+  subject: string
+  /** The repository's path, `/`-separated — see `GitCommitFile`. */
+  path: string
+  from?: string
 }
 
 export const useChanges = create<ChangesState>((set, get) => ({
@@ -118,6 +137,7 @@ export const useChanges = create<ChangesState>((set, get) => ({
   openIds: [],
   selectedId: null,
   selectedPath: {},
+  commitFile: {},
 
   async refresh(root) {
     if (!get().loading.includes(root.id)) {
@@ -237,6 +257,10 @@ export const useChanges = create<ChangesState>((set, get) => ({
   selectPath(rootId, path) {
     set((state) => ({
       selectedPath: { ...state.selectedPath, [rootId]: path },
+      commitFile:
+        path === null
+          ? state.commitFile
+          : { ...state.commitFile, [rootId]: null },
     }))
   },
 
@@ -245,6 +269,14 @@ export const useChanges = create<ChangesState>((set, get) => ({
     // "nothing selected" notice for a frame before the diff arrived would
     // flicker on every row clicked.
     get().selectPath(rootId, path)
+    get().open(rootId)
+  },
+
+  openCommitFile(rootId, target) {
+    set((state) => ({
+      selectedPath: { ...state.selectedPath, [rootId]: null },
+      commitFile: { ...state.commitFile, [rootId]: target },
+    }))
     get().open(rootId)
   },
 }))

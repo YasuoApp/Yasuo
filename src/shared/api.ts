@@ -147,6 +147,46 @@ export type GitCommit = {
 }
 
 /**
+ * Where the checked-out branch stands against its remote — see `upstream` in
+ * `main/git.ts`. `name` is null for a branch with no upstream, where `ahead`
+ * is every commit no remote has.
+ */
+export type GitUpstream = {
+  /** `origin/main`, as git abbreviates it. */
+  name: string | null
+  /** The commits not pushed, newest first, capped — looked up per row. */
+  ahead: string[]
+  aheadCount: number
+  behind: number
+  /** `https://github.com/owner/repo` and the like — see `GitBlame.webUrl`. */
+  webUrl: string | null
+}
+
+/**
+ * One file a commit changed — see `commitFiles` in `main/git.ts`. Paths are the
+ * repository's own, `/`-separated, since the file may no longer be on disk.
+ */
+export type GitCommitFile = {
+  path: string
+  /** Where a rename came from. */
+  from?: string
+  state: "added" | "modified" | "deleted"
+  /** Null for a binary file, which git will not count the lines of. */
+  added: number | null
+  removed: number | null
+}
+
+/** Both sides of one file in a commit, out of the object store — see
+ * `commitFileDiff` in `main/git.ts`. */
+export type GitCommitFileDiff = {
+  before: string | null
+  after: string | null
+  patch: string | null
+  /** Either side is not text, or too large to draw. */
+  binary: boolean
+}
+
+/**
  * Who last changed each line of a file — see `blame` in `main/git.ts`.
  * `lines[i]` is the commit for line `i + 1` of the text that was handed over,
  * or null for a line nobody has committed yet.
@@ -1978,13 +2018,26 @@ export type DesktopApi = {
    * Up to `limit` commits of the branch checked out in one folder, newest
    * first, after the newest `skip` — one page of the `Commits` view. Empty for
    * a folder that is not a repository, has no commit yet, or has nothing past
-   * `skip`.
+   * `skip`. A `query` pages through the matches alone — see `commitMatches`.
    */
   gitLog: (
     folderId: string,
     limit: number,
-    skip?: number
+    skip?: number,
+    query?: string
   ) => Promise<GitCommit[]>
+  /** The checked-out branch against its remote — see `GitUpstream`. Null for
+   * a folder with no commit to compare. */
+  gitUpstream: (folderId: string) => Promise<GitUpstream | null>
+  /** The files one commit changed, against its first parent. */
+  gitCommitFiles: (folderId: string, hash: string) => Promise<GitCommitFile[]>
+  /** One of those files, both sides — what the diff tab draws for it. */
+  gitCommitFileDiff: (
+    folderId: string,
+    hash: string,
+    path: string,
+    from?: string
+  ) => Promise<GitCommitFileDiff>
 
   /**
    * The three writes the Changes list makes — `git add`, its undo, and
@@ -2695,6 +2748,9 @@ export const IPC = {
   gitStatus: "git:status",
   gitChanges: "git:changes",
   gitLog: "git:log",
+  gitUpstream: "git:upstream",
+  gitCommitFiles: "git:commit-files",
+  gitCommitFileDiff: "git:commit-file-diff",
   gitStage: "git:stage",
   gitUnstage: "git:unstage",
   gitDiscard: "git:discard",

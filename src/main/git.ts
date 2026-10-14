@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process"
+import { execFile, spawn } from "node:child_process"
 import { readFile, realpath, stat } from "node:fs/promises"
 import path from "node:path"
 import { promisify } from "node:util"
@@ -8,8 +8,11 @@ import type {
   GitBlameCommit,
   GitChange,
   GitCommit,
+  GitCommitFile,
+  GitCommitFileDiff,
   GitFileState,
   GitStatusEntry,
+  GitUpstream,
 } from "../shared/api"
 
 const run = promisify(execFile)
@@ -879,14 +882,23 @@ export async function recentSubjects(
 const UNIT = "\x1f"
 const RECORD = "\x1e"
 
+/** `%D`: the refs pointing at the commit, so the row can say which is `HEAD`
+ * and where `origin` is without a second call. */
+const LOG_FORMAT = `--pretty=format:%H${UNIT}%h${UNIT}%s${UNIT}%an${UNIT}%aI${UNIT}%D${RECORD}`
+
 /**
  * `limit` commits of the branch that is checked out, newest first, after
  * skipping the newest `skip` — a page of the Explorer's `Commits` tab.
  *
  * **Read-only, and a list rather than a client.** It is the one place this
- * module reads history at all, and it reads only what the row draws — no
- * graph, no other branches, no diff of a commit. `docs/design.md` § Commits has
- * why a log was let in when amend, branch and push still are not.
+ * module reads history at all, and it reads only the checked-out branch — no
+ * graph, no other branches. `docs/design.md` § Commits has why a log was let
+ * in when amend, branch and push still are not, and why a commit's files and
+ * diffs were let in after it (`commitFiles`, `commitFileDiff`).
+ *
+ * `query` narrows it to the commits `commitMatches` keeps, and the page is a
+ * page **of the matches**: `skip` and `limit` count what is shown, not what was
+ * walked past to find it — see `logMatching`.
  *
  * Empty for a folder that is not a repository and for one with no commit yet,
  * which `git log` reports as an error: both are "nothing to list".
@@ -894,40 +906,401 @@ const RECORD = "\x1e"
 export async function log(
   dir: string,
   limit: number,
-  skip = 0
+  skip = 0,
+  query = ""
 ): Promise<GitCommit[]> {
+  if (query.trim()) return logMatching(dir, limit, skip, query.trim())
+
   let out: string
   try {
-    out = await git(dir, [
-      "log",
-      `-n${limit}`,
-      `--skip=${skip}`,
-      // `%D`: the refs pointing at the commit, so the row can say which is
-      // `HEAD` and where `origin` is without a second call.
-      `--pretty=format:%H${UNIT}%h${UNIT}%s${UNIT}%an${UNIT}%aI${UNIT}%D${RECORD}`,
-    ])
+    out = await git(dir, ["log", `-n${limit}`, `--skip=${skip}`, LOG_FORMAT])
   } catch {
     return []
   }
 
   return out
     .split(RECORD)
-    .map((record) => record.replace(/^\n/, ""))
-    .filter(Boolean)
-    .map((record) => {
-      const [hash, shortHash, subject, author, date, refs] = record.split(UNIT)
-      return {
-        hash: hash ?? "",
-        shortHash: shortHash ?? "",
-        subject: subject ?? "",
-        author: author ?? "",
-        date: date ?? "",
-        refs: (refs ?? "")
-          .split(", ")
-          .map((ref) => ref.trim())
-          .filter(Boolean),
+    .map(parseLogRecord)
+    .filter((commit): commit is GitCommit => commit !== null)
+}
+
+function parseLogRecord(raw: string): GitCommit | null {
+  const record = raw.replace(/^\n/, "")
+  if (!record) return null
+  const [hash, shortHash, subject, author, date, refs] = record.split(UNIT)
+  return {
+    hash: hash ?? "",
+    shortHash: shortHash ?? "",
+    subject: subject ?? "",
+    author: author ?? "",
+    date: date ?? "",
+    refs: (refs ?? "")
+      .split(", ")
+      .map((ref) => ref.trim())
+      .filter(Boolean),
+  }
+}
+
+/**
+ * Whether a commit is one the `Commits` filter keeps: the query, ignoring case,
+ * anywhere in the subject or the author's name, or the start of the hash.
+ *
+ * Matched here rather than with `--grep` / `--author`, because git **ands**
+ * those two where somebody typing a word into one box means "either" — and
+ * neither of them reaches the hash. Exported for `test/git-changes.ts`.
+ */
+export function commitMatches(commit: GitCommit, query: string): boolean {
+  const needle = query.toLowerCase()
+  return (
+    commit.subject.toLowerCase().includes(needle) ||
+    commit.author.toLowerCase().includes(needle) ||
+    commit.hash.startsWith(needle)
+  )
+}
+
+/**
+ * The filtered log: `git log` streamed, each record matched as it arrives, and
+ * the process killed as soon as the page is full.
+ *
+ * Streamed rather than read whole because a filter is the case where the page
+ * may be the whole history away — a word that matches nothing walks every
+ * commit, and a repository's whole log does not fit under `git`'s `maxBuffer`.
+ * A word that matches something recent, the usual case, stops after a screen.
+ */
+function logMatching(
+  dir: string,
+  limit: number,
+  skip: number,
+  query: string
+): Promise<GitCommit[]> {
+  return new Promise((resolve) => {
+    const found: GitCommit[] = []
+    let seen = 0
+    let buffer = ""
+    let done = false
+
+    const child = spawn("git", ["log", LOG_FORMAT], {
+      cwd: dir,
+      windowsHide: true,
+    })
+    const finish = () => {
+      if (done) return
+      done = true
+      child.kill()
+      resolve(found)
+    }
+
+    child.stdout.setEncoding("utf8")
+    child.stdout.on("data", (chunk: string) => {
+      if (done) return
+      buffer += chunk
+      const records = buffer.split(RECORD)
+      buffer = records.pop() ?? ""
+      for (const record of records) {
+        const commit = parseLogRecord(record)
+        if (!commit || !commitMatches(commit, query)) continue
+        seen += 1
+        if (seen <= skip) continue
+        found.push(commit)
+        if (found.length >= limit) return finish()
       }
     })
+    // Not a repository, or no commit yet: git exits non-zero having printed
+    // nothing, which is the same empty answer `log` gives.
+    child.on("error", finish)
+    child.on("close", finish)
+  })
+}
+
+/**
+ * Where the checked-out branch stands against the remote — what the `Commits`
+ * view marks as not pushed, and the `↑2 ↓1` above it.
+ *
+ * Against the branch's **upstream** when it has one. A branch nobody has
+ * pushed yet has none, and is the case where "not pushed" matters most, so
+ * there it is every commit no remote-tracking ref reaches (`--not --remotes`)
+ * and nothing is behind. A repository with no remote at all marks nothing:
+ * every commit in it is unpushed, and a mark on every row is no mark.
+ *
+ * `ahead` is capped, like the log's own page: it is looked up per row, and a
+ * branch thousands of commits from its remote has said what it needs to by the
+ * first screen. `aheadCount` is the true number.
+ *
+ * Null for a folder that is not a repository or has no commit yet.
+ */
+export async function upstream(dir: string): Promise<GitUpstream | null> {
+  try {
+    await git(dir, ["rev-parse", "--verify", "--quiet", "HEAD"])
+  } catch {
+    return null
+  }
+
+  const remote = await git(dir, ["remote", "get-url", "origin"]).catch(() => "")
+  const webUrl = webUrlOf(remote.trim())
+
+  const name = await git(dir, [
+    "rev-parse",
+    "--abbrev-ref",
+    "--symbolic-full-name",
+    "@{upstream}",
+  ])
+    .then((out) => out.trim() || null)
+    .catch(() => null)
+
+  if (name) {
+    const [ahead, counts] = await Promise.all([
+      git(dir, ["rev-list", `-n${MAX_AHEAD}`, "@{upstream}..HEAD"]),
+      git(dir, ["rev-list", "--left-right", "--count", "HEAD...@{upstream}"]),
+    ])
+    const [aheadCount, behind] = counts.trim().split(/\s+/).map(Number)
+    return {
+      name,
+      ahead: lines(ahead),
+      aheadCount: aheadCount ?? 0,
+      behind: behind ?? 0,
+      webUrl,
+    }
+  }
+
+  const remotes = lines(await git(dir, ["remote"]).catch(() => ""))
+  if (remotes.length === 0)
+    return { name: null, ahead: [], aheadCount: 0, behind: 0, webUrl }
+
+  const [ahead, count] = await Promise.all([
+    git(dir, ["rev-list", `-n${MAX_AHEAD}`, "HEAD", "--not", "--remotes"]),
+    git(dir, ["rev-list", "--count", "HEAD", "--not", "--remotes"]),
+  ])
+  return {
+    name: null,
+    ahead: lines(ahead),
+    aheadCount: Number(count.trim()) || 0,
+    behind: 0,
+    webUrl,
+  }
+}
+
+const MAX_AHEAD = 1000
+
+function lines(out: string): string[] {
+  return out
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+}
+
+/** A full or abbreviated object name and nothing else, so a value from the
+ * renderer can never be read by git as an option or a range. */
+const HASH = /^[0-9a-f]{7,64}$/i
+
+/**
+ * The first parent of a commit, or null for a root commit.
+ *
+ * The first and only the first: a merge is shown as what it brought onto the
+ * branch, which is the diff against the parent the branch was on — the same
+ * choice `git log --first-parent -p` and every forge's merge view make.
+ */
+async function firstParent(dir: string, hash: string): Promise<string | null> {
+  const out = await git(dir, ["rev-list", "--parents", "-n1", hash])
+  return out.trim().split(/\s+/)[1] ?? null
+}
+
+/**
+ * The files one commit changed, with how far each moved — the rows under a
+ * commit opened in the `Commits` view.
+ *
+ * Paths are the **repository's**, `/`-separated, not absolute: a commit is
+ * history, and the file it names may not be on disk any more — a deleted file
+ * is one of these rows. What opens one is `commitFileDiff`, which reads both
+ * sides out of the object store and never off disk.
+ *
+ * `-M` so a rename is one row that says where it came from, and the counts are
+ * read with the same flag so a rename's row carries its own numbers.
+ */
+export async function commitFiles(
+  dir: string,
+  hash: string
+): Promise<GitCommitFile[]> {
+  if (!HASH.test(hash)) return []
+
+  let parent: string | null
+  try {
+    parent = await firstParent(dir, hash)
+  } catch {
+    return []
+  }
+  const range = parent ? [parent, hash] : ["--root", hash]
+  const base = ["diff-tree", "-r", "-M", "--no-commit-id", "-z"]
+
+  const [status, numbers] = await Promise.all([
+    git(dir, [...base, "--name-status", ...range]),
+    git(dir, [...base, "--numstat", ...range]),
+  ])
+
+  return parseCommitFiles(status, numbers)
+}
+
+/**
+ * `diff-tree --name-status -z` and `--numstat -z`, read into rows.
+ *
+ * Both put a rename's two paths in their own NUL-terminated fields — the
+ * status's as `R100\0old\0new`, the numstat's as `added\tremoved\t\0old\0new`
+ * — which is the one shape here that is not one record per field. Exported for
+ * `test/git-changes.ts`.
+ */
+export function parseCommitFiles(
+  status: string,
+  numbers: string
+): GitCommitFile[] {
+  const counts = new Map<string, { added: number; removed: number } | null>()
+  const numberFields = numbers.split("\0")
+  for (let index = 0; index < numberFields.length; index += 1) {
+    const record = numberFields[index]
+    if (!record) continue
+    const [added, removed, target] = record.split("\t")
+    if (added === undefined || removed === undefined) continue
+    let file = target
+    if (!file) {
+      // A rename: the old path and then the new one, as the next two fields.
+      index += 2
+      file = numberFields[index]
+    }
+    if (!file) continue
+    counts.set(
+      file,
+      added === "-" || removed === "-"
+        ? null
+        : { added: Number(added), removed: Number(removed) }
+    )
+  }
+
+  const files: GitCommitFile[] = []
+  const fields = status.split("\0")
+  for (let index = 0; index < fields.length; index += 1) {
+    const letter = fields[index]?.[0]
+    if (!letter) continue
+    let from: string | undefined
+    if (letter === "R" || letter === "C") {
+      from = fields[index + 1]
+      index += 1
+    }
+    const file = fields[index + 1]
+    index += 1
+    if (!file) continue
+
+    const numbersOf = counts.get(file)
+    files.push({
+      path: file,
+      ...(from === undefined ? {} : { from }),
+      state:
+        letter === "A" || letter === "C"
+          ? "added"
+          : letter === "D"
+            ? "deleted"
+            : "modified",
+      added: numbersOf ? numbersOf.added : null,
+      removed: numbersOf ? numbersOf.removed : null,
+    })
+  }
+
+  return files.sort((a, b) => a.path.localeCompare(b.path))
+}
+
+/** How much of one side of a commit's file is read for its diff. The same
+ * ceiling the Explorer opens a file under. */
+const MAX_COMMIT_FILE_BYTES = 2 * 1024 * 1024
+
+/**
+ * One file as a commit changed it: the text before, the text after, and git's
+ * own patch between them — the `Changes` tab's pane, opened from a commit.
+ *
+ * Both sides come out of the object store (`git show <rev>:<path>`), never off
+ * disk: the left is the first parent's, the right the commit's. Null for a side
+ * that does not have the file — an added file has no before, a deleted one no
+ * after. `binary` for a side that is not text or is over the ceiling, which
+ * the pane says rather than drawing.
+ *
+ * The patch is `--unified=0` for the reason `fileDiff` gives, and absent for a
+ * rename and for a root commit, where the view falls back to computing the
+ * difference itself — the same fallback a patch that does not match gets.
+ */
+export async function commitFileDiff(
+  dir: string,
+  hash: string,
+  file: string,
+  from?: string
+): Promise<GitCommitFileDiff> {
+  const none = { before: null, after: null, patch: null, binary: false }
+  if (!HASH.test(hash) || !isRepoPath(file)) return none
+  if (from !== undefined && !isRepoPath(from)) return none
+
+  let parent: string | null
+  try {
+    parent = await firstParent(dir, hash)
+  } catch {
+    return none
+  }
+
+  const [before, after, patch] = await Promise.all([
+    parent ? blobText(dir, `${parent}:${from ?? file}`) : null,
+    blobText(dir, `${hash}:${file}`),
+    parent && from === undefined
+      ? git(dir, [
+          "diff",
+          "--unified=0",
+          "--no-color",
+          "--no-ext-diff",
+          "--no-textconv",
+          "--no-renames",
+          parent,
+          hash,
+          "--",
+          // From the repository's root rather than the cwd, which may be a
+          // folder inside it; `literal` so a `*` in a name is a `*`.
+          `:(top,literal)${file}`,
+        ]).catch(() => null)
+      : null,
+  ])
+
+  if (before === BINARY || after === BINARY)
+    return { before: null, after: null, patch: null, binary: true }
+  return { before, after, patch, binary: false }
+}
+
+const BINARY = Symbol("binary")
+
+/** A blob as text, null for one that is not there, `BINARY` for one that is not
+ * text or is too large to be worth drawing. */
+async function blobText(
+  dir: string,
+  spec: string
+): Promise<string | typeof BINARY | null> {
+  try {
+    const { stdout } = await run("git", ["show", spec], {
+      cwd: dir,
+      windowsHide: true,
+      maxBuffer: MAX_COMMIT_FILE_BYTES,
+    })
+    // The test every tool uses: a NUL early on is not text.
+    return stdout.slice(0, 8000).includes("\0") ? BINARY : stdout
+  } catch (error) {
+    // Over the buffer is a file that is there and too big; anything else is a
+    // path that side of the commit does not have.
+    return (error as { code?: string }).code ===
+      "ERR_CHILD_PROCESS_STDIO_MAXBUFFER"
+      ? BINARY
+      : null
+  }
+}
+
+/** A repository path from the renderer: relative, `/`-separated, no `..`. */
+function isRepoPath(file: string): boolean {
+  return (
+    typeof file === "string" &&
+    file !== "" &&
+    !file.includes("\0") &&
+    !file.startsWith("/") &&
+    !file.split("/").includes("..")
+  )
 }
 
 /**

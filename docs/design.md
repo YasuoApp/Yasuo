@@ -651,9 +651,37 @@ gated twice (`ipc.ts` and `main/git.ts`) and ends by re-reading git.
 ### Commits
 
 The checked-out branch's commits, twenty at a time with `Show 20 more`
-(`log`, one extra row asked to know whether more exist). Read-only and flat — no
-graph, no other branches, no commit diff. Re-read off the same git signal as
-`Changes`, so a commit in the dock's shell lands without Refresh.
+(`log`, one extra row asked to know whether more exist). Read-only, one branch,
+no graph. Re-read off the same git signal as `Changes`, so a commit in the
+dock's shell lands without Refresh.
+
+**It now opens a commit, which reverses "no commit diff".** The list answered
+"what has this branch had done to it lately" and stopped one question short —
+_what did that one change_ — which sent the reader to the dock's shell for a
+`git show`. A row opens into its files (`commitFiles`, against the **first
+parent**, so a merge is what it brought onto the branch), and a file opens in
+the checkout's **one diff tab**, the same tab `Changes` uses: one tab either
+way, and whichever was picked last is drawn (`commitFile` beside `selectedPath`
+in `lib/files/changes.ts`). Both sides come out of the object store
+(`commitFileDiff`), never off disk, and the merge view takes the right side as
+fixed text (`modified`) so it stays out of the shared buffers. Binary or over
+2 MB is said, not drawn.
+
+Three more, each something a reader kept leaving the list for:
+
+- **Not pushed** — an arrow on each commit the upstream lacks and `↑2 ↓1` over
+  the list (`upstream`). A branch with no upstream counts against every remote
+  (`--not --remotes`), since a branch nobody has pushed is where it matters most;
+  a repository with no remote marks nothing.
+- **A filter** — message, author or the start of the hash, matched in main
+  (`commitMatches`) rather than by `--grep`/`--author`, which git **ands**. The
+  log is streamed and the process killed once a page of matches is in, so a
+  recent match costs a screen and a miss costs one walk.
+- **The blame card's menu** on a row — copy SHA or message, `Ask in chat`
+  (typed, unsent), open on the forge.
+
+Still refused: other branches, a graph, checkout, revert, cherry-pick — the
+dock's shell is the git client.
 
 ### Who last changed a line
 

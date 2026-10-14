@@ -130,9 +130,11 @@ imports may reach `electron`.
   off the staged diff by the read-only `claude` (`draftCommitMessage` in
   `one-turn-agent.ts`, fed by `stagedDiff` / `recentSubjects` here), so the gesture
   is ending a reading of the diff rather than writing a paragraph in a panel with
-  no room for one. **`log` is the one read of history** — the checked-out
-  branch's commits a page at a time (`--skip`) for the `Commits` view, nothing
-  written (`docs/design.md` § Commits). **`blame` is the second**, one per file
+  no room for one. **`log` is the read of history** — the checked-out
+  branch's commits a page at a time (`--skip`, or a streamed filter) for the
+  `Commits` view, with `upstream` for what is not pushed and `commitFiles` /
+  `commitFileDiff` to open a commit into the checkout's one diff tab, both
+  sides out of the object store; nothing written (`docs/design.md` § Commits). **`blame` is the second**, one per file
   with the editor's buffer on stdin, for the current-line annotation
   (`lib/editor-git-blame.ts`, § Who last changed a line). Amend, branch and
   push stay out — that is

@@ -577,7 +577,7 @@ function SwitchButton({
  * `aria-pressed` — it says so to a screen reader and nothing to the eye — which
  * is why the on state here is drawn.
  */
-function DiffControls() {
+export function DiffControls() {
   const sideBySide = useSettings((state) => state.diffSideBySide)
   const setSideBySide = useSettings((state) => state.setDiffSideBySide)
   const whitespace = useSettings((state) => state.diffWhitespace)
