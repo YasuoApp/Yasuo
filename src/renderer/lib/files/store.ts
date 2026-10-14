@@ -331,6 +331,9 @@ type FilesState = {
   /** Copies paths dropped from outside the app into `dir`, and opens `dir` so
    * the copies are on screen. */
   copyIn: (dir: string, sources: string[]) => Promise<string[]>
+  /** Cut and Paste: moves `target` into `dir`, carrying its tabs and buffers
+   * across the way a rename does. */
+  moveInto: (target: string, dir: string) => Promise<string>
   /** To the system trash, and closes whatever tabs it took with it. */
   trash: (target: string) => Promise<void>
 
@@ -351,6 +354,56 @@ export const useFiles = create<FilesState>((set, get) => {
   function rememberTabs() {
     const { openIds, selectedId } = get()
     remember(OPEN_TABS_KEY, { openIds, selectedId })
+  }
+
+  /** The path is the identity here, so a rename or a move is a different file
+   * as far as every other part of this store is concerned: the tab, the
+   * document and any listing under it are moved across by hand. */
+  function relocate(target: string, renamed: string) {
+    const {
+      openIds,
+      selectedId,
+      previewId,
+      docs,
+      images,
+      views,
+      expanded,
+      entries,
+    } = get()
+    const moved = (filePath: string) => movedPath(filePath, target, renamed)
+    set({
+      openIds: openIds.map(moved),
+      selectedId: selectedId === null ? null : moved(selectedId),
+      // Moved rather than dropped: renaming a file is not opening it, and the
+      // tab that was a preview before the rename is the same tab after it.
+      previewId: previewId === null ? null : moved(previewId),
+      expanded: expanded.map(moved),
+      docs: Object.fromEntries(
+        Object.entries(docs).map(([filePath, doc]) => [moved(filePath), doc])
+      ),
+      images: Object.fromEntries(
+        Object.entries(images).map(([filePath, image]) => [
+          moved(filePath),
+          image,
+        ])
+      ),
+      // A rename can change the extension, and with it what the file is by
+      // default — but not what the user asked for it, which is why the
+      // choice travels rather than being dropped.
+      views: Object.fromEntries(
+        Object.entries(views).map(([filePath, viewer]) => [
+          moved(filePath),
+          viewer,
+        ])
+      ),
+      entries: Object.fromEntries(
+        Object.entries(entries).map(([dir, listing]) => [
+          moved(dir),
+          listing.map((entry) => ({ ...entry, path: moved(entry.path) })),
+        ])
+      ),
+    })
+    rememberTabs()
   }
 
   /** Adds or replaces one document. */
@@ -843,56 +896,17 @@ export const useFiles = create<FilesState>((set, get) => {
     async rename(target, name) {
       const renamed = await window.desktop.renamePath(target, name)
       await get().read(parentOf(target))
-
-      // The path is the identity here, so a rename is a different file as far
-      // as every other part of this store is concerned: the tab, the document
-      // and any listing under it are moved across by hand.
-      const {
-        openIds,
-        selectedId,
-        previewId,
-        docs,
-        images,
-        views,
-        expanded,
-        entries,
-      } = get()
-      const moved = (filePath: string) => movedPath(filePath, target, renamed)
-
-      set({
-        openIds: openIds.map(moved),
-        selectedId: selectedId === null ? null : moved(selectedId),
-        // Moved rather than dropped: renaming a file is not opening it, and the
-        // tab that was a preview before the rename is the same tab after it.
-        previewId: previewId === null ? null : moved(previewId),
-        expanded: expanded.map(moved),
-        docs: Object.fromEntries(
-          Object.entries(docs).map(([filePath, doc]) => [moved(filePath), doc])
-        ),
-        images: Object.fromEntries(
-          Object.entries(images).map(([filePath, image]) => [
-            moved(filePath),
-            image,
-          ])
-        ),
-        // A rename can change the extension, and with it what the file is by
-        // default — but not what the user asked for it, which is why the
-        // choice travels rather than being dropped.
-        views: Object.fromEntries(
-          Object.entries(views).map(([filePath, viewer]) => [
-            moved(filePath),
-            viewer,
-          ])
-        ),
-        entries: Object.fromEntries(
-          Object.entries(entries).map(([dir, listing]) => [
-            moved(dir),
-            listing.map((entry) => ({ ...entry, path: moved(entry.path) })),
-          ])
-        ),
-      })
-      rememberTabs()
+      relocate(target, renamed)
       return renamed
+    },
+
+    async moveInto(target, dir) {
+      const moved = await window.desktop.movePath(target, dir)
+      if (moved === target) return moved
+      await Promise.all([get().read(parentOf(target)), get().read(dir)])
+      relocate(target, moved)
+      if (!get().expanded.includes(dir)) get().toggle(dir)
+      return moved
     },
 
     async trash(target) {

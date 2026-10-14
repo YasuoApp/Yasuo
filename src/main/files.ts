@@ -4,6 +4,7 @@ import {
   readdir,
   readFile,
   rename,
+  rm,
   stat,
   writeFile,
 } from "node:fs/promises"
@@ -287,6 +288,39 @@ export async function copyInto(
     copied.push(target)
   }
   return copied
+}
+
+/**
+ * Moves `source` into `dir` — the tree's Cut and Paste — and hands back where it
+ * landed. Numbered like `copyInto` rather than over something, for the same
+ * reason. Two workspace folders can be on two volumes, where `rename` fails with
+ * `EXDEV`; that is a copy and then a delete, and the delete only runs once the
+ * copy is whole.
+ */
+export async function moveInto(source: string, dir: string): Promise<string> {
+  const from = path.resolve(source)
+  if (insideAny([from], dir)) {
+    throw new Error(`Cannot move "${path.basename(from)}" into itself.`)
+  }
+  // Pasted back where it was cut from: already there, and a ` 2` would be a
+  // rename nobody asked for.
+  if (path.dirname(from) === path.resolve(dir)) return from
+  const directory = (await stat(from)).isDirectory()
+  const target = await freeName(dir, path.basename(from), directory)
+  try {
+    await rename(from, target)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EXDEV") throw error
+    await cp(from, target, {
+      recursive: true,
+      force: false,
+      errorOnExist: true,
+      preserveTimestamps: true,
+      verbatimSymlinks: true,
+    })
+    await rm(from, { recursive: true })
+  }
+  return target
 }
 
 /** `name`, or the first of `name 2`, `name 3`… not already in `dir`. A folder's
