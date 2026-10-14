@@ -587,6 +587,8 @@ send each is also kept as a note file and the user line names it, so the
 composer and the transcript both draw thumbnails (`chat-images.tsx`,
 `docs/design.md` § Pictures in a message) (`test/chat-images.ts`),
 `lib/files/change-tree.ts` (`test/change-tree.ts`),
+`lib/shell/file-links.ts` — the paths in a line of terminal output that
+`⌘`-click opens (`test/terminal-links.ts`),
 `lib/files/conflicts.ts` — merge-conflict blocks and what Accept writes, drawn
 by `lib/editor-conflicts.ts` in the file editor (`test/conflicts.ts`),
 `lib/project-tree.ts` (`test/project-tree.ts`),

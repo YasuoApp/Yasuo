@@ -40,6 +40,10 @@ export type Shell = {
   /** The directory the shell is in now, as main last read it — what its tab
    * is named after. Null until it has been asked. */
   cwd: string | null
+  /** What the user called the tab, which wins over the cwd — a dev server's
+   * tab named `vite` stays `vite` whatever it `cd`s into. Null for the
+   * automatic name. */
+  name: string | null
 }
 
 type ShellState = {
@@ -91,13 +95,15 @@ type ShellState = {
   restart: (id: string) => void
   setExited: (id: string, exited: boolean) => void
   setCwd: (id: string, cwd: string) => void
+  /** Names the tab; a blank name hands it back to the cwd. */
+  rename: (id: string, name: string) => void
 }
 
 /**
  * What each tab is called: the directory its shell is in now — so a `cd`
  * renames it, as a terminal app's own tab does — or its project's name before
  * that is known. Numbered from the second tab of the same name on, so two tabs
- * are never one word.
+ * are never one word — except a name somebody typed, which is shown as typed.
  */
 export function shellLabels(
   shells: Shell[],
@@ -106,6 +112,10 @@ export function shellLabels(
   const seen = new Map<string, number>()
   const labels = new Map<string, string>()
   for (const shell of shells) {
+    if (shell.name) {
+      labels.set(shell.id, shell.name)
+      continue
+    }
     const name = shell.cwd ? dirName(shell.cwd) : projectOf(shell.folderId)
     const count = (seen.get(name) ?? 0) + 1
     seen.set(name, count)
@@ -162,6 +172,7 @@ export const useShells = create<ShellState>((set, get) => {
       attempt: 0,
       exited: false,
       cwd: null,
+      name: null,
     }
     set({ shells: [...get().shells, shell], activeId: shell.id })
   }
@@ -241,6 +252,15 @@ export const useShells = create<ShellState>((set, get) => {
       set({
         shells: get().shells.map((candidate) =>
           candidate.id === id ? { ...candidate, cwd } : candidate
+        ),
+      })
+    },
+
+    rename(id, name) {
+      const trimmed = name.trim() || null
+      set({
+        shells: get().shells.map((shell) =>
+          shell.id === id ? { ...shell, name: trimmed } : shell
         ),
       })
     },

@@ -385,6 +385,26 @@ Enter). Clicking a project row points the dock at that project; the pty starts
 only when the tab is shown. Shells are not restored across a launch. ptys live
 in a detached per-machine daemon (`main/daemon.ts`).
 
+A tab can be **renamed** — double-click it, or `Rename` in its right-click
+menu — and a typed name then wins over the cwd; emptying it hands the tab back.
+`⌘K` clears (macOS only: elsewhere `Ctrl+K` is readline's), and `⌃⇧\`` opens
+another shell beside `⌃\``'s toggle.
+
+**A path in the output is a link**: `⌘`-click (`Ctrl` elsewhere)
+`src/app.ts:42:7`, tsc's `src/app.ts(42,7)`, a stack frame or a Python
+traceback's `File "…", line 12`, and it opens in the editor at that line.
+A modifier rather than the plain click the web links take, because paths are
+most of what `git status` and `ls` print and a click to focus the shell must
+not open a tab. Candidates are found by `lib/shell/file-links.ts` (tested),
+read from the shell's cwd, and each is asked of main through
+`resolveRelativePath` — the workspace's file gate — before it is marked, so a
+path outside the folders, a directory, or a word that only looks like a path
+is never a link. A link is **coloured as soon as it is printed**, in the
+theme's blue, not only underlined on hover: rows are scanned as xterm redraws
+them (`components/studio/terminal-file-links.ts`), re-asked only when a row's
+text changed, with main's answers cached briefly. The alternate screen — vim,
+`less`, a TUI — is left alone, and a path broken by a wrapped row is not joined.
+
 ## The tab strip
 
 One strip for the whole workbench; `lib/panels.ts` holds each panel's tab rules

@@ -1,5 +1,20 @@
-import { ChevronDown, Plus, RotateCw, SquareTerminal, X } from "lucide-react"
+import { useRef, useState } from "react"
+import {
+  ChevronDown,
+  Pencil,
+  Plus,
+  RotateCw,
+  SquareTerminal,
+  X,
+} from "lucide-react"
 
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,6 +29,7 @@ import { shellLabels, useShells } from "@/lib/shell/store"
 import { useStudio } from "@/lib/store"
 import { IconButton } from "./icon-button"
 import { DockTerminal } from "./dock-terminal"
+import { useMenuFocusHandoff } from "./rename-row"
 
 /**
  * The strip under the pane: a tab per shell, and a `+` for another.
@@ -47,6 +63,7 @@ export function Dock() {
   const close = useShells((state) => state.close)
   const add = useShells((state) => state.add)
   const restart = useShells((state) => state.restart)
+  const rename = useShells((state) => state.rename)
   const installed = useShells((state) => state.installed)
   const loadInstalled = useShells((state) => state.loadInstalled)
 
@@ -105,6 +122,8 @@ export function Dock() {
               exited={shell.exited}
               onSelect={() => select(shell.id)}
               onClose={() => close(shell.id)}
+              onRestart={() => restart(shell.id)}
+              onRename={(name) => rename(shell.id, name)}
             />
           ))}
         </div>
@@ -182,6 +201,12 @@ export function Dock() {
   )
 }
 
+/**
+ * One tab of the strip. A shell's tab is renamed in place — double-click the
+ * name, or `Rename` in its right-click menu — and Enter, Escape and clicking
+ * away mean what they do in `RenameRow`. Emptying the field hands the tab back
+ * to its automatic name, the cwd.
+ */
 function TabFace({
   label,
   kind,
@@ -190,6 +215,8 @@ function TabFace({
   exited = false,
   onSelect,
   onClose,
+  onRestart,
+  onRename,
 }: {
   label: string
   /** The shell it runs, when that is not the default one. */
@@ -200,8 +227,13 @@ function TabFace({
   exited?: boolean
   onSelect: () => void
   onClose?: () => void
+  onRestart?: () => void
+  onRename?: (name: string) => void
 }) {
-  return (
+  const [renaming, setRenaming] = useState(false)
+  const menuFocus = useMenuFocusHandoff()
+
+  const face = (
     <div
       className={cn(
         "group flex h-7 shrink-0 items-center rounded-md text-xs font-medium transition-colors",
@@ -210,31 +242,44 @@ function TabFace({
           : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
       )}
     >
-      <button
-        type="button"
-        role="tab"
-        aria-selected={selected}
-        title={title}
-        onClick={onSelect}
-        // Middle-click closes, as it does a browser's tab.
-        onAuxClick={(event) => {
-          if (event.button === 1 && onClose) onClose()
-        }}
-        className={cn(
-          "flex h-full max-w-48 items-center gap-1.5 pl-2",
-          onClose ? "pr-1" : "pr-2"
-        )}
-      >
-        <SquareTerminal className="size-3.5 shrink-0" />
-        <span className={cn("truncate", exited && "line-through opacity-60")}>
-          {label}
-        </span>
-        {kind && (
-          <span className="shrink-0 text-[0.65rem] text-muted-foreground">
-            {kind}
+      {renaming && onRename ? (
+        <TabNameField
+          name={label}
+          onDone={(name) => {
+            setRenaming(false)
+            if (name !== null) onRename(name)
+          }}
+        />
+      ) : (
+        <button
+          type="button"
+          role="tab"
+          aria-selected={selected}
+          title={title}
+          onClick={onSelect}
+          onDoubleClick={() => {
+            if (onRename) setRenaming(true)
+          }}
+          // Middle-click closes, as it does a browser's tab.
+          onAuxClick={(event) => {
+            if (event.button === 1 && onClose) onClose()
+          }}
+          className={cn(
+            "flex h-full max-w-48 items-center gap-1.5 pl-2",
+            onClose ? "pr-1" : "pr-2"
+          )}
+        >
+          <SquareTerminal className="size-3.5 shrink-0" />
+          <span className={cn("truncate", exited && "line-through opacity-60")}>
+            {label}
           </span>
-        )}
-      </button>
+          {kind && (
+            <span className="shrink-0 text-[0.65rem] text-muted-foreground">
+              {kind}
+            </span>
+          )}
+        </button>
+      )}
       {onClose && (
         <button
           type="button"
@@ -250,5 +295,81 @@ function TabFace({
         </button>
       )}
     </div>
+  )
+
+  if (!onRename) return face
+
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger render={face} />
+      <ContextMenuContent className="w-40" finalFocus={menuFocus.finalFocus}>
+        <ContextMenuItem
+          onClick={() => {
+            menuFocus.handOff()
+            setRenaming(true)
+          }}
+        >
+          <Pencil />
+          Rename
+        </ContextMenuItem>
+        {onRestart && (
+          <ContextMenuItem onClick={onRestart}>
+            <RotateCw />
+            Restart
+          </ContextMenuItem>
+        )}
+        {onClose && (
+          <>
+            <ContextMenuSeparator />
+            <ContextMenuItem onClick={onClose}>
+              <X />
+              Close
+            </ContextMenuItem>
+          </>
+        )}
+      </ContextMenuContent>
+    </ContextMenu>
+  )
+}
+
+/**
+ * The tab's name as a field. `onDone` gets the name typed, or null for Escape
+ * and for a name left as it was — the second matters, since committing the
+ * automatic name would pin it and stop the tab following `cd`.
+ */
+function TabNameField({
+  name,
+  onDone,
+}: {
+  name: string
+  onDone: (name: string | null) => void
+}) {
+  // The blur that follows Enter or Escape must not decide a second time.
+  const settled = useRef(false)
+  const finish = (next: string | null) => {
+    if (settled.current) return
+    settled.current = true
+    onDone(next !== null && next.trim() === name ? null : next)
+  }
+
+  return (
+    <input
+      autoFocus
+      defaultValue={name}
+      spellCheck={false}
+      aria-label="Terminal name"
+      onFocus={(event) => event.currentTarget.select()}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          event.preventDefault()
+          finish(event.currentTarget.value)
+        } else if (event.key === "Escape") {
+          event.preventDefault()
+          finish(null)
+        }
+      }}
+      onBlur={(event) => finish(event.currentTarget.value)}
+      className="mx-1 h-5 w-32 min-w-0 rounded-sm border border-ring bg-background px-1 text-xs text-foreground outline-none"
+    />
   )
 }

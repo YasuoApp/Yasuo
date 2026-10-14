@@ -16,8 +16,10 @@ import {
   isEditingRichText,
   isSearchShortcut,
   isStudioShortcut,
+  isNewTerminalShortcut,
   isTerminalShortcut,
 } from "@/lib/shortcuts"
+import { useShells } from "@/lib/shell/store"
 import { applyAppearance } from "@/lib/appearance"
 import { usePlugins } from "@/lib/plugins/store"
 import { useSettings } from "@/lib/settings"
@@ -383,10 +385,16 @@ function Workbench() {
    *
    * On the capture phase for the reason the others are, and one more: this is
    * the only one of them meant to work *inside* the terminal, and xterm would
-   * otherwise hand the key to the pty before the page had it.
+   * otherwise hand the key to the pty before the page had it. `⌃⇧\`` beside
+   * it opens another shell, which also shows the dock.
    */
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
+      if (isNewTerminalShortcut(event)) {
+        event.preventDefault()
+        useShells.getState().add()
+        return
+      }
       if (!isTerminalShortcut(event)) return
 
       event.preventDefault()
