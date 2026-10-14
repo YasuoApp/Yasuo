@@ -328,6 +328,9 @@ type FilesState = {
   create: (dir: string, name: string) => Promise<string>
   createFolder: (dir: string, name: string) => Promise<string>
   rename: (target: string, name: string) => Promise<string>
+  /** Copies paths dropped from outside the app into `dir`, and opens `dir` so
+   * the copies are on screen. */
+  copyIn: (dir: string, sources: string[]) => Promise<string[]>
   /** To the system trash, and closes whatever tabs it took with it. */
   trash: (target: string) => Promise<void>
 
@@ -828,6 +831,13 @@ export const useFiles = create<FilesState>((set, get) => {
       // something in it.
       if (!get().expanded.includes(created)) get().toggle(created)
       return created
+    },
+
+    async copyIn(dir, sources) {
+      const copied = await window.desktop.copyIntoDirectory(dir, sources)
+      await get().read(dir)
+      if (!get().expanded.includes(dir)) get().toggle(dir)
+      return copied
     },
 
     async rename(target, name) {

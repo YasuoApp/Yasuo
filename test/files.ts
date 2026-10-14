@@ -1,11 +1,19 @@
 import { execFile } from "node:child_process"
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises"
+import {
+  mkdir,
+  mkdtemp,
+  readlink,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { promisify } from "node:util"
 
 import {
   compareEntries,
+  copyInto,
   createFile,
   indexFiles,
   insideAny,
@@ -20,8 +28,6 @@ import { iconNameFor } from "../src/renderer/lib/files/icon-names"
 import {
   defaultViewer,
   isImage,
-  noteFileName,
-  viewerLabel,
   viewersFor,
 } from "../src/renderer/lib/files/viewers"
 import {
@@ -233,34 +239,15 @@ async function main() {
 
   check(
     "a diff is never what a file opens as",
-    ["/w/a.ts", "/w/README.md", "/w/spec.note", "/w/icon.svg"].every(
+    ["/w/a.ts", "/w/README.md", "/w/icon.svg"].every(
       (file) => defaultViewer(file) !== "diff"
     ),
     "a diff is asked for — see the Viewer comment"
   )
 
   check(
-    "a note opens in the block editor",
-    defaultViewer("/w/spec.note") === "blocks",
-    "the editor is the point of the file; the JSON under it is not"
-  )
-  check(
-    "and keeps the text editor behind it",
-    viewersFor("/w/spec.note").join() === "blocks,text,diff"
-  )
-  check(
-    "the block editor is named for the file it is opening",
-    viewerLabel("blocks", "/w/spec.note") === "Note editor" &&
-      viewerLabel("blocks", "/w/README.md") === "Markdown editor",
-    "one viewer, two honest names — see viewerLabel"
-  )
-  check(
-    "a name typed into New note gets the extension",
-    noteFileName("Release plan") === "Release plan.note"
-  )
-  check(
-    "and is not given it twice",
-    noteFileName("Release plan.note") === "Release plan.note"
+    "a .note is no longer a kind of file of its own",
+    viewersFor("/w/spec.note").join() === "text,diff"
   )
 
   section("file-type icons")
@@ -561,6 +548,56 @@ async function main() {
     check("a rename refuses to land on something that exists", !replaced)
   } finally {
     await rm(root, { recursive: true, force: true })
+  }
+
+  section("copyInto")
+
+  const outside = await mkdtemp(path.join(tmpdir(), "vsclaude-drop-"))
+  const into = await mkdtemp(path.join(tmpdir(), "vsclaude-into-"))
+  try {
+    await writeFile(path.join(outside, "a.txt"), "dropped")
+    await mkdir(path.join(outside, "pkg.d", "src"), { recursive: true })
+    await writeFile(path.join(outside, "pkg.d", "src", "x.ts"), "x")
+    await symlink("src/x.ts", path.join(outside, "pkg.d", "link"))
+    await writeFile(path.join(into, "a.txt"), "mine")
+
+    const copied = await copyInto(into, [
+      path.join(outside, "a.txt"),
+      path.join(outside, "pkg.d"),
+    ])
+    check(
+      "a taken name is numbered before the extension, not replaced",
+      copied[0] === path.join(into, "a 2.txt") &&
+        JSON.stringify(await readTextFile(path.join(into, "a.txt"))) ===
+          JSON.stringify({ kind: "text", text: "mine" })
+    )
+    check(
+      "a folder is copied with what is inside it",
+      JSON.stringify(
+        await readTextFile(path.join(into, "pkg.d", "src", "x.ts"))
+      ) === JSON.stringify({ kind: "text", text: "x" })
+    )
+    check(
+      "a relative link inside a copied folder stays relative",
+      (await readlink(path.join(into, "pkg.d", "link"))) === "src/x.ts"
+    )
+
+    const again = await copyInto(into, [path.join(outside, "pkg.d")])
+    check(
+      "a folder's dot is part of its name when numbering",
+      again[0] === path.join(into, "pkg.d 2")
+    )
+
+    let refused = false
+    await copyInto(path.join(outside, "pkg.d", "src"), [
+      path.join(outside, "pkg.d"),
+    ]).catch(() => {
+      refused = true
+    })
+    check("a folder is not copied into itself", refused)
+  } finally {
+    await rm(outside, { recursive: true, force: true })
+    await rm(into, { recursive: true, force: true })
   }
 
   finish()

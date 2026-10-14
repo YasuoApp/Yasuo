@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react"
+import { createContext, useContext, useEffect, useState } from "react"
+import type { DragEvent } from "react"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -38,7 +39,6 @@ import {
   ExternalLink,
   File,
   FileCode,
-  FileText,
   Image,
   FilePlus,
   Folder,
@@ -63,15 +63,13 @@ import {
 import { iconFor } from "@/lib/files/icons"
 import {
   isImage,
-  isNote,
-  noteFileName,
-  viewerLabel,
+  VIEWER_LABELS,
   viewersFor,
   type Viewer,
 } from "@/lib/files/viewers"
 import { useProjects } from "@/lib/projects"
 import { shownRootOf } from "@/lib/files/roots"
-import { relativeTo } from "@/lib/files/paths"
+import { isInside, parentOf, relativeTo } from "@/lib/files/paths"
 import { useStudio } from "@/lib/store"
 import { RenameDialog } from "../rename-dialog"
 import { IconButton } from "../icon-button"
@@ -87,24 +85,30 @@ import { CommitsList } from "./commits-list"
  * `RootMenu`. */
 type MenuTarget = { kind: "entry"; entry: FileEntry }
 
-/** A pending "name this" dialog: a new file, note or folder inside `dir`. */
-type Creating = { dir: string; kind: "file" | "directory" | "note" }
+/** A pending "name this" dialog: a new file or folder inside `dir`. */
+type Creating = { dir: string; kind: "file" | "directory" }
 
-/**
- * What the dialog says for each of the three.
- *
- * A table rather than three conditionals threaded through the same JSX: a note
- * made "file or folder" into a third case, and the wording is the only thing
- * that differs between them.
- */
+/** What the dialog says for each kind — the wording is the only thing that
+ * differs between them. */
 const CREATING_WORDS: Record<
   Creating["kind"],
   { title: string; label: string }
 > = {
   file: { title: "New file", label: "File name" },
   directory: { title: "New folder", label: "Folder name" },
-  note: { title: "New note", label: "Note name" },
 }
+
+/**
+ * The directory a drag from outside the app would land in, or null.
+ *
+ * A context rather than a prop because the row that lights up is at the bottom
+ * of the recursion and the drag is caught once, at the top — and only the two
+ * rows whose answer changes re-render as the pointer moves.
+ */
+const DropTarget = createContext<string | null>(null)
+
+const carriesFiles = (event: DragEvent) =>
+  [...event.dataTransfer.types].includes("Files")
 
 function failureOf(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback
@@ -168,6 +172,8 @@ export function FileTree({ onAddFolder }: { onAddFolder: () => void }) {
   const [creating, setCreating] = useState<Creating | null>(null)
   const [trashing, setTrashing] = useState<FileEntry | null>(null)
   const menuFocus = useMenuFocusHandoff()
+  const [dropDir, setDropDir] = useState<string | null>(null)
+  const [dropError, setDropError] = useState<string | null>(null)
   const [renamingFolder, setRenamingFolder] = useState<WorkspaceFolder | null>(
     null
   )
@@ -205,6 +211,44 @@ export function FileTree({ onAddFolder }: { onAddFolder: () => void }) {
   )
   const changed = changes === undefined ? undefined : changeCount(changes)
   useWatchChanges(shown)
+
+  /** The nearest row's directory under the pointer — a folder's own, a file's
+   * parent — and the root for the empty space under the last row. */
+  function dropDirOf(event: DragEvent): string | null {
+    const row = (event.target as HTMLElement).closest<HTMLElement>(
+      "[data-drop-dir]"
+    )
+    return row?.dataset.dropDir ?? rootPath
+  }
+
+  /*
+   * A drop from Finder is a **copy** into the directory under the pointer.
+   *
+   * A path already inside one of the workspace's folders is left out: that is
+   * a row of this tree dragged back onto it (`startDragPath` makes it an OS
+   * drag), and copying it would leave a `name 2` beside every row somebody
+   * nudged. Moving within the tree is a different gesture this does not claim.
+   */
+  function onDrop(event: DragEvent) {
+    if (!carriesFiles(event)) return
+    event.preventDefault()
+    const dir = dropDirOf(event)
+    setDropDir(null)
+    if (dir === null) return
+    const sources = [...event.dataTransfer.files]
+      .map((file) => window.desktop.getPathForFile(file))
+      .filter(
+        (source) =>
+          source && !folders.some((entry) => isInside(entry.path, source))
+      )
+    if (sources.length === 0) return
+    void useFiles
+      .getState()
+      .copyIn(dir, sources)
+      .catch((error: unknown) => {
+        setDropError(failureOf(error, "Could not copy that in."))
+      })
+  }
 
   return (
     <ContextMenu>
@@ -315,51 +359,77 @@ export function FileTree({ onAddFolder }: { onAddFolder: () => void }) {
           <ContextMenuTrigger
             render={
               <div
-                className="min-h-0 flex-1 overflow-auto pb-3"
+                className={cn(
+                  "min-h-0 flex-1 overflow-auto pb-3",
+                  dropDir !== null &&
+                    dropDir === rootPath &&
+                    "bg-primary/5 ring-1 ring-primary/40 ring-inset"
+                )}
                 onContextMenu={(event) => {
                   // Only the empty space below the last row: a row of its own
                   // has already set the target by the time this is reached.
                   if (event.target === event.currentTarget) setMenuTarget(null)
                 }}
+                onDragOver={(event) => {
+                  if (!carriesFiles(event) || rootPath === null) return
+                  // Without this the drop is refused, and Chromium navigates
+                  // the window to the dropped file instead.
+                  event.preventDefault()
+                  event.dataTransfer.dropEffect = "copy"
+                  setDropDir(dropDirOf(event))
+                }}
+                onDragLeave={(event) => {
+                  // Only on leaving the list, not on crossing from row to row.
+                  if (
+                    !event.currentTarget.contains(event.relatedTarget as Node)
+                  ) {
+                    setDropDir(null)
+                  }
+                }}
+                onDrop={onDrop}
               />
             }
           >
-            {/* No heading over the list, and no row for the root itself. The
+            <DropTarget.Provider value={dropDir}>
+              {/* No heading over the list, and no row for the root itself. The
                 tree is one project's files, so a row saying which one would be
                 a row every file is indented under for no answer it gives —
                 which project and which branch is the bar above, where it can be
                 read with the list scrolled. */}
-            {shown && folder ? (
-              <Directory
-                dir={shown.path}
-                depth={0}
-                onMenu={(entry) => setMenuTarget({ kind: "entry", entry })}
-              />
-            ) : (
-              /* A workspace pointed at nothing used to draw an empty list and
+              {shown && folder ? (
+                <Directory
+                  dir={shown.path}
+                  depth={0}
+                  onMenu={(entry) => setMenuTarget({ kind: "entry", entry })}
+                />
+              ) : (
+                /* A workspace pointed at nothing used to draw an empty list and
                  say nothing, because `Add folder` was a button in the header
                  directly above it. It is not any more, and a blank column whose
                  only way forward is a right-click is a dead end — so the way in
                  is drawn where the files would have been. Only for a workspace
                  with no folders at all: a folder that is merely empty has a
                  root bar above it saying which one it is. */
-              folders.length === 0 && (
-                <Empty className="border-0 py-8">
-                  <EmptyHeader>
-                    <EmptyTitle className="text-sm">No folders yet</EmptyTitle>
-                    <EmptyDescription>
-                      Point the workspace at a directory on this machine.
-                    </EmptyDescription>
-                  </EmptyHeader>
-                  <EmptyContent>
-                    <Button size="sm" variant="outline" onClick={onAddFolder}>
-                      <FolderPlus />
-                      Add folder…
-                    </Button>
-                  </EmptyContent>
-                </Empty>
-              )
-            )}
+                folders.length === 0 && (
+                  <Empty className="border-0 py-8">
+                    <EmptyHeader>
+                      <EmptyTitle className="text-sm">
+                        No folders yet
+                      </EmptyTitle>
+                      <EmptyDescription>
+                        Point the workspace at a directory on this machine.
+                      </EmptyDescription>
+                    </EmptyHeader>
+                    <EmptyContent>
+                      <Button size="sm" variant="outline" onClick={onAddFolder}>
+                        <FolderPlus />
+                        Add folder…
+                      </Button>
+                    </EmptyContent>
+                  </Empty>
+                )
+              )}
+            </DropTarget.Provider>
           </ContextMenuTrigger>
         )}
 
@@ -381,13 +451,7 @@ export function FileTree({ onAddFolder }: { onAddFolder: () => void }) {
                 if (creating.kind === "directory") {
                   await createFolder(creating.dir, name)
                 } else {
-                  // A note is an ordinary empty file with the extension that
-                  // opens it in the note editor — the pane draws an empty
-                  // document for one, so there is nothing to write into it.
-                  await create(
-                    creating.dir,
-                    creating.kind === "note" ? noteFileName(name) : name
-                  )
+                  await create(creating.dir, name)
                 }
                 return null
               } catch (error) {
@@ -460,8 +524,8 @@ export function FileTree({ onAddFolder }: { onAddFolder: () => void }) {
           // Rename hands focus to the field it opens — see `useMenuFocusHandoff`.
           finalFocus={menuFocus.finalFocus}
         >
-          {/* Only where there is a choice to make — an SVG, a `.md` and a
-              `.note` are the files the studio can honestly draw more than one
+          {/* Only where there is a choice to make — an SVG, a `.md` and an
+              `.html` are the files the studio can honestly draw more than one
               way; offering the menu on a `.ts` would be offering the same thing
               twice. */}
           {menuTarget.entry.kind === "file" &&
@@ -484,14 +548,6 @@ export function FileTree({ onAddFolder }: { onAddFolder: () => void }) {
               >
                 <FilePlus />
                 New file…
-              </ContextMenuItem>
-              <ContextMenuItem
-                onClick={() =>
-                  setCreating({ dir: menuTarget.entry.path, kind: "note" })
-                }
-              >
-                <NotebookPen />
-                New note…
               </ContextMenuItem>
               <ContextMenuItem
                 onClick={() =>
@@ -591,6 +647,23 @@ export function FileTree({ onAddFolder }: { onAddFolder: () => void }) {
             >
               Move to trash
             </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={dropError !== null}
+        onOpenChange={(next) => {
+          if (!next) setDropError(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Could not copy that in</AlertDialogTitle>
+            <AlertDialogDescription>{dropError}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Close</AlertDialogCancel>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -700,7 +773,7 @@ function OpenWith({ path }: { path: string }) {
       {viewersFor(path).map((viewer) => (
         <ContextMenuRadioItem key={viewer} value={viewer}>
           <ViewerIcon viewer={viewer} />
-          {viewerLabel(viewer, path)}
+          {VIEWER_LABELS[viewer]}
         </ContextMenuRadioItem>
       ))}
     </ContextMenuRadioGroup>
@@ -765,13 +838,6 @@ function RootMenu({
       <ContextMenuItem onClick={() => onCreate("file")}>
         <FilePlus />
         New file…
-      </ContextMenuItem>
-      {/* Beside New file rather than in a group of its own: a note is a file in
-          this folder like any other, and what it opens in is what the extension
-          says. */}
-      <ContextMenuItem onClick={() => onCreate("note")}>
-        <NotebookPen />
-        New note…
       </ContextMenuItem>
       <ContextMenuItem onClick={() => onCreate("directory")}>
         <FolderPlus />
@@ -893,18 +959,15 @@ function Row({
   const git = useGitStatus((state) => gitStateOf(state, entry.path))
 
   const directory = entry.kind === "directory"
+  const dropDir = directory ? entry.path : parentOf(entry.path)
+  const dropping = useContext(DropTarget) === entry.path && directory
   const Icon = directory
     ? open
       ? FolderOpen
       : Folder
     : isImage(entry.path)
       ? Image
-      : // The same glyph the Notes sidebar draws a note with, so a note reads
-        // as one wherever it is listed. `NotebookPen` is the panel's mark, not
-        // a note's.
-        isNote(entry.path)
-        ? FileText
-        : File
+      : File
   // A vendored file-type icon where there is one, and the Lucide glyph above
   // otherwise — so a coloured icon reads as "a kind of file the studio knows"
   // rather than as decoration. Folders keep the glyph either way: they are the
@@ -975,7 +1038,12 @@ function Row({
   }
 
   return (
-    <li>
+    <li
+      data-drop-dir={dropDir}
+      className={cn(
+        dropping && "bg-primary/5 ring-1 ring-primary/40 ring-inset"
+      )}
+    >
       <SideRow
         active={active}
         indent={depth}

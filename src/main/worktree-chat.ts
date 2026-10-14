@@ -666,11 +666,13 @@ export class WorktreeChats {
   async search(
     matcher: RegExp,
     limit: number,
-    stale: () => boolean
+    stale: () => boolean,
+    /** The one project to search, or null for every chat. */
+    folderId: string | null = null
   ): Promise<{ chats: ChatSearchResult[]; matches: number }> {
-    const chats = [...(await this.source.chats())].sort((a, b) =>
-      b.updatedAt.localeCompare(a.updatedAt)
-    )
+    const chats = [...(await this.source.chats())]
+      .filter((chat) => folderId === null || chatRootId(chat) === folderId)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
 
     const found: ChatSearchResult[] = []
     let matches = 0

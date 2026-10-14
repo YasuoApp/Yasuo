@@ -1,43 +1,11 @@
-import type { NoteBlock } from "@shared/api"
-
 /**
- * The two files the Explorer opens in the block editor, as text on disk.
- *
- * A `.note` holds the editor's own block document; a `.md` holds markdown and
- * is a file the editor is only one way of writing. Everything here is the part
- * of that which is pure text handling — the parsing and printing of blocks
+ * A `.md` the Explorer opens in the block editor, as text on disk — a file the
+ * editor is only one way of writing. Everything here is the part of that which
+ * is pure text handling — the parsing and printing of blocks
  * themselves is BlockNote's, and lives in `lib/note/from-markdown.ts` where it
  * can reach an editor. Keeping the two apart is what lets this file be tested
  * under plain `bun`, with no DOM for ProseMirror to want.
  */
-
-/** Written back indented, and with the trailing newline every other file in a
- * repository has. A note kept in a working tree gets reviewed, and a note whose
- * diff is one 40 KB line is a note nobody can review. */
-export function serializeBlockFile(blocks: NoteBlock[]): string {
-  return `${JSON.stringify(blocks, null, 2)}\n`
-}
-
-/**
- * The blocks a `.note` holds, or null for a body that is not them.
- *
- * Null is not an error: it is what sends the caller to the markdown parser
- * instead. A `.note` can reach the pane having been written by hand or by
- * something else, and an unreadable one drawn as an empty document is an empty
- * document about to be saved over the top of it.
- */
-export function blocksJsonOf(text: string): NoteBlock[] | null {
-  // Checked before parsing so that markdown starting with a bracketed link is
-  // not reported as broken JSON on the console every time it is opened.
-  if (!text.trimStart().startsWith("[")) return null
-
-  try {
-    const parsed: unknown = JSON.parse(text)
-    return Array.isArray(parsed) ? (parsed as NoteBlock[]) : null
-  } catch {
-    return null
-  }
-}
 
 /**
  * A markdown file's frontmatter, split off from the prose.

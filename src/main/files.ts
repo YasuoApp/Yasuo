@@ -1,4 +1,5 @@
 import {
+  cp,
   mkdir,
   readdir,
   readFile,
@@ -246,6 +247,65 @@ export async function renamePath(
 
   await rename(target, next)
   return next
+}
+
+/**
+ * Copies files and folders into `dir`, and hands back where each one landed.
+ *
+ * What a drop from Finder onto the tree does. The sources are the one set of
+ * paths a `files:*` call takes from **outside** the workspace — that is the
+ * point of the gesture — so only `dir` is gated, by the caller; the sources are
+ * what `webUtils.getPathForFile` said the OS dragged in.
+ *
+ * Never over something: a name that is taken gets ` 2`, ` 3` before the
+ * extension, the way Finder numbers a duplicate, because a drop has no dialog
+ * to ask in and a silent overwrite has no undo. `errorOnExist` is what still
+ * holds if the name is taken between the check and the copy.
+ */
+export async function copyInto(
+  dir: string,
+  sources: string[]
+): Promise<string[]> {
+  const copied: string[] = []
+  for (const source of sources) {
+    const from = path.resolve(source)
+    // `cp` would recurse into its own output until the disk filled.
+    if (insideAny([from], dir)) {
+      throw new Error(`Cannot copy "${path.basename(from)}" into itself.`)
+    }
+    const directory = (await stat(from)).isDirectory()
+    const target = await freeName(dir, path.basename(from), directory)
+    await cp(from, target, {
+      recursive: true,
+      force: false,
+      errorOnExist: true,
+      preserveTimestamps: true,
+      // A relative link inside a copied folder stays relative, rather than
+      // being rewritten to point back at the original.
+      verbatimSymlinks: true,
+    })
+    copied.push(target)
+  }
+  return copied
+}
+
+/** `name`, or the first of `name 2`, `name 3`… not already in `dir`. A folder's
+ * dot is part of its name; a file's is its extension. */
+async function freeName(
+  dir: string,
+  name: string,
+  directory: boolean
+): Promise<string> {
+  const ext = directory ? "" : path.extname(name)
+  const stem = name.slice(0, name.length - ext.length)
+  for (let n = 1; ; n++) {
+    const candidate = path.join(dir, n === 1 ? name : `${stem} ${n}${ext}`)
+    const taken = await stat(candidate).then(
+      () => true,
+      () => false
+    )
+    if (!taken) return candidate
+  }
 }
 
 /**

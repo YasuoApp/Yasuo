@@ -12,12 +12,15 @@ import {
   type ClaudeProfile,
   type FileDiff,
   type FileIndexEntry,
+  type ReplaceResult,
+  type SearchFilter,
   type SearchOptions,
   type WorkspaceSearch,
   type WorktreeChatAnswer,
   type WorktreeChatOptions,
 } from "../shared/api"
 import type { PluginFile, PluginSource } from "../shared/plugins"
+import { pathFilterOf } from "../shared/search"
 import { agentCommands } from "./agent-commands"
 import { agentModels } from "./agent-models"
 import { claudeAccount } from "./claude-auth"
@@ -28,7 +31,12 @@ import { WorktreeChats } from "./worktree-chat"
 import { findFavicon, MAX_FAVICON_BYTES } from "./favicon"
 import * as files from "./files"
 import { MAX_INDEXED_FILES } from "./files"
-import { matcherOf, MAX_SEARCH_MATCHES, searchFiles } from "./content-search"
+import {
+  matcherOf,
+  MAX_SEARCH_MATCHES,
+  replaceInFile,
+  searchFiles,
+} from "./content-search"
 import {
   changes,
   log,
@@ -491,7 +499,8 @@ export function createIpc(host: Host): {
     async (
       _event,
       query: string,
-      options: SearchOptions
+      options: SearchOptions,
+      filter: SearchFilter
     ): Promise<WorkspaceSearch> => {
       const generation = (searching += 1)
       const stale = () => generation !== searching
@@ -506,21 +515,78 @@ export function createIpc(host: Host): {
       if (!built) return none
       if ("error" in built) return { ...none, error: built.error }
 
-      const chats = await worktreeChats.search(
-        built.matcher,
-        MAX_SEARCH_MATCHES,
-        stale
+      const chats =
+        filter.kinds === "files"
+          ? { chats: [], matches: 0 }
+          : await worktreeChats.search(
+              built.matcher,
+              MAX_SEARCH_MATCHES,
+              stale,
+              filter.folderId
+            )
+      const roots = (await fileRoots()).filter(
+        (root) => filter.folderId === null || root.folderId === filter.folderId
       )
-      const found = await searchFiles(await fileRoots(), built.matcher, {
-        limit: MAX_SEARCH_MATCHES - chats.matches,
-        stale,
-      })
+      const found =
+        filter.kinds === "chats"
+          ? { files: [], matches: 0, truncated: false }
+          : await searchFiles(roots, built.matcher, {
+              limit: MAX_SEARCH_MATCHES - chats.matches,
+              stale,
+              accept: pathFilterOf(filter.include, filter.exclude),
+            })
       return {
         files: found.files,
         chats: chats.chats,
         truncated: found.truncated || chats.matches >= MAX_SEARCH_MATCHES,
         error: null,
       }
+    }
+  )
+
+  /*
+   * Replace across the files a search showed. One at a time rather than all at
+   * once: a few hundred files is still quick, and a failure halfway leaves a
+   * clean line between what was written and what was not.
+   */
+  handle(
+    IPC.replaceInFiles,
+    async (
+      _event,
+      query: string,
+      options: SearchOptions,
+      replacement: string,
+      paths: string[]
+    ): Promise<ReplaceResult> => {
+      const result: ReplaceResult = {
+        replaced: 0,
+        files: [],
+        failed: [],
+        error: null,
+      }
+      const built = matcherOf(query, options)
+      if (!built) return result
+      if ("error" in built) return { ...result, error: built.error }
+
+      for (const filePath of new Set(paths)) {
+        try {
+          const count = await replaceInFile(
+            await inWorkspace(filePath),
+            built.matcher,
+            replacement,
+            options.regex
+          )
+          if (count === 0) continue
+          result.replaced += count
+          result.files.push(filePath)
+        } catch (error) {
+          result.failed.push({
+            path: filePath,
+            error: error instanceof Error ? error.message : String(error),
+          })
+        }
+      }
+      return result
     }
   )
 
@@ -988,6 +1054,12 @@ export function createIpc(host: Host): {
 
   handle(IPC.renamePath, async (_event, target: string, name: string) =>
     files.renamePath(await inWorkspace(target), name)
+  )
+
+  handle(
+    IPC.copyIntoDirectory,
+    async (_event, dir: string, sources: string[]) =>
+      files.copyInto(await inWorkspace(dir), sources)
   )
 
   handle(IPC.trashPath, async (_event, target: string) => {
