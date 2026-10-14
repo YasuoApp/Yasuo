@@ -1,4 +1,9 @@
-import type { WorkspaceFolder, WorkspaceRecord } from "@shared/api"
+import type {
+  WorkspaceFolder,
+  WorkspaceRecord,
+  WorktreeOptions,
+  WorktreeStatus,
+} from "@shared/api"
 
 export type { WorkspaceFolder, WorkspaceRecord }
 
@@ -31,15 +36,32 @@ export async function addWorktree(input: {
   folderId: string
   branch: string
   name: string
+  base?: string
 }): Promise<WorkspaceRecord> {
   return window.desktop.addWorktree(input)
 }
 
-/** The checkout removed and the project dropped. The branch is left alone. */
+/** The checkout removed and the project dropped; the branch only when
+ * `deleteBranch` says so. */
 export async function removeWorktree(
-  folderId: string
+  folderId: string,
+  options: { deleteBranch: boolean }
 ): Promise<WorkspaceRecord> {
-  return window.desktop.removeWorktree(folderId)
+  return window.desktop.removeWorktree(folderId, options)
+}
+
+/** Branches and a setup command for the New worktree dialog. */
+export async function worktreeOptions(
+  folderId: string
+): Promise<WorktreeOptions> {
+  return window.desktop.worktreeOptions(folderId)
+}
+
+/** How far a checkout has moved, or null for a folder that is not one. */
+export async function worktreeStatus(
+  folderId: string
+): Promise<WorktreeStatus | null> {
+  return window.desktop.worktreeStatus(folderId)
 }
 
 /** Names a checkout nobody has named yet after the chat running in it, or

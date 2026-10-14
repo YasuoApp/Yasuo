@@ -79,7 +79,7 @@ function ShellView({ shell }: { shell: Shell }) {
   // so writes go through a ref rather than state.
   const terminalId = useRef<string | null>(null)
 
-  const { id, folderId, shellId } = shell
+  const { id, folderId, shellId, command } = shell
   // Until the first cwd lookup lands, the shell is where it started.
   const folderPath = useStudio(
     (state) => state.folders.find((folder) => folder.id === folderId)?.path
@@ -129,6 +129,11 @@ function ShellView({ shell }: { shell: Shell }) {
 
           terminalId.current = created
 
+          // Typed ahead of the first prompt: the pty holds it until the shell
+          // has read its rc files, as it would a fast typist's line.
+          if (command)
+            void window.desktop.terminalWrite(created, `${command}\r`)
+
           unsubscribeData = window.desktop.onTerminalData((event) => {
             if (event.terminalId !== created) return
             terminal.write(event.chunk)
@@ -167,7 +172,7 @@ function ShellView({ shell }: { shell: Shell }) {
         if (current) void window.desktop.terminalKill(current)
       }
     },
-    [id, folderId, shellId, setExited, setCwd]
+    [id, folderId, shellId, command, setExited, setCwd]
   )
 
   const onResize = useCallback((size: { cols: number; rows: number }) => {

@@ -482,6 +482,11 @@ than written down, which is what makes `Remove worktree` correct for a checkout
 somebody made in their own shell — and what makes the `realpath` on both sides of
 that comparison load-bearing. `docs/design.md` § Worktrees, as projects has the
 argument, and § Worktrees, removed is the one it is held against.
+The dialog takes a **base** to cut from (`branch.<name>.vsclaudeBase` in the
+repository's config remembers it), copies `.worktreeinclude`'s ignored files in,
+and runs an optional setup command in a **dock shell** (`useShells.run`); a
+checkout's row draws ahead/behind and uncommitted counts (`worktreeStatus`), and
+Remove warns about commits on that branch alone before offering to delete it.
 The **column** files a checkout one indent under the project it was cut from
 (`projectTree` in `lib/project-tree.ts`, tested) — the only nesting there is, and
 the column's alone: it pairs on that same `worktreeRepo` answer rather than on

@@ -1,21 +1,35 @@
 import { execFile } from "node:child_process"
-import { mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises"
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { promisify } from "node:util"
 
 import {
   addWorktree,
+  baseKey,
   branchFromTitle,
+  copyIncluded,
   isUntitledBranch,
   mainWorktreeIn,
   removeWorktree,
   renameBranch,
+  setupCommandFor,
   untitledBranch,
   worktreeDir,
+  worktreeOptions,
   worktreeRepo,
   worktreeSlug,
+  worktreeStatus,
 } from "../src/main/worktrees"
+import { removalWarnings, worktreeSummary } from "../src/renderer/lib/worktrees"
 import { check, finish, section } from "./harness"
 
 /**
@@ -250,6 +264,243 @@ async function main() {
     "every failure here is a sentence for the dialog that asked"
   )
   check("and is no checkout either", (await worktreeRepo(plain)) === null)
+
+  section("cut from a base")
+
+  await git(repo, "checkout", "-q", "-b", "develop")
+  await writeFile(path.join(repo, "develop.ts"), "const d = 1\n")
+  await git(repo, "add", ".")
+  await git(repo, "commit", "-q", "-m", "develop only")
+  await git(repo, "checkout", "-q", "main")
+
+  const based = worktreeDir(workspace, "f1", "off-develop")
+  const fromDevelop = await addWorktree({
+    repo,
+    dir: based,
+    branch: "off-develop",
+    base: "develop",
+  })
+  check("a base is accepted", !("error" in fromDevelop), fromDevelop)
+  check(
+    "and the checkout starts at it rather than at HEAD",
+    await exists(path.join(based, "develop.ts"))
+  )
+  check(
+    "the base is written beside the branch",
+    (await git(repo, "config", "--get", baseKey("off-develop"))).trim() ===
+      "develop",
+    "what ahead and behind count against a week later"
+  )
+  check(
+    "and is not made its upstream",
+    (await run("git", ["rev-parse", "--abbrev-ref", "off-develop@{u}"], {
+      cwd: repo,
+    }).catch(() => null)) === null,
+    "a `git push` would refuse a branch tracking one of another name"
+  )
+  check(
+    "an empty base records the main checkout's branch",
+    (await git(repo, "config", "--get", baseKey("feature/sso"))).trim() ===
+      "main"
+  )
+
+  const nowhere = await addWorktree({
+    repo,
+    dir: worktreeDir(workspace, "f1", "from-nowhere"),
+    branch: "from-nowhere",
+    base: "no-such-branch",
+  })
+  check("a base git does not know is git's refusal", "error" in nowhere)
+
+  section("a branch that exists only on the remote")
+
+  const clone = path.join(root, "clone")
+  await run("git", ["clone", "-q", repo, clone])
+  const tracked = worktreeDir(workspace, "f3", "develop")
+  const fromRemote = await addWorktree({
+    repo: clone,
+    dir: tracked,
+    branch: "develop",
+  })
+  check("is checked out", !("error" in fromRemote), fromRemote)
+  check(
+    "tracking the remote's, not cut fresh off HEAD",
+    (await git(clone, "rev-parse", "--abbrev-ref", "develop@{u}")).trim() ===
+      "origin/develop" && (await exists(path.join(tracked, "develop.ts")))
+  )
+
+  section("what the dialog is offered")
+
+  const offered = await worktreeOptions(repo)
+  check(
+    "local branches, and no remote ones in that list",
+    offered.branches.includes("develop") &&
+      offered.branches.includes("main") &&
+      offered.remotes.length === 0,
+    // Not the order: every commit here lands in one second, and git's sort
+    // on a tie is not this test's to pin.
+    offered.branches
+  )
+  check(
+    "the main checkout's branch",
+    offered.current === "main",
+    offered.current
+  )
+  check(
+    "a clone's remotes, without origin/HEAD",
+    (await worktreeOptions(clone)).remotes.includes("origin/develop") &&
+      !(await worktreeOptions(clone)).remotes.some((r) => r.endsWith("/HEAD"))
+  )
+  check("no lock file, no setup", offered.setup === null)
+  check(
+    "a lock file names its installer",
+    setupCommandFor(["src", "bun.lock", "package.json"]) === "bun install" &&
+      setupCommandFor(["pnpm-lock.yaml"]) === "pnpm install" &&
+      setupCommandFor(["README.md"]) === null
+  )
+  check(
+    "two lock files take the first listed",
+    setupCommandFor(["package-lock.json", "bun.lock"]) === "bun install"
+  )
+
+  section("ignored files a checkout is given")
+
+  await writeFile(
+    path.join(repo, ".gitignore"),
+    "local.json\nsecret/\nbuild/\n"
+  )
+  await writeFile(
+    path.join(repo, ".worktreeinclude"),
+    "local.json\nsecret/\nnotes.md\n"
+  )
+  await writeFile(path.join(repo, "local.json"), "KEY=1\n")
+  await mkdir(path.join(repo, "secret"), { recursive: true })
+  await writeFile(path.join(repo, "secret", "a.json"), "{}\n")
+  await mkdir(path.join(repo, "build"), { recursive: true })
+  await writeFile(path.join(repo, "build", "out.js"), "1\n")
+  // Listed, but not ignored: work in progress belongs where it was made.
+  await writeFile(path.join(repo, "notes.md"), "draft\n")
+
+  const given = worktreeDir(workspace, "f1", "given")
+  await addWorktree({ repo, dir: given, branch: "given" })
+  const copied = await copyIncluded(repo, given)
+  check(
+    "what is both listed and ignored is copied",
+    (await readFile(path.join(given, "local.json"), "utf8")) === "KEY=1\n" &&
+      (await exists(path.join(given, "secret", "a.json"))),
+    copied
+  )
+  check(
+    "what is ignored but not listed is not",
+    !(await exists(path.join(given, "build")))
+  )
+  check(
+    "what is listed but not ignored is not",
+    !(await exists(path.join(given, "notes.md")))
+  )
+  check(
+    "a repository without the file copies nothing",
+    (await copyIncluded(clone, tracked)).length === 0
+  )
+
+  section("how far a checkout has moved")
+
+  check("a project is no checkout", (await worktreeStatus(repo)) === null)
+
+  const fresh = await worktreeStatus(based)
+  check(
+    "a fresh one is level with its base and clean",
+    fresh?.base === "develop" &&
+      fresh.ahead === 0 &&
+      fresh.behind === 0 &&
+      fresh.changed === 0 &&
+      fresh.unique === 0,
+    fresh
+  )
+
+  await writeFile(path.join(based, "work.ts"), "const w = 1\n")
+  await git(based, "add", ".")
+  await git(based, "commit", "-q", "-m", "work")
+  await writeFile(path.join(based, "develop.ts"), "const d = 2\n")
+  await writeFile(path.join(based, "loose.ts"), "\n")
+  // And the base moves on without it.
+  await git(repo, "checkout", "-q", "develop")
+  await git(repo, "commit", "-q", "--allow-empty", "-m", "elsewhere")
+  await git(repo, "checkout", "-q", "main")
+
+  const moved = await worktreeStatus(based)
+  check(
+    "a commit is ahead and the base's is behind",
+    moved?.ahead === 1 && moved.behind === 1,
+    moved
+  )
+  check(
+    "edits and untracked files are uncommitted",
+    moved?.changed === 2,
+    moved
+  )
+  check(
+    "and the commit exists on this branch alone",
+    moved?.unique === 1,
+    "what `git branch -D` would lose"
+  )
+
+  await git(repo, "branch", "kept-copy", "off-develop")
+  check(
+    "a commit another branch has is not counted as unique",
+    (await worktreeStatus(based))?.unique === 0
+  )
+  await git(repo, "branch", "-D", "kept-copy")
+
+  section("saying it")
+
+  const said = worktreeSummary({
+    branch: "feature/sso",
+    base: "main",
+    changed: 3,
+    ahead: 2,
+    behind: 1,
+    unique: 2,
+  })
+  check(
+    "the row's tooltip names what moved",
+    said === "feature/sso · 2 ahead, 1 behind main · 3 uncommitted",
+    said
+  )
+  check(
+    "and a level, clean one says so",
+    worktreeSummary({
+      branch: "x",
+      base: "main",
+      changed: 0,
+      ahead: 0,
+      behind: 0,
+      unique: 0,
+    }) === "x · up to date"
+  )
+  const level = {
+    branch: "x",
+    base: "main",
+    changed: 0,
+    ahead: 0,
+    behind: 0,
+    unique: 0,
+  }
+  check(
+    "nothing to lose, nothing said",
+    removalWarnings(level, true).length === 0
+  )
+  check(
+    "unique commits are warned about only when the branch goes",
+    removalWarnings({ ...level, unique: 1 }, true).length === 1 &&
+      removalWarnings({ ...level, unique: 1 }, false).length === 0,
+    removalWarnings({ ...level, unique: 1 }, true)
+  )
+  check(
+    "uncommitted work is warned about either way",
+    removalWarnings({ ...level, changed: 2 }, false)[0] ===
+      "2 uncommitted changes will be deleted."
+  )
 
   section("removing one")
 
