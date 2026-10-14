@@ -1,11 +1,6 @@
 import { useCallback, useState } from "react"
 
-import {
-  blocksJsonOf,
-  serializeBlockFile,
-  splitFrontmatter,
-  withFrontmatter,
-} from "@/lib/files/block-doc"
+import { splitFrontmatter, withFrontmatter } from "@/lib/files/block-doc"
 import {
   frontmatterEntriesOf,
   frontmatterTableBlock,
@@ -14,7 +9,6 @@ import {
   printFrontmatter,
   type FrontmatterEntry,
 } from "@/lib/files/frontmatter"
-import { isNote } from "@/lib/files/viewers"
 import { splitRawHtml } from "@/lib/markdown/raw-html"
 import type { NoteBlock } from "@/lib/note/blocks"
 import { blocksFromMarkdown } from "@/lib/note/from-markdown"
@@ -22,7 +16,7 @@ import { BlockEditor, type Editor } from "../note/block-editor"
 import { RAW_HTML_BLOCK } from "../note/raw-html-block"
 
 /**
- * A `.note` or a `.md`, in the block editor.
+ * A `.md`, in the block editor.
  *
  * **The only thing left that mounts `BlockEditor`.** It came from the Notes
  * panel, which kept a record under `~/.vsclaude` and wrote it as it was typed;
@@ -34,11 +28,9 @@ import { RAW_HTML_BLOCK } from "../note/raw-html-block"
  * source, and a rich-text pane that wrote to it on every keystroke would be
  * committing to their working tree while they thought.
  *
- * **The two files are not the same bargain, though, and the difference is worth
- * knowing before choosing this over the text editor.** A `.note` holds the
- * editor's own block document, so what is saved is exactly what was on screen. A
- * `.md` holds markdown, and BlockNote's markdown export is lossy by its own
- * documentation — children of blocks that are not list items are un-nested,
+ * **The difference is worth knowing before choosing this over the text
+ * editor.** A `.md` holds markdown, and BlockNote's markdown export is lossy by
+ * its own documentation — children of blocks that are not list items are un-nested,
  * some styles are dropped — and it prints the *whole* file from the document, so
  * the first save reflows every line whether or not it was edited. Nothing is
  * written until there is an edit, and the text editor stays the default for a
@@ -70,8 +62,6 @@ export function FileBlocks({
   onChange: (text: string) => void
   visible: boolean
 }) {
-  const note = isNote(path)
-
   /*
    * What the editor starts on, read once.
    *
@@ -85,15 +75,10 @@ export function FileBlocks({
    * save has to reason about rather than print: unchanged rows go back out as
    * the bytes they came in as, and a block with shape to it never left.
    */
-  const [initial] = useState(() => read(path, text))
+  const [initial] = useState(() => read(text))
 
   const write = useCallback(
     (blocks: NoteBlock[], editor: Editor) => {
-      if (note) {
-        onChange(serializeBlockFile(blocks))
-        return
-      }
-
       const frontmatter = frontmatterOf(blocks, initial)
       const body = printBody(blocks, editor)
       // A file emptied down to its frontmatter is the block and one newline,
@@ -105,7 +90,7 @@ export function FileBlocks({
       }
       onChange(withFrontmatter(frontmatter, body))
     },
-    [note, onChange, initial]
+    [onChange, initial]
   )
 
   return (
@@ -128,7 +113,7 @@ export function FileBlocks({
           initial={initial.blocks}
           onChange={write}
           visible={visible}
-          workspaceFiles={note}
+          workspaceFiles={false}
         />
       </div>
     </div>
@@ -137,41 +122,30 @@ export function FileBlocks({
 
 /** One file's text as blocks, with what the save will need to know about its
  * frontmatter. */
-function read(
-  path: string,
-  text: string
-): {
+function read(text: string): {
   blocks: NoteBlock[]
   frontmatter: string
   /** The rows the table was built from, or null for a block that could not be
    * one — which is also how the save knows there is no table to read back. */
   entries: FrontmatterEntry[] | null
 } {
-  if (!isNote(path)) {
-    const { frontmatter, body } = splitFrontmatter(text)
-    const entries =
-      frontmatter === "" ? null : parseFrontmatterEntries(frontmatter)
-    const blocks = markdownBlocks(body)
+  const { frontmatter, body } = splitFrontmatter(text)
+  const entries =
+    frontmatter === "" ? null : parseFrontmatterEntries(frontmatter)
+  const blocks = markdownBlocks(body)
 
-    return {
-      frontmatter,
-      entries,
-      blocks: entries
-        ? [
-            frontmatterTableBlock(entries),
-            // A document whose only block is a table has nowhere to put the
-            // caret to start writing under it.
-            ...(blocks.length > 0 ? blocks : [{ type: "paragraph" }]),
-          ]
-        : blocks,
-    }
+  return {
+    frontmatter,
+    entries,
+    blocks: entries
+      ? [
+          frontmatterTableBlock(entries),
+          // A document whose only block is a table has nowhere to put the
+          // caret to start writing under it.
+          ...(blocks.length > 0 ? blocks : [{ type: "paragraph" }]),
+        ]
+      : blocks,
   }
-
-  if (!text.trim()) return { blocks: [], frontmatter: "", entries: null }
-  // A `.note` that is not the JSON this app writes is read as markdown rather
-  // than as an empty document — `blocksJsonOf` says why.
-  const blocks = blocksJsonOf(text) ?? blocksFromMarkdown(text)
-  return { blocks, frontmatter: "", entries: null }
 }
 
 /**

@@ -100,6 +100,8 @@ const api: DesktopApi = {
     ipcRenderer.invoke(IPC.createDirectory, dirPath, name),
   renamePath: (target, name) =>
     ipcRenderer.invoke(IPC.renamePath, target, name),
+  copyIntoDirectory: (dirPath, sources) =>
+    ipcRenderer.invoke(IPC.copyIntoDirectory, dirPath, sources),
   trashPath: (target) => ipcRenderer.invoke(IPC.trashPath, target),
   revealPath: (target) => ipcRenderer.invoke(IPC.revealPath, target),
   startDragPath: (target) => ipcRenderer.invoke(IPC.startDragPath, target),
@@ -156,8 +158,10 @@ const api: DesktopApi = {
   setAlwaysOnTop: (on) => ipcRenderer.invoke(IPC.setAlwaysOnTop, on),
   isAlwaysOnTop: () => ipcRenderer.invoke(IPC.isAlwaysOnTop),
   setBadgeCount: (count) => ipcRenderer.invoke(IPC.setBadgeCount, count),
-  searchWorkspace: (query, options) =>
-    ipcRenderer.invoke(IPC.searchWorkspace, query, options),
+  searchWorkspace: (query, options, filter) =>
+    ipcRenderer.invoke(IPC.searchWorkspace, query, options, filter),
+  replaceInFiles: (query, options, replacement, paths) =>
+    ipcRenderer.invoke(IPC.replaceInFiles, query, options, replacement, paths),
   deleteWorktreeChat: (id) => ipcRenderer.invoke(IPC.deleteWorktreeChat, id),
   clearWorktreeChat: (id) => ipcRenderer.invoke(IPC.clearWorktreeChat, id),
   renameWorktreeChat: (id, title) =>

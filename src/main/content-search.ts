@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process"
-import { readFile, stat } from "node:fs/promises"
+import { readFile, stat, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { promisify } from "node:util"
 
@@ -7,9 +7,9 @@ import type {
   AssistantMessage,
   ChatSearchMatch,
   FileSearchResult,
-  SearchOptions,
   SearchPreview,
 } from "../shared/api"
+import { replaceIn } from "../shared/search"
 import { IGNORED_DIRECTORIES, indexFiles, MAX_INDEXED_FILES } from "./files"
 
 const run = promisify(execFile)
@@ -51,33 +51,9 @@ const READ_BATCH = 32
 const PREVIEW_LEAD = 30
 const PREVIEW_WIDTH = 200
 
-export type Matcher = { matcher: RegExp } | { error: string }
-
-/**
- * The query and its toggles as one expression, or why it is not one.
- *
- * A literal is escaped into the same `RegExp` a pattern is, so there is one
- * matching loop rather than an `indexOf` beside a `exec` that disagree about
- * where a line ends. `m`, so `^` and `$` are a line's ends the way they are in
- * every editor's search.
- */
-export function matcherOf(
-  query: string,
-  options: SearchOptions
-): Matcher | null {
-  if (!query) return null
-
-  let source = options.regex
-    ? query
-    : query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-  if (options.wholeWord) source = `\\b(?:${source})\\b`
-
-  try {
-    return { matcher: new RegExp(source, options.matchCase ? "gm" : "gim") }
-  } catch (error) {
-    return { error: error instanceof Error ? error.message : String(error) }
-  }
-}
+// In `shared/search.ts`, because the renderer's replace preview builds the same
+// expression; re-exported so main's callers keep one import.
+export { matcherOf, type Matcher } from "../shared/search"
 
 export type TextMatch = {
   line: number
@@ -185,7 +161,17 @@ function isBinary(buffer: Buffer): boolean {
 export async function searchFiles(
   roots: { path: string; folderId: string }[],
   matcher: RegExp,
-  { limit, stale }: { limit: number; stale: () => boolean }
+  {
+    limit,
+    stale,
+    accept = () => true,
+  }: {
+    limit: number
+    stale: () => boolean
+    /** `files to include` / `files to exclude`, over the path relative to its
+     * folder — applied before the read, so an excluded tree costs nothing. */
+    accept?: (relative: string) => boolean
+  }
 ): Promise<{ files: FileSearchResult[]; matches: number; truncated: boolean }> {
   const files: FileSearchResult[] = []
   let matches = 0
@@ -194,7 +180,9 @@ export async function searchFiles(
   if (limit <= 0) return { files, matches, truncated: true }
 
   for (const root of roots) {
-    const entries = await searchedFiles(root.path, root.folderId)
+    const entries = (await searchedFiles(root.path, root.folderId)).filter(
+      (entry) => accept(entry.relative)
+    )
 
     for (let at = 0; at < entries.length; at += READ_BATCH) {
       if (stale()) return { files, matches, truncated: false }
@@ -292,6 +280,37 @@ async function readSearched(entry: Searched): Promise<Buffer | null> {
   const info = await stat(entry.path).catch(() => null)
   if (!info?.isFile() || info.size > MAX_SEARCHED_BYTES) return null
   return readFile(entry.path).catch(() => null)
+}
+
+/**
+ * One file with every match replaced, written back only if anything changed.
+ * Answers with how many matches were replaced.
+ *
+ * Read and matched again now rather than at the search's offsets: the file may
+ * have moved on since, and a replace at a stale offset writes into the middle
+ * of whatever is there now. The same files the search skips are refused, and
+ * one more: bytes that do not survive a UTF-8 round trip would be rewritten as
+ * replacement characters everywhere, not only where the match was.
+ */
+export async function replaceInFile(
+  filePath: string,
+  matcher: RegExp,
+  replacement: string,
+  regex: boolean
+): Promise<number> {
+  const info = await stat(filePath)
+  if (!info.isFile()) throw new Error("Not a file.")
+  if (info.size > MAX_SEARCHED_BYTES) throw new Error("Too large to search.")
+  const buffer = await readFile(filePath)
+  if (isBinary(buffer)) throw new Error("A binary file.")
+  const text = buffer.toString("utf8")
+  if (!Buffer.from(text, "utf8").equals(buffer))
+    throw new Error("Not UTF-8 text.")
+
+  const replaced = replaceIn(text, matcher, replacement, regex)
+  if (replaced.count > 0 && replaced.text !== text)
+    await writeFile(filePath, replaced.text, "utf8")
+  return replaced.count
 }
 
 /**

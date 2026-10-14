@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process"
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 
@@ -9,8 +9,15 @@ import {
   matcherOf,
   matchesIn,
   previewOf,
+  replaceInFile,
   searchFiles,
 } from "../src/main/content-search"
+import {
+  expandReplacement,
+  pathFilterOf,
+  previewReplacement,
+  replaceIn,
+} from "../src/shared/search"
 import { hitAt, hitsIn } from "../src/renderer/lib/worktree-chat/search"
 import { check, finish, section } from "./harness"
 
@@ -177,6 +184,17 @@ section("files")
       { limit: 100, stale: () => true }
     )
     check("a stale search stops", stopped.files.length === 0)
+
+    const narrowed = await searchFiles(
+      [{ path: root, folderId: "f" }],
+      regexOf("needle"),
+      { limit: 100, stale: () => false, accept: pathFilterOf("src", "") }
+    )
+    check(
+      "files to include narrow the walk",
+      narrowed.files.length === 1 && narrowed.files[0]?.relative === "src/a.ts",
+      narrowed.files.map((file) => file.relative)
+    )
   } finally {
     await rm(root, { recursive: true, force: true })
   }
@@ -209,6 +227,119 @@ section("a repository: what git ignores is not searched")
       JSON.stringify(relatives) ===
         JSON.stringify(["src/kept.ts", "untracked.md"]),
       relatives
+    )
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+}
+
+section("files to include and exclude")
+{
+  const only = (include: string, exclude: string, paths: string[]) => {
+    const accept = pathFilterOf(include, exclude)
+    return paths.filter(accept)
+  }
+  const paths = [
+    "src/a.ts",
+    "src/a.test.ts",
+    "src/deep/b.tsx",
+    "docs/c.md",
+    "dist/d.js",
+  ]
+  const same = (a: string[], b: string[]) =>
+    JSON.stringify(a) === JSON.stringify(b)
+
+  check("nothing typed is everything", same(only("", "", paths), paths))
+  check(
+    "a bare extension matches at any depth",
+    same(only("*.md", "", paths), ["docs/c.md"])
+  )
+  check(
+    "a directory name matches everything under it",
+    same(only("", "dist", paths), paths.slice(0, 4))
+  )
+  check(
+    "a slash anchors at the folder",
+    same(only("src/*.ts", "", paths), ["src/a.ts", "src/a.test.ts"])
+  )
+  check(
+    "** crosses directories",
+    same(only("src/**", "**/*.test.ts", paths), ["src/a.ts", "src/deep/b.tsx"])
+  )
+  check(
+    "braces are alternatives, not a list separator",
+    same(only("*.{md,js}", "", paths), ["docs/c.md", "dist/d.js"])
+  )
+  check(
+    "a comma list",
+    same(only("docs, dist", "", paths), ["docs/c.md", "dist/d.js"])
+  )
+}
+
+section("replace")
+{
+  check(
+    "a literal replacement is verbatim",
+    replaceIn("a.b a.b", regexOf("a.b"), "$1&", false).text === "$1& $1&"
+  )
+  const swapped = replaceIn(
+    "x=1, y=2",
+    regexOf("(\\w)=(\\d)", { regex: true }),
+    "$2:$1",
+    true
+  )
+  check(
+    "groups are filled in",
+    swapped.text === "1:x, 2:y" && swapped.count === 2,
+    swapped
+  )
+  check(
+    "named groups, the whole match and a dollar",
+    replaceIn(
+      "ab",
+      regexOf("(?<first>a)b", { regex: true }),
+      "[$<first>|$&|$$]",
+      true
+    ).text === "[a|ab|$]"
+  )
+  check(
+    "an empty match writes nothing",
+    replaceIn("abc", regexOf("x*", { regex: true }), "-", true).text === "abc"
+  )
+  check(
+    "a group that is not there is kept as typed",
+    expandReplacement("$3 $0", "m", ["a"]) === "$3 $0"
+  )
+  check(
+    "the preview fills a row in the same way",
+    previewReplacement(
+      "  let x=1",
+      6,
+      regexOf("(\\w)=(\\d)", { regex: true }),
+      "$2=$1",
+      true
+    ) === "1=x"
+  )
+
+  const root = await mkdtemp(path.join(tmpdir(), "vsclaude-replace-"))
+  try {
+    const text = path.join(root, "a.txt")
+    await writeFile(text, "foo\r\nbar foo\r\n")
+    const count = await replaceInFile(text, regexOf("foo"), "baz", false)
+    check(
+      "a file is rewritten, its line endings kept",
+      count === 2 && (await readFile(text, "utf8")) === "baz\r\nbar baz\r\n"
+    )
+
+    const latin = path.join(root, "latin.txt")
+    await writeFile(latin, Buffer.from([0x66, 0x6f, 0x6f, 0xe9]))
+    const refused = await replaceInFile(latin, regexOf("foo"), "x", false)
+      .then(() => null)
+      .catch((error: Error) => error.message)
+    check(
+      "bytes that are not UTF-8 are not rewritten",
+      refused === "Not UTF-8 text." &&
+        (await readFile(latin)).equals(Buffer.from([0x66, 0x6f, 0x6f, 0xe9]))
     )
   } finally {
     await rm(root, { recursive: true, force: true })

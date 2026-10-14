@@ -1706,6 +1706,35 @@ export type SearchOptions = {
   regex: boolean
 }
 
+/** Which half of the left column's Search is run — both, or one of them. */
+export type SearchKinds = "all" | "files" | "chats"
+
+/**
+ * Where a search looks, beside what it looks for: which halves, which project,
+ * and the editors' `files to include` / `files to exclude` globs
+ * (`pathFilterOf` in `shared/search.ts`), which apply to files alone. A
+ * `folderId` of null is the whole workspace.
+ */
+export type SearchFilter = {
+  kinds: SearchKinds
+  include: string
+  exclude: string
+  folderId: string | null
+}
+
+/**
+ * What a replace across files did. `files` is every path written; `failed` the
+ * ones that could not be, with why — a file deleted since the search, or one
+ * that is not UTF-8 and so would not survive being read as text and written
+ * back.
+ */
+export type ReplaceResult = {
+  replaced: number
+  files: string[]
+  failed: { path: string; error: string }[]
+  error: string | null
+}
+
 /**
  * The line a match sits on, cut to what a row in a narrow column can show, with
  * the match itself at `from`–`to` inside `text`.
@@ -1835,8 +1864,7 @@ export const DRAWING_LANGUAGE = "drawing"
  *
  * Here rather than beside the renderer's walk over it because the main process
  * read the same file while the note preview server existed. It does not cross a
- * channel; it is the shape of a file on disk, and `.note` files in the
- * workspace's folders are still written in it.
+ * channel; it is the shape of the block editor's document.
  */
 export type NoteBlock = {
   id?: string
@@ -2141,6 +2169,11 @@ export type DesktopApi = {
   /** Renames in place — a name, not a path, so this can never be a move out of
    * the workspace. Resolves to the new path. */
   renamePath: (target: string, name: string) => Promise<string>
+  /** Copies what was dropped onto the tree from outside the app into `dirPath`,
+   * renumbering a name that is taken rather than replacing it. Only `dirPath` is
+   * held to the workspace's folders — the sources are the point of the drop.
+   * Resolves to the copies' paths. */
+  copyIntoDirectory: (dirPath: string, sources: string[]) => Promise<string[]>
   /** To the system trash, not `unlink`: this is somebody's source file, and the
    * OS already has the undo for it. */
   trashPath: (target: string) => Promise<void>
@@ -2444,8 +2477,21 @@ export type DesktopApi = {
    */
   searchWorkspace: (
     query: string,
-    options: SearchOptions
+    options: SearchOptions,
+    filter: SearchFilter
   ) => Promise<WorkspaceSearch>
+  /**
+   * Replaces every match of `query` in `paths` — the files a search showed —
+   * with `replacement`, read and matched again at the time of the write rather
+   * than at the offsets the search found. Files only: what a chat said is a
+   * record, not a document. Every path is gated by the workspace's roots.
+   */
+  replaceInFiles: (
+    query: string,
+    options: SearchOptions,
+    replacement: string,
+    paths: string[]
+  ) => Promise<ReplaceResult>
   deleteWorktreeChat: (id: string) => Promise<void>
   /**
    * Empties a chat and closes the CLI behind it — the composer's `/clear`.
@@ -2769,6 +2815,7 @@ export const IPC = {
   createFile: "files:create-file",
   createDirectory: "files:create-directory",
   renamePath: "files:rename",
+  copyIntoDirectory: "files:copy-into",
   trashPath: "files:trash",
   revealPath: "files:reveal",
   startDragPath: "files:start-drag",
@@ -2807,6 +2854,7 @@ export const IPC = {
   isAlwaysOnTop: "window:is-always-on-top",
   setBadgeCount: "app:set-badge-count",
   searchWorkspace: "search:workspace",
+  replaceInFiles: "search:replace",
   deleteWorktreeChat: "worktree-chats:delete",
   clearWorktreeChat: "worktree-chats:clear",
   renameWorktreeChat: "worktree-chats:rename",

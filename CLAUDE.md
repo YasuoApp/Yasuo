@@ -190,7 +190,10 @@ learnings…`, its dialog, `main/learnings.ts`, `shared/learnings.ts` and the
   was said in every chat (`WorktreeChats.search`), one channel
   (`search:workspace`) whose **generation** in `ipc.ts` stops an older search
   typed past. A walk and a read per search, nothing indexed; capped at 2,000
-  matches. It **reverses** two deletions — `docs/design.md` § Searching inside
+  matches. A `SearchFilter` scopes it (kinds, one project, include/exclude
+  globs), and `search:replace` (`replaceInFile`) is its one write — files only,
+  re-matched at write time, never a non-UTF-8 file. `shared/search.ts` holds
+  the matcher, the globs and the `$1` expansion both sides use. It **reverses** two deletions — `docs/design.md` § Searching inside
   the files and the chats has the argument. Free of `electron`
   (`test/content-search.ts`).
 
@@ -554,7 +557,8 @@ app minted, only while `isUntitledBranch` still holds, never one the user named.
 - **The Notes panel is gone** (`docs/design.md` § Notes, removed) — the store,
   the list, the pane, the preview server, the `notes:*` channels and the note
   types with it. What stayed is the **block editor**, because the Explorer's
-  `.note` and `.md` tabs are that editor over a file: `components/studio/note/`
+  `.md` tabs can open in it (`.note` is no longer recognised — § `.note`
+  files, removed): `components/studio/note/`
   and `lib/note/` are named for where they came from and are the editor's now.
 - **Animation is CSS**, in `styles/motion.css`, and an animation added anywhere
   else should go there too.

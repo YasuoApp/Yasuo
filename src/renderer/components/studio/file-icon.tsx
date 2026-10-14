@@ -1,7 +1,7 @@
-import { File, FileText, Image } from "lucide-react"
+import { File, Image } from "lucide-react"
 
 import { iconFor } from "@/lib/files/icons"
-import { isImage, isNote } from "@/lib/files/viewers"
+import { isImage } from "@/lib/files/viewers"
 import { cn } from "@/lib/utils"
 
 /**
@@ -34,8 +34,5 @@ export function FileIcon({
 
   if (url) return <img src={url} alt="" aria-hidden className={classes} />
   if (isImage(filePath)) return <Image aria-hidden className={classes} />
-  // A `.note` is the block editor over a file, and this is the glyph that
-  // says so.
-  if (isNote(filePath)) return <FileText aria-hidden className={classes} />
   return <File aria-hidden className={classes} />
 }

@@ -9,11 +9,9 @@ import { nameOf } from "./paths"
  * file people open to change a `fill` or a `viewBox`. A `.md` is three: the
  * source somebody edits, the document somebody reads, and — since the studio
  * has a block editor anyway — prose somebody writes without typing the syntax.
- * A `.note` is the block editor first and its own document second. Every one of
- * them is reached from the tree's right-click menu.
+ * Every one of them is reached from the tree's right-click menu.
  *
- * `blocks` is that block editor, and it is one viewer rather than two: what
- * changes between a `.note` and a `.md` is the file it writes, not the pane.
+ * `blocks` is that block editor, offered for a `.md` alone.
  *
  * `diff` is the odd one: every other viewer here is a way of reading the file,
  * and that one is a way of reading what has happened to it — the committed side
@@ -85,19 +83,6 @@ export function isHtml(filePath: string): boolean {
  * this one is a file the studio writes so that a note can live in the
  * repository it is about rather than only in the workspace's own directory.
  */
-export const NOTE_EXTENSION = "note"
-
-export function isNote(filePath: string): boolean {
-  return extensionOf(filePath) === NOTE_EXTENSION
-}
-
-/** What a name typed into `New note…` becomes. The extension is what makes the
- * file a note, so it is added rather than asked for — and not added twice for
- * somebody who typed it. */
-export function noteFileName(name: string): string {
-  return isNote(name) ? name : `${name}.${NOTE_EXTENSION}`
-}
-
 /**
  * Every way this file can be shown, best first.
  *
@@ -123,12 +108,6 @@ export function viewersFor(filePath: string): Viewer[] {
   // arrived at, and the editor is the one asked for.
   if (isMarkdown(filePath)) return ["markdown", "text", "blocks", "diff"]
 
-  // A `.note` is the other way round from a `.md`: the editor is the point of
-  // the file, and the block document underneath it is JSON nobody writes by
-  // hand — offered second all the same, since a note that will not open is a
-  // note whose text somebody needs to see.
-  if (isNote(filePath)) return ["blocks", "text", "diff"]
-
   // An `.html` opens as the page, for the `.md`'s reason: what somebody clicks
   // one to find out is what it looks like. The source is `Edit` in the pane's
   // header.
@@ -141,25 +120,12 @@ export function defaultViewer(filePath: string): Viewer {
   return viewersFor(filePath)[0]!
 }
 
-/**
- * What a viewer is called, in the menu of the file it would open.
- *
- * A function rather than a table because one of the four has two honest names:
- * the block editor is the **note** editor on a `.note`, whose whole point it
- * is, and the **markdown** editor on a `.md`, where it is the alternative to
- * typing the syntax. Naming it once for both would mean naming it after neither.
- */
-export function viewerLabel(viewer: Viewer, filePath: string): string {
-  if (viewer === "blocks") {
-    return isNote(filePath) ? "Note editor" : "Markdown editor"
-  }
-  return FIXED_LABELS[viewer]
-}
-
-const FIXED_LABELS: Record<Exclude<Viewer, "blocks">, string> = {
+/** What a viewer is called, in the "Open with" menu. */
+export const VIEWER_LABELS: Record<Viewer, string> = {
   image: "Image preview",
   text: "Text editor",
   markdown: "Markdown preview",
   html: "HTML preview",
+  blocks: "Markdown editor",
   diff: "Diff",
 }

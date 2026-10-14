@@ -5,7 +5,7 @@ import { DRAWING_LANGUAGE, type NoteBlock } from "@shared/api"
  *
  * What is left of the Notes panel's own document module. The panel is gone —
  * see `docs/design.md` § Notes, removed — and what still reads this is the
- * Explorer's block editor over a `.note` or a `.md` file: `blocksFromMarkdown`
+ * Explorer's block editor over a `.md` file: `blocksFromMarkdown`
  * in `from-markdown.ts` parses one and hands the result here to have its
  * drawing fences adopted.
  *

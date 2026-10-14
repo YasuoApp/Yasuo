@@ -72,8 +72,8 @@ const DrawingIcon = () => (
 export type Editor = typeof schema.BlockNoteEditor
 
 /**
- * Exported for the Explorer's `.note` and `.md` files, which are the same
- * editor over a file in one of the workspace's folders rather than over a note
+ * Exported for the Explorer's `.md` files, which are the same editor over a
+ * file in one of the workspace's folders rather than over a note
  * in `~/.vsclaude` — see `files/file-blocks.tsx`. It takes its blocks already
  * read, which is what that pane has: the files store holds the text.
  */
@@ -99,8 +99,8 @@ export function BlockEditor({
    * drawing's scene under `workspace/drawings/`, a picture under
    * `workspace/note-files/`.
    *
-   * True for a note, and for a `.note`, whose whole document is this app's
-   * format anyway. False for a `.md`, which is somebody's markdown: a
+   * False for a `.md`, which is somebody's markdown — and a `.md` is the only
+   * file this editor opens now that `.note` is gone: a
    * `note-file://` URL in it is a broken image in every other reader, and a
    * drawing has no markdown at all to be written as. Both are switched off at
    * the source rather than warned about — the slash menu is built from what the

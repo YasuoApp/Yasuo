@@ -438,6 +438,22 @@ per search with nothing indexed, binary and >1 MB files skipped, a 2,000-match
 cap, and transcripts not made resident. A chat hit opens that chat with its
 `⌘F` bar on the occurrence.
 
+Under the field: `All` / `Chats` / `Files`, **this project only** (the
+column's `activeFolderId`, read at each search, so switching project re-asks),
+and VS Code's `files to include` / `files to exclude` globs (`pathFilterOf` in
+`shared/search.ts`), applied to the walk before anything is read. The result
+list is one flat run of rows, so `↑`/`↓`/`←`/`→`/`Enter` walk what is on screen,
+and `F4` / `⇧F4` step through the matches while the column shows Search.
+
+**Replace** is the one write here, and it is files only — what a chat said is a
+record. The rows draw each match struck through beside what it becomes,
+expanded by the same `shared/search.ts` main writes with (`$1`, `$<name>`,
+`$&`, `$$`). `Replace all` asks first, and a file's row replaces just that file.
+Main reads and matches each file **again** rather than trusting the search's
+offsets, refuses what the search skips plus anything that is not UTF-8 (it would
+be rewritten whole), and a file with unsaved edits is left out by the renderer
+and said to be. Open tabs are re-read through `syncPaths` straight after.
+
 ## The window shortcuts
 
 `⌘P`, `⇧⌘F`, `⌘F`, `⌘W`, `⌘S`, `⌘B` and `⌃\`` are `keydown` listeners in the
@@ -625,7 +641,7 @@ closing the other project's tabs. Its header is two tabs, `All files` and
   removing one never touches the directory. Rows are renamed in place.
 - **Viewers** (`lib/files/viewers.ts`): text, image (on a checkerboard),
   markdown preview, HTML preview (a sandboxed `srcdoc` frame without
-  `allow-same-origin`), the block editor for `.note` and optionally `.md`, and
+  `allow-same-origin`), the block editor for `.md` (by choice), and
   diff. Binary files and anything over 2 MB are reported, not opened.
 
 ### Closing it leaves the rail
@@ -740,11 +756,10 @@ editor's buffer. Spoken to directly rather than through an LSP layer
 
 ## The block editor
 
-BlockNote, behind a `.note` or (by choice) a `.md`. A `.note` is indented JSON
-so it can be reviewed; one that is not JSON is read as markdown rather than
-replaced. A `.md` is printed back lossily, so it is never the default:
-frontmatter is set aside and restored byte for byte, and drawings and uploads
-are switched off for it.
+BlockNote, behind a `.md` by choice. A `.md` is printed back lossily, so it is
+never the default: frontmatter is set aside and restored byte for byte, and
+drawings and uploads are switched off for it — which, with `.note` gone, leaves
+the two sections below with no file that reaches them.
 
 ### Images
 
@@ -897,6 +912,15 @@ An SMTP sink (and before it a webhook catcher).
 
 A Notes panel with its own tree and preview server. The block editor stayed, as
 the Explorer's `.note` / `.md` viewer.
+
+### `.note` files, removed
+
+The tree's `New note…` and every recognition of the extension — its icon, the
+block editor as its default viewer, the `Note editor` label, the JSON reading
+and writing in `lib/files/block-doc.ts`. A note was the Notes panel's document
+kept in a repository, and with the panel gone it was a format only this app
+could read, sitting in somebody's working tree. A `.note` already on disk is now
+an ordinary text file; nothing converts or deletes it.
 
 ### The Env editor, removed
 
