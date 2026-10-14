@@ -60,6 +60,11 @@
   /* `.spinner`, below. Two loops on one clock: the grid breathes apart while
      its eight outer cells step one place round the middle. */
   --animate-shuffle: shuffle-spread 1s infinite, shuffle-step 1s infinite;
+
+  /* The setup screen's illustrations (`claude-setup.tsx`): the chips beside a
+     page's picture drifting a few pixels, slow enough to read as weightless
+     rather than as something asking to be clicked. */
+  --animate-float: float 5s ease-in-out infinite;
 }
 
 @keyframes rise {
@@ -99,6 +104,12 @@
 @keyframes breathe {
   50% {
     opacity: 0.4;
+  }
+}
+
+@keyframes float {
+  50% {
+    transform: translateY(-0.3rem);
   }
 }
 
@@ -321,6 +332,7 @@
     --animate-settle: none;
     --animate-dot: breathe 1.2s ease-in-out infinite;
     --animate-shimmer: none;
+    --animate-float: none;
   }
 
   /* Scoped to the launch screen's own crossfade rather than left to a blanket
