@@ -90,8 +90,8 @@ A chat that answered while you read another is **unread**: a dot and a heavier
 title, on the row and the tab (`marksUnread`, tested). It is marked on
 **quiet**, not on `done` — a message queued behind a turn starts the next one.
 "Read" is selected in a focused window, and none of it is written down: unread
-is this run's attention. It is kept out of `ChatActivity`, which the tray
-shares and which counts what is happening.
+is this run's attention. It is kept out of `ChatActivity`, which counts what
+is happening.
 
 A message sent into a chat that is **already working** is marked `Queued` until
 the turn ends. It is a mark, not a cancel: the CLI folds queued messages into
@@ -107,15 +107,28 @@ them — the failures are ringing twice and swallowing a quiet. The title is rea
 when the notice is due, since `retitle` renames a chat mid-turn. On by default
 (`CHAT_NOTIFICATIONS_KEY`).
 
-### The menu bar
+### The dock badge
 
-A tray icon with **the same count** beside it, drawn by `activityLabel` from
-`@shared/chat-activity` so the two can never disagree; empty when nothing runs.
-Its menu names the chats, waiting first. `ChatNotices.pending()` feeds it — no
-second watcher. The `Tray` is **held on the object** (an unreferenced one is
-collected and vanishes silently), created with the managers but shown from
-`whenReady`, and redrawn in sequence. Switchable off (`CHAT_TRAY_KEY`), which
-destroys it at once. The icon is a template image from `scripts/tray-icon.mjs`.
+The app's own icon carries a red number, the way Slack's does: how many chats
+**want you** — unread, or stopped on a question — counted once per chat
+(`badgeCount` in `lib/worktree-chat/unread.ts`, tested). A chat merely working
+is not in it: a badge that is never zero while anything runs is one nobody
+reads. The studio's window sends it (`IPC.setBadgeCount` → `app.setBadgeCount`),
+because `unread` is the renderer's — main knows a chat went quiet, not whether
+anybody has looked since — and a popped-out chat's window does not, since it
+keeps a store of its own. No switch: the dock is the app's own icon, not a strip
+shared with every other app.
+
+### The menu bar, removed
+
+There was a tray icon with the working/waiting count beside it and a menu
+naming the chats, behind a `Count the chats in the menu bar` switch. It is
+replaced by the dock badge: the menu bar is a strip shared with the whole
+machine, so it needed a switch to get out of, and it counted what was
+_happening_ where the question somebody glances for is what is _waiting for
+them_. `main/tray.ts`, `ChatNotices.pending()`, `resources/tray*.png` and
+`scripts/tray-icon.mjs` are deleted. Nothing reads the `chats.tray` setting key
+any more, and nothing deletes it.
 
 ### The chat's loading indicator
 

@@ -436,8 +436,6 @@ function TabsSection() {
 function ChatsSection() {
   const on = useSettings((state) => state.chatNotifications)
   const setOn = useSettings((state) => state.setChatNotifications)
-  const tray = useSettings((state) => state.chatTray)
-  const setTray = useSettings((state) => state.setChatTray)
 
   return (
     <Card>
@@ -452,19 +450,6 @@ function ChatsSection() {
         description="When a chat finishes, fails or asks something, while the window is in the background."
       >
         <Switch checked={on} onCheckedChange={setOn} />
-      </Row>
-      {/*
-        The standing version of the row above, and on by default for the same
-        reason. It is a switch at all because this icon is in a strip shared
-        with every other app on the machine — that is the one place in this app
-        where "I do not want to see this" is a reasonable thing to want, and
-        where there is no way to say it from the icon itself.
-      */}
-      <Row
-        title="Count the chats in the menu bar"
-        description="How many chats are running or waiting on you."
-      >
-        <Switch checked={tray} onCheckedChange={setTray} />
       </Row>
     </Card>
   )

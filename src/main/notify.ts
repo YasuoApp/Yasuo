@@ -89,27 +89,6 @@ export class ChatNotices {
     return { kind: "done", chatId }
   }
 
-  /**
-   * Which chats are working and which have stopped to ask, right now.
-   *
-   * The same two sets the notices are read off, handed out rather than counted
-   * a second time: this watcher is already main's answer to "what is happening"
-   * and a second pass over the same events is two answers that can drift. It is
-   * what the menu bar's tray draws (`main/tray.ts`) — the count outside the
-   * window, where the sidebar's row is the one inside it.
-   *
-   * **Waiting wins over working**, applied here rather than left to the caller,
-   * because a chat with a question up is in both sets and is one thing to do.
-   * `@shared/chat-activity` is where that rule is written down, and the tray and
-   * the sidebar row must not disagree about it.
-   */
-  pending(): { working: string[]; waiting: string[] } {
-    return {
-      working: [...this.working].filter((id) => !this.asking.has(id)),
-      waiting: [...this.asking],
-    }
-  }
-
   /** Everything held about a chat that has been deleted, or whose session was
    * closed. A chat reaped mid-thought would otherwise leave a `working` entry
    * that never clears, and its next turn would ring one notice short. */

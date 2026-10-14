@@ -9,10 +9,9 @@ import type { ChatActivity } from "@shared/chat-activity"
  * is easy to get wrong in two places at once, and neither way of getting it
  * wrong looks broken.
  *
- * The rule itself, the shape and the two labels moved to
- * `@shared/chat-activity` when the menu bar's tray started drawing the same
- * count from the main process — see the header there. Re-exported so this file
- * is still the one place the sidebar asks about it.
+ * The rule itself, the shape and the two labels live in
+ * `@shared/chat-activity` — see the header there. Re-exported so this file is
+ * still the one place the sidebar asks about it.
  */
 export {
   isRunning,

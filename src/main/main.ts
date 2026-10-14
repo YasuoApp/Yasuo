@@ -139,8 +139,6 @@ const {
   worktreeChats,
   tsServers,
   watchers,
-  tray,
-  startTray,
   noteFilePath,
   pluginFilePath,
 } = registerIpc(
@@ -290,10 +288,6 @@ void app.whenReady().then(() => {
   // Before the window, so the menu bar is never Electron's default one.
   installMenu(() => mainWindow)
   createWindow()
-  // After the window, and not awaited: the icon is a count of what the chats
-  // are doing, and at this point they are not doing anything. A first paint
-  // must not wait on a settings read.
-  void startTray()
 
   app.on("activate", () => {
     // macOS: clicking the dock icon reopens the studio. The *studio* rather
@@ -333,10 +327,6 @@ app.on("before-quit", (event) => {
     // a watcher with a debounce pending is a callback into a window that is on
     // its way out.
     watchers.closeAll()
-    // The menu bar's icon, before the slow half below: quitting can take the
-    // five seconds that cleanup is given, and an icon still counting chats
-    // during them is an app that looks stuck.
-    tray.destroy()
 
     await Promise.race([
       // Containers are stopped, not removed: a database's data lives in its

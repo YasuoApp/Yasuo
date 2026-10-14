@@ -17,7 +17,6 @@ import { IPC } from "../shared/api"
 import type { Host } from "./host"
 import { createIpc } from "./ipc"
 import { clampPercent, kilobytes } from "./system-usage"
-import { ChatTray } from "./tray"
 
 /** The installer, shipped in the bundle (`extraResources`) rather than fetched:
  * a button that runs a script downloaded at the moment it is pressed is a
@@ -103,8 +102,7 @@ export function registerIpc(
     return window
   }
 
-  /** The studio, scrolled to one chat. Shared by the notification's click and
-   * the tray's menu, which are the same errand arriving two ways. */
+  /** The studio, scrolled to one chat — where a notification's click leads. */
   const revealChat = (chatId: string): void => {
     showWindow()?.webContents.send(IPC.revealWorktreeChat, chatId)
   }
@@ -115,15 +113,6 @@ export function registerIpc(
       ? dialog.showOpenDialog(window, options)
       : dialog.showOpenDialog(options)
   }
-
-  /*
-   * Created here but not shown: a `Tray` before `whenReady` throws, and this
-   * runs at module scope — `startTray` is what puts it in the strip.
-   */
-  const tray = new ChatTray({
-    reveal: (chatId) => revealChat(chatId),
-    show: () => showWindow(),
-  })
 
   const host: Host = {
     send(channel, payload) {
@@ -204,7 +193,9 @@ export function registerIpc(
     },
     isAlwaysOnTop: (caller) => ownerOf(caller)?.isAlwaysOnTop() ?? false,
 
-    tray,
+    setBadgeCount(count) {
+      app.setBadgeCount(Math.max(0, Math.floor(count)))
+    },
     version: app.getVersion(),
     installerScript: installerScript(),
     bundledPluginsDir: bundledPluginsDir(),
@@ -218,5 +209,5 @@ export function registerIpc(
     )
   }
 
-  return { ...ipc, tray }
+  return ipc
 }

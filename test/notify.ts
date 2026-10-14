@@ -153,44 +153,6 @@ section("one watcher, several chats")
   same("a forgotten chat holds nothing", notices.read(busy("a", false)), null)
 }
 
-/*
- * The same watcher read the other way round — as a standing count rather than
- * as edges, which is what the menu bar's icon draws. Worth its own section
- * because the two readings share the sets underneath: a bug in `forget` or in
- * "waiting wins" shows up here as a number nobody can clear, and the icon is
- * exactly where a stuck number is most visible.
- */
-section("what is happening right now")
-{
-  const notices = new ChatNotices()
-  const pending = (label: string, working: string[], waiting: string[]) =>
-    check(
-      label,
-      JSON.stringify(notices.pending()) ===
-        JSON.stringify({ working, waiting }),
-      notices.pending()
-    )
-
-  pending("nothing to begin with", [], [])
-  notices.read(busy("a", true))
-  notices.read(busy("b", true))
-  pending("two chats answering", ["a", "b"], [])
-
-  notices.read(asks("b"))
-  // b is still `busy` — the turn has not ended — and it is one thing to do, not
-  // two things happening.
-  pending("a question takes its chat out of working", ["a"], ["b"])
-
-  notices.read(decision("b"))
-  pending("answering it puts the chat back to work", ["a", "b"], [])
-
-  notices.read(busy("a", false))
-  pending("quiet leaves the count", ["b"], [])
-
-  notices.forget("b")
-  pending("and so does being deleted mid-turn", [], [])
-}
-
 section("what a notice says")
 {
   const say = (notice: ChatNotice) => noticeText(notice, "Fix the parser")

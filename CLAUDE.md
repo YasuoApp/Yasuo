@@ -84,7 +84,7 @@ reaches the contract through the `@shared/*` alias; `@/*` is `src/renderer`.
 `ipc.ts` owns every handler and the long-lived managers (`Store`,
 `TerminalManager`, `WorktreeChats`) as **`createIpc(host)`**, a table keyed by
 channel that **does not import `electron`**, so the tests can import it.
-What needs Electron itself — dialogs, windows, the tray, the trash,
+What needs Electron itself — dialogs, windows, the dock badge, the trash,
 notifications — is `main/host.ts`, implemented by `electron-ipc.ts`. A handler
 that needs one of those asks `host`; nothing under `src/main/` that `ipc.ts`
 imports may reach `electron`.
@@ -108,16 +108,12 @@ imports may reach `electron`.
   notification: quiet (**not** `done` — a message sent mid-turn is queued behind
   it), a failure, a question. Free of `electron` so `test/notify.ts` can import
   it; `ipc.ts` rings the bell, only while the window is unfocused, and the click
-  comes back as `IPC.revealWorktreeChat`. Its `pending()` is those same two sets
-  read as a **standing count** rather than as edges.
-- **`tray.ts`** — the menu bar's icon and that count beside it, drawn in the
-  sidebar row's own words: `activityLabel` and friends live in
-  `@shared/chat-activity`, re-exported by `lib/worktree-chat/running.ts`, so the
-  count outside the window and the one inside it cannot disagree. A `Tray` built
-  before `whenReady` throws, so it is created with the managers and shown from
-  `startTray`; it is **held on the object**, since an unreferenced one is
-  collected and the icon vanishes with nothing in any log. `CHAT_TRAY_KEY`
-  switches it off, and `ipc.ts` acts on that key as the write lands.
+  comes back as `IPC.revealWorktreeChat`.
+- **There is no menu bar tray** any more — the app's **dock icon carries a red
+  badge** instead, Slack's way: chats unread or stopped on a question
+  (`badgeCount` in `lib/worktree-chat/unread.ts`), sent by the studio's window
+  alone through `IPC.setBadgeCount` to `app.setBadgeCount`, because `unread` is
+  the renderer's. `docs/design.md` § The dock badge, § The menu bar, removed.
 - **`files.ts`** — every `files:*` call goes through `insideAny`, which is what
   keeps an absolute path from the renderer inside the roots the workspace was
   pointed at. Deleting is `shell.trashItem`, never `unlink`. `fileRoots` in
@@ -395,7 +391,7 @@ a heavier title on the row and on the tab, off `marksUnread` in
 `lib/worktree-chat/unread.ts` (tested). Same rule as the notice, **quiet not
 `done`**; read is selected-and-focused; nothing is written down, since unread is
 this run's attention. Its count is kept out of `ChatActivity` deliberately —
-that shape is the tray's too, and the tray counts what is happening.
+that shape counts what is happening. Unread plus waiting is the dock badge.
 A message sent into a chat that was **already working** is marked `Queued` on its
 own line until the running turn ends (`queued` in the store, cleared on `done`) —
 in memory like `unread`, and a mark rather than a cancel: holding it back in main

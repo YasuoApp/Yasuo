@@ -900,19 +900,6 @@ export type McpServerState =
  */
 export const CHAT_NOTIFICATIONS_KEY = "chats.notifications"
 
-/**
- * Whether the menu bar carries an icon counting the chats that are working and
- * the ones stopped on a question. `"off"` takes it out of the strip;
- * **anything else, including unset, is on**.
- *
- * The same default and the same argument as `CHAT_NOTIFICATIONS_KEY`, which it
- * sits beside: a notification is a moment and this is the standing version of
- * it, for the far commoner case of glancing at the machine rather than being
- * interrupted by it. Read by main, which owns the icon — the renderer only
- * draws the switch.
- */
-export const CHAT_TRAY_KEY = "chats.tray"
-
 /** One tool a server offers, as a row of the Settings listing draws it. */
 export type McpToolInfo = {
   /** The tool's own name, without the `mcp__<server>__` the CLI prefixes it
@@ -2390,6 +2377,12 @@ export type DesktopApi = {
   /** Whether the calling window is pinned. */
   isAlwaysOnTop: () => Promise<boolean>
   /**
+   * The red number on the app's dock icon, the way Slack's is: how many chats
+   * want the user — answered and not yet read, or stopped on a question. Zero
+   * clears it. Sent by the studio's window alone, which holds `unread`.
+   */
+  setBadgeCount: (count: number) => Promise<void>
+  /**
    * The left column's Search: `query` across every file in the workspace and
    * everything said in every chat — see `WorkspaceSearch`.
    *
@@ -2756,6 +2749,7 @@ export const IPC = {
   openChatWindow: "window:open-chat",
   setAlwaysOnTop: "window:set-always-on-top",
   isAlwaysOnTop: "window:is-always-on-top",
+  setBadgeCount: "app:set-badge-count",
   searchWorkspace: "search:workspace",
   deleteWorktreeChat: "worktree-chats:delete",
   clearWorktreeChat: "worktree-chats:clear",
