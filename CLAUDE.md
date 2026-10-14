@@ -138,11 +138,12 @@ imports may reach `electron`.
   with the editor's buffer on stdin, for the current-line annotation
   (`lib/editor-git-blame.ts`, § Who last changed a line), and
   `lineHistory` (`git log -L`) the card's list of every commit that changed
-  that line. Amend, branch and
-  push stay out — that is
-  the git client the dock's shell already is; the `Commits` view's **Push**
-  button only types `git push` into a dock shell, so a key's passphrase is
-  asked there. `discard`
+  that line. Amend and branch
+  stay out — that is
+  the git client the dock's shell already is. **`push`** is the `Commits`
+  view's button, run in the background and **never prompting** (no tty,
+  prompts off, a timeout); a push that needed a passphrase answers `auth` and
+  the renderer re-runs it in a dock shell, which can ask (`test/git-push.ts`). `discard`
   answers with the paths it could not restore instead of deleting them: they go
   to the trash in `ipc.ts`, because this module stays free of `electron` so the
   tests can import it.
@@ -502,8 +503,8 @@ its checkouts' chats too, since folding it now hides them.
 checkout goes on `vsclaude/untitled-<hex>` and the first chat in it that receives a
 title renames the branch _and_ the project (`nameWorktree` in `ipc.ts`, off the
 same CLI `ai-title` a chat names itself with, so it costs no turn). That
-`git branch -m` is the **one branch write in this app** — `git.ts` keeps branch,
-amend, log and push out — and it is narrow by construction: only a branch this
+`git branch -m` is the **one branch write in this app** — `git.ts` keeps branch
+and amend out — and it is narrow by construction: only a branch this
 app minted, only while `isUntitledBranch` still holds, never one the user named.
 
 ### Constraints that bite

@@ -729,11 +729,15 @@ Three more, each something a reader kept leaving the list for:
   the list (`upstream`). A branch with no upstream counts against every remote
   (`--not --remotes`), since a branch nobody has pushed is where it matters most;
   a repository with no remote marks nothing. Beside the count, a **Push**
-  button — which pushes nothing itself: it opens a dock shell in the folder
-  typing `git push` (`git push -u origin HEAD` with no upstream). A push run
-  from main through `execFile` has no terminal, so an SSH key's passphrase, a
-  credential helper or a 2FA prompt would hang or fail it; the shell asks, and
-  leaves a rejected push's reason on screen. `main/git.ts` gains no write.
+  button: `git push` (`-u origin HEAD` with no upstream) run by main in the
+  background (`push`), with the login shell's env so an ssh agent exported in a
+  profile is seen. It **never prompts** — detached from any tty, git's and
+  GCM's prompts off, a timeout behind them — because there is nothing here to
+  answer a prompt in. A push that needed somebody to type (a key's passphrase
+  no agent or Keychain holds, a host key to accept) answers `auth`, and the
+  same command is typed into a **dock shell**, which can ask; a refusal is
+  git's own words under the line. It was a shell every time at first, which
+  put a terminal on screen for the push that needed nothing.
 - **A filter** — message, author or the start of the hash, matched in main
   (`commitMatches`) rather than by `--grep`/`--author`, which git **ands**. The
   log is streamed and the process killed once a page of matches is in, so a
@@ -774,7 +778,7 @@ diff and the last ten subjects — a button pressed, its output text in a box
 somebody still has to commit, which is why it passes the rule against helper
 turns. A failed commit **rejects** and keeps the message. No amend, branch
 or stash: the dock's shell is the git client. Push is the `Commits` view's
-button, and it too is that shell (§ Commits).
+button (§ Commits).
 
 ### Resolving a conflict in the file
 

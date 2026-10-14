@@ -12,6 +12,7 @@ import type {
   GitCommitFileDiff,
   GitFileState,
   GitLineCommit,
+  GitPushResult,
   GitStatusEntry,
   GitUpstream,
 } from "../shared/api"
@@ -1477,7 +1478,8 @@ function isRepoPath(file: string): boolean {
  * panel with no room for one" — it is reading a diff, then ending that reading.
  * `docs/design.md` § Committing carries the whole argument.
  *
- * What is still refused is everything after it: no amend, no branch, no push.
+ * What is still refused is everything after it: no amend, no branch. (`push`
+ * came later, for the `Commits` view's button, and never prompts.)
  * This app is not becoming a second and worse git client — it finishes the one
  * gesture it already had somebody in the middle of. (A read-only list of
  * commits came later, `log` above; it writes nothing.)
@@ -1502,6 +1504,99 @@ export async function commit(
   const sha = (await git(dir, ["rev-parse", "--short", "HEAD"])).trim()
   return { sha, subject: body.split("\n")[0] ?? "" }
 }
+
+/**
+ * The checked-out branch, pushed — or, with no upstream yet, pushed to `origin`
+ * under its own name and tracked (`-u origin HEAD`).
+ *
+ * The one write to a **remote**, and the `Commits` view's button. It never
+ * asks anything: there is no terminal here to ask in, so a passphrase, a
+ * username or a host key to accept would leave the push waiting on nobody.
+ * Started in a new session (`detached`), which is what keeps ssh off a
+ * controlling tty — under `bun run dev` main has one, and ssh opens
+ * `/dev/tty` itself — with git's own prompts and Git Credential Manager's
+ * switched off and a timeout behind them. A key already in the agent or the
+ * Keychain pushes; one that would have to be asked for answers `auth`, and
+ * the renderer moves the same command to a dock shell, which can ask.
+ *
+ * `env` is the caller's, so this module stays free of the login-shell read:
+ * an agent socket exported in `.zshrc` (1Password, Secretive) is exactly what
+ * decides whether a key needs asking for.
+ */
+export async function push(
+  dir: string,
+  env: Record<string, string | undefined>
+): Promise<GitPushResult> {
+  const tracked = await git(dir, [
+    "rev-parse",
+    "--abbrev-ref",
+    "--symbolic-full-name",
+    "@{upstream}",
+  ]).then(
+    () => true,
+    () => false
+  )
+  const args = tracked ? ["push"] : ["push", "-u", "origin", "HEAD"]
+  const command = `git ${args.join(" ")}`
+
+  const { code, output, timedOut } = await new Promise<{
+    code: number | null
+    output: string
+    timedOut: boolean
+  }>((resolve) => {
+    const child = spawn("git", args, {
+      cwd: dir,
+      detached: true,
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
+      env: {
+        ...env,
+        GIT_TERMINAL_PROMPT: "0",
+        GCM_INTERACTIVE: "never",
+        // An askpass would put a prompt back on screen from outside this app.
+        GIT_ASKPASS: "",
+        SSH_ASKPASS: "",
+        SSH_ASKPASS_REQUIRE: "never",
+      },
+    })
+    let output = ""
+    child.stdout.on("data", (chunk: Buffer) => (output += chunk.toString()))
+    child.stderr.on("data", (chunk: Buffer) => (output += chunk.toString()))
+    let timedOut = false
+    const timer = setTimeout(() => {
+      timedOut = true
+      child.kill()
+    }, PUSH_TIMEOUT_MS)
+    child.on("error", (error) => {
+      clearTimeout(timer)
+      resolve({ code: null, output: error.message, timedOut })
+    })
+    child.on("close", (code) => {
+      clearTimeout(timer)
+      resolve({ code, output, timedOut })
+    })
+  })
+
+  const message = output.trim()
+  if (code === 0) return { ok: true, command, message }
+  // A push that hung is one that was waiting for something to be typed, as
+  // far as anybody can tell from here — the terminal is where to find out.
+  if (timedOut || AUTH_FAILURE.test(message))
+    return { ok: false, reason: "auth", command, message }
+  return { ok: false, reason: "failed", command, message }
+}
+
+/** Long enough for a slow remote and a large pack, short of somebody giving
+ * up on the button. */
+const PUSH_TIMEOUT_MS = 90_000
+
+/**
+ * What git and ssh say when the push needed somebody to type something:
+ * a key whose passphrase is in no agent, a host key nobody has accepted, a
+ * credential with prompting off.
+ */
+const AUTH_FAILURE =
+  /Permission denied \(|Host key verification failed|terminal prompts disabled|could not read (Username|Password)|Authentication failed|passphrase|read_passphrase|askpass/i
 
 /** Whether `HEAD` has this path — the question that decides whether discarding
  * it is a restore or a deletion. False for a repository with no commits, where

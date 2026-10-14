@@ -125,6 +125,10 @@ export function CommitsList({ root }: { root: FileRoot }) {
   }, [root.folderId, status, count, query])
 
   const [upstream, setUpstream] = useState<GitUpstream | null>(null)
+  /** Bumped by a push from the button, which moves the remote-tracking ref
+   * and nothing in the working tree — so not a status the list would re-read
+   * on. */
+  const [pushes, setPushes] = useState(0)
   useEffect(() => {
     let current = true
     void window.desktop
@@ -136,7 +140,7 @@ export function CommitsList({ root }: { root: FileRoot }) {
     return () => {
       current = false
     }
-  }, [root.folderId, status])
+  }, [root.folderId, status, pushes])
 
   /** The commits opened into their files, and the files read for them — a
    * commit's files never change, so a read is kept for as long as the list. */
@@ -198,7 +202,11 @@ export function CommitsList({ root }: { root: FileRoot }) {
             </button>
           )}
         </div>
-        <UpstreamLine upstream={upstream} folderId={root.folderId} />
+        <UpstreamLine
+          upstream={upstream}
+          folderId={root.folderId}
+          onPushed={() => setPushes((count) => count + 1)}
+        />
       </div>
 
       {read === null ? (
@@ -252,37 +260,83 @@ export function CommitsList({ root }: { root: FileRoot }) {
 }
 
 /**
- * Where the branch stands against its remote, in one line over the list.
- * Nothing at all for a repository with no remote, which has nowhere to stand.
+ * Where the branch stands against its remote, in one line over the list, and
+ * the push for whatever is ahead of it. Nothing at all for a repository with no
+ * remote, which has nowhere to stand.
  */
 function UpstreamLine({
   upstream,
   folderId,
+  onPushed,
 }: {
   upstream: GitUpstream | null
   folderId: string
+  onPushed: () => void
 }) {
+  const [pushing, setPushing] = useState(false)
+  const [said, setSaid] = useState<{ ok: boolean; text: string } | null>(null)
+
   if (!upstream) return null
   const { name, aheadCount, behind } = upstream
 
-  if (!name) {
-    if (aheadCount === 0) return null
-    return (
+  /**
+   * In the background first, and in a dock shell only when that could not
+   * finish without somebody typing — a key's passphrase that no agent holds, a
+   * host key to accept. `push` in `main/git.ts` never prompts, so that case
+   * comes back as `auth` rather than as a push left hanging; the shell then
+   * runs the same command, where ssh can ask.
+   */
+  async function onPush() {
+    setPushing(true)
+    setSaid(null)
+    const result = await window.desktop.gitPush(folderId).catch(
+      (error: unknown) =>
+        ({
+          ok: false,
+          reason: "failed",
+          command: "git push",
+          message: error instanceof Error ? error.message : String(error),
+        }) as const
+    )
+    setPushing(false)
+    if (result.ok) {
+      setSaid({ ok: true, text: name ? `Pushed to ${name}` : "Pushed" })
+      onPushed()
+    } else if (result.reason === "auth") {
+      useShells.getState().run(folderId, result.command)
+    } else {
+      setSaid({ ok: false, text: result.message || "git push failed" })
+    }
+  }
+
+  const button = aheadCount > 0 && (
+    <button
+      type="button"
+      disabled={pushing}
+      title={
+        name
+          ? `Push ${aheadCount} commit${aheadCount === 1 ? "" : "s"} to ${name}`
+          : "Push this branch to origin and track it"
+      }
+      onClick={() => void onPush()}
+      className="ml-auto flex h-5 shrink-0 items-center gap-1 rounded px-1.5 text-[0.65rem] text-primary transition-colors hover:bg-primary/10 disabled:opacity-60"
+    >
+      <ArrowUp aria-hidden className="size-3" />
+      {pushing ? "Pushing…" : "Push"}
+    </button>
+  )
+
+  const line = !name ? (
+    aheadCount === 0 ? null : (
       <p className="flex items-center gap-1.5 px-0.5 text-[0.65rem] text-muted-foreground">
         <span className="min-w-0 truncate">
           No upstream —{" "}
           <span className="text-primary">↑{aheadCount} not on any remote</span>
         </span>
-        <PushButton
-          folderId={folderId}
-          command="git push -u origin HEAD"
-          title="Push this branch to origin and track it"
-        />
+        {button}
       </p>
     )
-  }
-
-  return (
+  ) : (
     <p className="flex items-center gap-1.5 px-0.5 text-[0.65rem] text-muted-foreground">
       <span className="min-w-0 truncate font-mono">{name}</span>
       {aheadCount === 0 && behind === 0 ? (
@@ -302,45 +356,37 @@ function UpstreamLine({
           )}
         </span>
       )}
-      {aheadCount > 0 && (
-        <PushButton
-          folderId={folderId}
-          command="git push"
-          title={`Push ${aheadCount} commit${aheadCount === 1 ? "" : "s"} to ${name}`}
-        />
-      )}
+      {button}
     </p>
   )
-}
 
-/**
- * Types the push into a **dock shell** rather than running it in main: a key
- * with a passphrase, a credential helper or a 2FA prompt all want a terminal,
- * and `execFile` has none to ask in — it would hang or fail where the shell
- * simply asks. It also leaves the output, and a rejected push's reason, on
- * screen. No new write in `main/git.ts`: the dock's shell is still the git
- * client, this only saves typing into it. The list re-reads off the git status
- * like after any push made there.
- */
-function PushButton({
-  folderId,
-  command,
-  title,
-}: {
-  folderId: string
-  command: string
-  title: string
-}) {
   return (
-    <button
-      type="button"
-      title={`${title} — runs \`${command}\` in the terminal`}
-      onClick={() => useShells.getState().run(folderId, command)}
-      className="ml-auto flex h-5 shrink-0 items-center gap-1 rounded px-1.5 text-[0.65rem] text-primary transition-colors hover:bg-primary/10"
-    >
-      <ArrowUp aria-hidden className="size-3" />
-      Push
-    </button>
+    <>
+      {line}
+      {/* Under the line rather than in a toast, the way the worktree row says
+          git refused: a rejected push's reason — fetch first, a protected
+          branch — is git's own words and worth reading whole. */}
+      {said && (
+        <p
+          className={cn(
+            "flex items-start gap-1 px-0.5 text-[0.65rem]",
+            said.ok ? "text-muted-foreground" : "text-destructive"
+          )}
+        >
+          <span className="min-w-0 flex-1 break-words whitespace-pre-wrap">
+            {said.text}
+          </span>
+          <button
+            type="button"
+            aria-label="Dismiss"
+            onClick={() => setSaid(null)}
+            className="shrink-0 text-muted-foreground hover:text-foreground"
+          >
+            <X className="size-3" />
+          </button>
+        </p>
+      )}
+    </>
   )
 }
 

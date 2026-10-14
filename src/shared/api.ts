@@ -162,6 +162,12 @@ export type GitUpstream = {
   webUrl: string | null
 }
 
+/** What `gitPush` answers with — see `push` in `main/git.ts`. `auth` is a push
+ * that needed somebody to type something, and is moved to a dock shell. */
+export type GitPushResult =
+  | { ok: true; command: string; message: string }
+  | { ok: false; reason: "auth" | "failed"; command: string; message: string }
+
 /** What the New worktree dialog offers — see `worktreeOptions` in
  * `main/worktrees.ts`. */
 export type WorktreeOptions = {
@@ -2158,7 +2164,8 @@ export type DesktopApi = {
    *
    * `gitCommit` is the fourth now, and the reversal is recorded on `commit` in
    * `main/git.ts` and in `docs/design.md` § Committing. What is still refused is
-   * everything past it: no amend, no log, no branch, no push.
+   * everything past it: no amend, no branch. `gitPush` pushes, without
+   * prompting — see `push` there.
    */
   gitStage: (folderId: string, paths: string[]) => Promise<void>
   gitUnstage: (folderId: string, paths: string[]) => Promise<void>
@@ -2184,6 +2191,12 @@ export type DesktopApi = {
     folderId: string,
     message: string
   ) => Promise<{ sha: string; subject: string }>
+  /**
+   * The checked-out branch pushed, in the background, without prompting —
+   * `docs/design.md` § Commits. Answers rather than rejects, since `auth` is
+   * not an error so much as a request for the terminal.
+   */
+  gitPush: (folderId: string) => Promise<GitPushResult>
   /**
    * A commit message for what is staged, drafted by the read-only `claude`.
    *
@@ -2884,6 +2897,7 @@ export const IPC = {
   gitDiscard: "git:discard",
   gitDiscardAll: "git:discard-all",
   gitCommit: "git:commit",
+  gitPush: "git:push",
   draftCommitMessage: "git:draft-message",
   cancelCommitDraft: "git:draft-cancel",
   fileDiff: "git:file-diff",
