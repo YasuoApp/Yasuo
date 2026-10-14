@@ -237,6 +237,53 @@
 }
 
 /*
+ * A light running round a box's border while something writes into it — the
+ * commit message while `claude` drafts it (`commit-box.tsx`). The spinner on
+ * the button says work is happening; this says where the answer will land.
+ *
+ * The ring is a pseudo-element over the box's own 1px border, a conic gradient
+ * masked down to that border, so the box underneath keeps its background, focus
+ * ring and size. What turns is the gradient's start angle, registered with
+ * `@property` so it interpolates — an unregistered custom property would jump.
+ * Like the shimmer it repaints, and what it repaints is one thin outline.
+ */
+@property --run-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@keyframes border-run {
+  to {
+    --run-angle: 360deg;
+  }
+}
+
+.border-run {
+  position: relative;
+}
+
+.border-run[data-running]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  padding: 1px;
+  border-radius: inherit;
+  pointer-events: none;
+  background: conic-gradient(
+    from var(--run-angle),
+    transparent 0 55%,
+    color-mix(in oklab, var(--primary) 40%, transparent) 75%,
+    var(--primary) 92%,
+    transparent
+  );
+  mask:
+    linear-gradient(#000 0 0) content-box exclude,
+    linear-gradient(#000 0 0);
+  animation: border-run 1.6s linear infinite;
+}
+
+/*
  * The onboarding tour's spotlight (`onboarding-tour.tsx`) sliding from one
  * target to the next. A transition rather than a keyframe because the
  * destination is measured off the page, not known in advance; it is here with
@@ -281,5 +328,11 @@
   [data-splash],
   .tour-spot {
     transition-duration: 1ms !important;
+  }
+
+  /* The button's spinner already says the draft is running, so the ring stops
+     travelling and breathes in place instead. */
+  .border-run[data-running]::after {
+    animation: breathe 2.6s ease-in-out infinite;
   }
 }
