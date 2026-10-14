@@ -1107,6 +1107,36 @@ function stateOf(x: string, y: string): GitFileState {
   return "modified"
 }
 
+/**
+ * What git ignores under `dir`, as paths relative to it with forward slashes —
+ * an ignored directory as one entry, not as everything inside it.
+ *
+ * Asked of git rather than read out of `.gitignore`: nesting, negation, the
+ * global excludes file and `.git/info/exclude` are git's to apply, and a second
+ * reading of them would be one that disagrees in the cases nobody tests. Empty
+ * for a folder that is not a repository, which leaves the walk to its fixed list.
+ */
+export async function ignoredPaths(dir: string): Promise<Set<string>> {
+  try {
+    const out = await git(dir, [
+      "ls-files",
+      "-z",
+      "--others",
+      "--ignored",
+      "--exclude-standard",
+      "--directory",
+    ])
+    return new Set(
+      out
+        .split("\0")
+        .filter(Boolean)
+        .map((entry) => entry.replace(/\/$/, ""))
+    )
+  } catch {
+    return new Set()
+  }
+}
+
 async function git(dir: string, args: string[]): Promise<string> {
   const { stdout } = await run("git", args, {
     cwd: dir,

@@ -44,6 +44,5 @@ export default {
     app.register(close)
 
     app.addRailButton({ id: "open", label: "Usage", icon: "chart", run: show })
-    app.addCommand({ id: "open", name: "Show usage", run: show })
   },
 }

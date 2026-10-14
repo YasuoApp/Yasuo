@@ -12,16 +12,6 @@
  * what a plugin is handed on top of it.
  */
 
-/** One command a plugin added to the palette. */
-export type PluginCommand = {
-  /** `<plugin id>:<the plugin's own id>`, so two plugins can both call a
-   * command `open` without one replacing the other. */
-  id: string
-  pluginId: string
-  name: string
-  run: () => void | Promise<void>
-}
-
 /**
  * The marks a plugin's menu item may carry, by name: a plugin cannot hand the
  * studio a React component, and an item with no mark sits misaligned in a menu
@@ -40,6 +30,8 @@ export type PluginIcon = (typeof PLUGIN_ICONS)[number]
 
 /** One item a plugin added to a chat row's context menu. */
 export type PluginChatMenuItem = {
+  /** `<plugin id>:<the plugin's own id>`, so two plugins can both call an
+   * item `export` without one replacing the other. */
   id: string
   pluginId: string
   name: string
@@ -64,7 +56,6 @@ export type PluginModule<App> = {
 
 export class PluginRegistry {
   private readonly disposers = new Map<string, (() => void)[]>()
-  private readonly commands = new Map<string, PluginCommand>()
   private readonly chatMenuItems = new Map<string, PluginChatMenuItem>()
   private readonly railButtons = new Map<string, PluginRailButton>()
   private readonly modules = new Map<string, PluginModule<unknown>>()
@@ -75,33 +66,6 @@ export class PluginRegistry {
     const list = this.disposers.get(pluginId) ?? []
     list.push(dispose)
     this.disposers.set(pluginId, list)
-  }
-
-  addCommand(
-    pluginId: string,
-    command: { id: string; name: string; run: PluginCommand["run"] }
-  ): void {
-    if (typeof command?.run !== "function") {
-      throw new Error("A command needs a `run` function.")
-    }
-    const id = `${pluginId}:${String(command.id)}`
-    this.commands.set(id, {
-      id,
-      pluginId,
-      name: String(command.name || command.id),
-      run: command.run,
-    })
-    this.track(pluginId, () => {
-      // Only if it is still this one: a plugin re-adding the same id replaced
-      // it, and the first registration's undo must not take the second away.
-      if (this.commands.get(id)?.run === command.run) this.commands.delete(id)
-    })
-    this.changed()
-  }
-
-  /** Every command, in the order they were added. */
-  commandList(): PluginCommand[] {
-    return [...this.commands.values()]
   }
 
   addChatMenuItem(
@@ -125,6 +89,8 @@ export class PluginRegistry {
       run: item.run,
     })
     this.track(pluginId, () => {
+      // Only if it is still this one: a plugin re-adding the same id replaced
+      // it, and the first registration's undo must not take the second away.
       if (this.chatMenuItems.get(id)?.run === item.run) {
         this.chatMenuItems.delete(id)
       }

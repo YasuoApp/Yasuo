@@ -9,6 +9,7 @@ import {
 import path from "node:path"
 
 import type { FileContent, FileEntry, FileIndexEntry } from "../shared/api"
+import { ignoredPaths } from "./git"
 
 /**
  * The Explorer's side of the disk: the workspace's folders, read and written
@@ -46,11 +47,11 @@ export const MAX_TEXT_FILE_BYTES = 2 * 1024 * 1024
  * magnitude, so this is also the difference between an index that takes a
  * moment and one that takes a minute.
  *
- * Deliberately a fixed list rather than `.gitignore`. Reading those means
- * parsing the format, honouring nesting and negation, and then explaining why
- * a file the user can plainly see is not in the palette — while this list is
- * wrong in only one direction: something ignored here is still reachable in the
- * tree, which shows everything.
+ * What a repository's `.gitignore` names is skipped as well, but that is asked
+ * of git (`ignoredPaths`) rather than parsed here. This list is for the folder
+ * that is not a repository, and for the one whose `.gitignore` forgot
+ * `node_modules`. Both are wrong in only one direction: something skipped is
+ * still reachable in the tree, which shows everything.
  */
 export const IGNORED_DIRECTORIES = new Set([
   ".cache",
@@ -280,6 +281,9 @@ export async function indexFiles(
 ): Promise<FileIndexEntry[]> {
   const found: FileIndexEntry[] = []
   const queue: string[] = [root]
+  // Once per walk, up front: an ignored directory is then never read at all,
+  // which for a repository's build output is most of what the walk would cost.
+  const ignored = await ignoredPaths(root)
 
   while (queue.length > 0 && found.length < limit) {
     const dir = queue.shift()!
@@ -302,6 +306,7 @@ export async function indexFiles(
       if (found.length >= limit) break
 
       const target = path.join(dir, dirent.name)
+      if (ignored.has(relative(target))) continue
       if (dirent.isDirectory()) {
         if (IGNORED_DIRECTORIES.has(dirent.name)) continue
         queue.push(target)

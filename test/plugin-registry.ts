@@ -42,9 +42,9 @@ section("load and unload")
     {
       default: {
         onload(app: App) {
-          app.registry.addCommand(app.id, {
+          app.registry.addRailButton(app.id, {
             id: "go",
-            name: "Go",
+            label: "Go",
             run: () => {},
           })
           app.registry.track(app.id, () => undone.push("first"))
@@ -57,7 +57,7 @@ section("load and unload")
     },
     { registry, id: "a" }
   )
-  check("namespaced", registry.commandList()[0]?.id === "a:go")
+  check("namespaced", registry.railButtonList()[0]?.id === "a:go")
   check("subscribers told", changes > 0)
   check("is loaded", registry.isLoaded("a"))
 
@@ -66,9 +66,9 @@ section("load and unload")
     {
       default: {
         onload(app: App) {
-          app.registry.addCommand(app.id, {
+          app.registry.addRailButton(app.id, {
             id: "go",
-            name: "Go",
+            label: "Go",
             run: () => {},
           })
         },
@@ -76,7 +76,7 @@ section("load and unload")
     },
     { registry, id: "b" }
   )
-  check("same id, two plugins", registry.commandList().length === 2)
+  check("same id, two plugins", registry.railButtonList().length === 2)
 
   const errors = await registry.unload("a")
   check("no errors", errors.length === 0)
@@ -86,10 +86,10 @@ section("load and unload")
     undone
   )
   check(
-    "only its own commands go",
+    "only its own buttons go",
     registry
-      .commandList()
-      .map((command) => command.id)
+      .railButtonList()
+      .map((button) => button.id)
       .join(",") === "b:go"
   )
   check("not loaded", !registry.isLoaded("a"))
@@ -105,9 +105,9 @@ section("failures")
       {
         default: {
           onload(app: App) {
-            app.registry.addCommand(app.id, {
+            app.registry.addRailButton(app.id, {
               id: "half",
-              name: "Half",
+              label: "Half",
               run: () => {},
             })
             throw new Error("boom")
@@ -120,7 +120,7 @@ section("failures")
     failed = true
   }
   check("onload's throw comes back", failed)
-  check("what it added is taken back", registry.commandList().length === 0)
+  check("what it added is taken back", registry.railButtonList().length === 0)
   check("not left loaded", !registry.isLoaded("bad"))
 
   await registry.load<App>(
@@ -131,7 +131,11 @@ section("failures")
           app.registry.track(app.id, () => {
             throw new Error("dispose")
           })
-          app.registry.addCommand(app.id, { id: "x", name: "X", run: () => {} })
+          app.registry.addRailButton(app.id, {
+            id: "x",
+            label: "X",
+            run: () => {},
+          })
         },
         onunload() {
           throw new Error("unload")
@@ -142,19 +146,19 @@ section("failures")
   )
   const errors = await registry.unload("messy")
   check("errors collected, not thrown", errors.length === 2)
-  check("still cleaned up", registry.commandList().length === 0)
+  check("still cleaned up", registry.railButtonList().length === 0)
 }
 
-section("re-adding a command")
+section("re-adding a button")
 {
   const registry = new PluginRegistry()
   const first = () => {}
   const second = () => {}
-  registry.addCommand("p", { id: "c", name: "One", run: first })
-  registry.addCommand("p", { id: "c", name: "Two", run: second })
-  check("replaced", registry.commandList()[0]?.name === "Two")
+  registry.addRailButton("p", { id: "c", label: "One", run: first })
+  registry.addRailButton("p", { id: "c", label: "Two", run: second })
+  check("replaced", registry.railButtonList()[0]?.label === "Two")
   await registry.unload("p")
-  check("both registrations undone", registry.commandList().length === 0)
+  check("both registrations undone", registry.railButtonList().length === 0)
 }
 
 section("chat menu items")

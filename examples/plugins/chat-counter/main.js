@@ -10,9 +10,10 @@ export default {
   async onload(app) {
     const saved = (await app.loadData()) ?? { finished: 0 }
 
-    app.addCommand({
+    app.addRailButton({
       id: "count",
-      name: "Count chats",
+      label: "Count chats",
+      icon: "puzzle",
       run() {
         const chats = app.chats.list()
         const folders = app.folders().length

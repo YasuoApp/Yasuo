@@ -13,7 +13,6 @@ import { exposeSharedModules } from "./shared-modules"
 import {
   PluginRegistry,
   type PluginChatMenuItem,
-  type PluginCommand,
   type PluginRailButton,
 } from "./registry"
 
@@ -54,7 +53,6 @@ type PluginsState = {
   enabled: string[]
   disabled: string[]
   status: Record<string, PluginStatus>
-  commands: PluginCommand[]
   chatMenuItems: PluginChatMenuItem[]
   railButtons: PluginRailButton[]
   notices: PluginNotice[]
@@ -76,8 +74,7 @@ type PluginsState = {
   install: (source: PluginSource) => Promise<PluginInstall | null>
   /** Switches a user's plugin off and moves it to the trash. */
   remove: (id: string) => Promise<void>
-  /** A notice in the plugin's name — `app.notice`, and the palette reporting a
-   * command that threw. */
+  /** A notice in the plugin's name — `app.notice`. */
   notify: (pluginId: string, text: string) => void
   dismissNotice: (key: number) => void
 }
@@ -89,7 +86,6 @@ let noticeKey = 0
 export const usePlugins = create<PluginsState>((set, get) => {
   registry.subscribe(() =>
     set({
-      commands: registry.commandList(),
       chatMenuItems: registry.chatMenuList(),
       railButtons: registry.railButtonList(),
     })
@@ -175,7 +171,6 @@ export const usePlugins = create<PluginsState>((set, get) => {
     enabled: [],
     disabled: [],
     status: {},
-    commands: [],
     chatMenuItems: [],
     railButtons: [],
     notices: [],

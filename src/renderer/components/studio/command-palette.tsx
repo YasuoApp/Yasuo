@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react"
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { defaultFilter } from "cmdk"
-import { BadgeCheck, MessageSquare, Puzzle } from "lucide-react"
+import { MessageSquare } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import {
@@ -22,11 +22,6 @@ import { isStudioShortcut } from "@/lib/shortcuts"
 import { useStudio } from "@/lib/store"
 import { PREFIX } from "@/lib/tabs"
 import { useWorktreeChats } from "@/lib/worktree-chat/store"
-import { usePlugins } from "@/lib/plugins/store"
-
-/** Keeps a plugin command's cmdk value apart from the tab prefixes in `PREFIX`,
- * which name things that open as tabs and this does not. */
-const PLUGIN_COMMAND_PREFIX = "plugin-command:"
 
 /**
  * One thing the palette can open.
@@ -89,12 +84,11 @@ type Notice = { text: string }
  * It listed tables and saved requests too, until the Database and API panels
  * were deleted; see `docs/design.md` § Database and API, removed.
  *
- * The studio's own actions are still not here — a palette that also ran them
- * would be the second place every action is spelled out, and they already sit
- * in the header or the context menu of the panel they belong to, where the
- * thing they act on is on screen. The `Commands` group is the plugins' alone:
- * a plugin has no header of its own to put a button in, so this is its one
- * place (`docs/design.md` § Plugins).
+ * Actions are not here — a palette that also ran them would be the second
+ * place every action is spelled out, and they already sit in the header or the
+ * context menu of the panel they belong to, where the thing they act on is on
+ * screen. Plugins' commands had a group here once, and it went for the same
+ * reason (`docs/design.md` § Plugins).
  */
 export function CommandPalette() {
   // On a store, so the left column's Search row opens the same dialog this
@@ -128,7 +122,10 @@ export function CommandPalette() {
       onOpenChange={setOpen}
       title="Go to"
       description="Search the workspace's files and chats."
-      className="sm:max-w-xl"
+      // At the top of the window rather than a third of the way down, VS
+      // Code's way: `top-2` lands it over the title bar's `Run a command`
+      // field, so the palette opens where its button is.
+      className="top-2 sm:max-w-xl"
     >
       {/* A child of the dialog, so the stores below are subscribed to
           while the palette is on screen and not for the whole run — a closed
@@ -172,6 +169,28 @@ function Palette({ onOpened }: { onOpened: () => void }) {
       group.entries.length > 0 && (active === ALL || group.kind === active)
   )
 
+  /*
+   * The highlighted row, held here rather than left to cmdk. cmdk picks the
+   * first row when the input changes, but the file rows are a shortlist cut
+   * from `query` and arrive a render later — by then cmdk has kept whichever
+   * row it had picked, scrolled that into view, and the list opens partway
+   * down. So once the rows for this query and tab are on screen, the list goes
+   * back to its top and the first row is the highlighted one.
+   */
+  const [value, setValue] = useState("")
+  const listRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    // A frame later, because cmdk sorts the rows in its own layout effects.
+    const frame = requestAnimationFrame(() => {
+      const list = listRef.current
+      if (!list) return
+      list.scrollTop = 0
+      const first = list.querySelector("[cmdk-item]")
+      setValue(first?.getAttribute("data-value") ?? "")
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [query, active])
+
   function cycle(by: number) {
     const order = [ALL, ...tabs.map((group) => group.kind)]
     const at = order.indexOf(active)
@@ -196,6 +215,8 @@ function Palette({ onOpened }: { onOpened: () => void }) {
   return (
     <Command
       filter={score}
+      value={value}
+      onValueChange={setValue}
       /*
        * `⇥` walks the tabs, the way it does in a browser's own find bar.
        * Claimed here rather than left to the input, where it would move focus
@@ -247,7 +268,7 @@ function Palette({ onOpened }: { onOpened: () => void }) {
         <p className="px-3 pt-2 text-xs text-muted-foreground">{notice.text}</p>
       )}
 
-      <CommandList className="max-h-[min(60vh,24rem)]">
+      <CommandList ref={listRef} className="max-h-[min(60vh,24rem)]">
         <CommandEmpty className="text-muted-foreground">
           {tabs.length === 0
             ? "Nothing to open yet. Add a project and start a chat in it."
@@ -344,8 +365,6 @@ function useEntries(query: string): Group[] {
 
   const chats = useWorktreeChats((state) => state.chats)
   const folders = useStudio((state) => state.folders)
-  const commands = usePlugins((state) => state.commands)
-  const plugins = usePlugins((state) => state.plugins)
 
   return useMemo(() => {
     const fileEntries: Entry[] = shortlist(files, query).map((entry) => {
@@ -402,41 +421,6 @@ function useEntries(query: string): Group[] {
       }
     })
 
-    const commandEntries: Entry[] = commands.map((command) => {
-      const info = plugins.find(
-        (candidate) => candidate.id === command.pluginId
-      )
-      const plugin = info?.manifest?.name ?? command.pluginId
-      return {
-        value: PLUGIN_COMMAND_PREFIX + command.id,
-        label: command.name,
-        hint: plugin,
-        keywords: [command.name, plugin],
-        // The official mark where the plugin ships with the app — see
-        // `OfficialBadge` for why that is read off `bundled` alone.
-        icon: info?.bundled ? (
-          <BadgeCheck className="size-3.5 shrink-0 text-primary" />
-        ) : (
-          <Puzzle className="size-3.5 shrink-0" />
-        ),
-        open: async () => {
-          // A plugin's failure is reported as the plugin's, and the palette
-          // still closes — it is not the palette that went wrong.
-          try {
-            await command.run()
-          } catch (error) {
-            console.error(`[plugin ${command.pluginId}]`, error)
-            usePlugins
-              .getState()
-              .notify(
-                command.pluginId,
-                `${command.name} failed: ${error instanceof Error ? error.message : String(error)}`
-              )
-          }
-        },
-      }
-    })
-
     /*
      * Every kind, empty ones included — the tab row is drawn from this list and
      * has to know a kind exists before a query has matched any of it. What
@@ -461,14 +445,8 @@ function useEntries(query: string): Group[] {
         entries: chatEntries,
         available: chatEntries.length > 0,
       },
-      {
-        kind: "commands",
-        heading: "Commands",
-        entries: commandEntries,
-        available: commandEntries.length > 0,
-      },
     ]
 
     return all
-  }, [files, query, chats, folders, commands, plugins])
+  }, [files, query, chats, folders])
 }

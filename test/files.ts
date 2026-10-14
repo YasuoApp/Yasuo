@@ -1,6 +1,8 @@
+import { execFile } from "node:child_process"
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
+import { promisify } from "node:util"
 
 import {
   compareEntries,
@@ -30,6 +32,8 @@ import {
   stemEnd,
 } from "../src/renderer/lib/files/paths"
 import { check, finish, section } from "./harness"
+
+const run = promisify(execFile)
 
 /**
  * The Explorer's side of the disk.
@@ -430,6 +434,39 @@ async function main() {
         .filter((item) => item.kind === "directory")
         .every((item) => item.bytes === 0)
     )
+
+    // A repository of its own, so the `.gitignore` is git's to read.
+    const repo = await mkdtemp(path.join(tmpdir(), "vsclaude-ignored-"))
+    try {
+      await run("git", ["init", "-q"], { cwd: repo })
+      await writeFile(path.join(repo, ".gitignore"), "out/\n*.log\n!keep.log\n")
+      await mkdir(path.join(repo, "out"), { recursive: true })
+      await writeFile(path.join(repo, "out", "bundle.js"), "")
+      await writeFile(path.join(repo, "debug.log"), "")
+      await writeFile(path.join(repo, "keep.log"), "")
+      await writeFile(path.join(repo, "index.ts"), "")
+
+      const inRepo = (await indexFiles(repo, "folder-2")).map(
+        (item) => item.relative
+      )
+      check(
+        "a folder .gitignore names is skipped, and nothing under it is read",
+        !inRepo.some((relative) => relative.startsWith("out")),
+        inRepo
+      )
+      check(
+        "a file .gitignore names is skipped",
+        !inRepo.includes("debug.log"),
+        inRepo
+      )
+      check(
+        "a negated pattern is git's to apply, so the file is kept",
+        inRepo.includes("keep.log") && inRepo.includes("index.ts"),
+        inRepo
+      )
+    } finally {
+      await rm(repo, { recursive: true, force: true })
+    }
 
     section("shortlist")
 

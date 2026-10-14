@@ -37,12 +37,6 @@ export type PluginChat = {
 export type PluginApp = {
   manifest: PluginManifest
 
-  /** A row in the palette's `Commands` group. */
-  addCommand: (command: {
-    id: string
-    name: string
-    run: () => void | Promise<void>
-  }) => void
   /** An item in a chat row's context menu, handed that chat's id. */
   addChatMenuItem: (item: {
     id: string
@@ -114,7 +108,6 @@ export function createPluginApp(
   return {
     manifest,
 
-    addCommand: (command) => registry.addCommand(id, command),
     addChatMenuItem: (item) => registry.addChatMenuItem(id, item),
     addRailButton: (button) => registry.addRailButton(id, button),
     notice: (text) => notice(id, String(text)),

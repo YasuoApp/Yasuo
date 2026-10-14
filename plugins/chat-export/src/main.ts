@@ -93,11 +93,6 @@ export default {
         icon: format.icon,
         run: (chatId) => exporting(format, chatId),
       })
-      app.addCommand({
-        id: format.id,
-        name: `Chat: ${format.name}`,
-        run: () => exporting(format, app.chats.selected()),
-      })
     }
   },
 }
