@@ -418,6 +418,15 @@ first time the palette opens (skipping `IGNORED_DIRECTORIES`, capped at 20,000),
 re-walked by Refresh or when a folder is added or removed, and cut to a
 shortlist by a subsequence pass before cmdk ranks them.
 
+The walk also skips what the repository's `.gitignore` names. This reverses
+an earlier choice: the index used to be the fixed list alone, because reading
+`.gitignore` meant parsing it, with its nesting and negation. It is not parsed
+here. `git ls-files --others --ignored --exclude-standard --directory` is asked
+once per walk (`ignoredPaths` in `git.ts`), so git's own reading is the only
+one. A folder that is not a repository answers nothing and keeps the fixed list.
+The tree still shows everything, so an ignored file is a click away, not lost.
+Find in files walks the same index and skips the same paths.
+
 ### Searching inside the files and the chats
 
 The left column's **Search** (`⇧⌘F`): one query with `Aa` / `ab` / `.*` over
@@ -488,8 +497,8 @@ unzip on each OS.
 
 Its `main.js` is an ES module the renderer `import()`s off this app's
 `vsc-plugin://` scheme (`main/protocol.ts`), and its default export's `onload`
-is handed a `PluginApp` (`lib/plugins/app.ts`): palette commands, chat-row menu
-items, a corner notice, saved data, a save dialog, the clipboard, the
+is handed a `PluginApp` (`lib/plugins/app.ts`): chat-row menu items, rail
+buttons, a corner notice, saved data, a save dialog, the clipboard, the
 transcript's own Markdown renderer, the folders, and the chats — listed, read
 and subscribed to. What a plugin saves goes to `workspace/plugin-data/<id>.json`
 rather than beside its files, because a built-in plugin's folder is inside the
@@ -514,11 +523,14 @@ confirm clicked through once. Real isolation — a sandboxed `iframe` per plugin
 on its own origin, talking `postMessage` — is the next step if plugins are ever
 installed from somewhere other than the user's own hands.
 
-**The palette gained a `Commands` group** for them, which reverses its own
-"opens things and nothing more": the studio's actions still live beside what
-they act on, but a plugin has no header to put a button in, so the palette is
-its one place — that, and a chat row's menu, which is where the first built-in
-plugin's items already were. A plugin's menu item names one of a few marks
+**A plugin's surface is a chat row's menu and the rail**, where the built-in
+plugins' items already were. The palette had a `Commands` group for them too,
+and it was removed: it broke the palette's "opens things and nothing more" for
+a list that only repeated buttons already on screen — `Show usage` was the
+rail's `Usage`, and the export commands were the chat row's own items. So
+`addCommand` is gone from `PluginApp`. A plugin that still calls it throws in
+`onload` and is switched back off with the reason shown, which is what an
+unknown call on that object would do anyway. A plugin's menu item names one of a few marks
 (`PLUGIN_ICONS`) rather than handing over a component. The rest of what a
 plugin might want — a tab, a rail button, a settings page of its own — is
 deliberately not in this cut.
