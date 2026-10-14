@@ -3,13 +3,13 @@ import { Check, Copy, Loader2 } from "lucide-react"
 
 import type { ClaudeVersions } from "@shared/api"
 import { Button } from "@/components/ui/button"
-import { useClaudeProfiles } from "@/lib/worktree-chat/claude-profiles"
+import { useClaudeProfiles } from "@/lib/chat/claude-profiles"
 import {
   installCommand,
   installShell,
   setupStep,
   type SetupStep,
-} from "@/lib/worktree-chat/claude-setup"
+} from "@/lib/chat/claude-setup"
 import { ClaudeLoginDialog } from "./claude-login-dialog"
 
 const SETUP_DOCS = "https://docs.claude.com/en/docs/claude-code/setup"

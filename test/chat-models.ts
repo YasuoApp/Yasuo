@@ -10,7 +10,7 @@ import {
   effortFor,
   mergeModels,
   orderedModels,
-} from "../src/renderer/lib/worktree-chat/models"
+} from "../src/renderer/lib/chat/models"
 import { check, finish, section } from "./harness"
 
 /**

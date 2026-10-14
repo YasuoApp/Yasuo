@@ -4,7 +4,7 @@ import { X } from "lucide-react"
 import { noteFileUrl } from "@shared/note-files"
 
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
-import { imageTag } from "@/lib/worktree-chat/images"
+import { imageTag } from "@/lib/chat/images"
 import { cn } from "@/lib/utils"
 
 /**

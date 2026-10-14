@@ -6,7 +6,7 @@ import {
   parseCommand,
   rankCommands,
   visibleCommands,
-} from "../src/renderer/lib/worktree-chat/command-text"
+} from "../src/renderer/lib/chat/command-text"
 import { check, finish, section } from "./harness"
 
 /**

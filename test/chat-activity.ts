@@ -8,7 +8,7 @@ import {
   splitSubagents,
   summaryOf,
   usageOfAll,
-} from "../src/renderer/lib/worktree-chat/activity"
+} from "../src/renderer/lib/chat/activity"
 import {
   changeOf,
   describeCall,

@@ -1,10 +1,10 @@
-import type { WorktreeChat } from "../src/shared/api"
+import type { Chat } from "../src/shared/api"
 import {
   activityLabel,
   activityOf,
   activityTitle,
   isRunning,
-} from "../src/renderer/lib/worktree-chat/running"
+} from "../src/renderer/lib/chat/running"
 import { check, finish, section } from "./harness"
 
 /**
@@ -21,7 +21,7 @@ import { check, finish, section } from "./harness"
 
 /** Only the id is read, and a fixture built out of the whole record would be a
  * test that breaks when an unrelated field is added. */
-const chat = (id: string): WorktreeChat => ({ id }) as WorktreeChat
+const chat = (id: string): Chat => ({ id }) as Chat
 
 const three = [chat("a"), chat("b"), chat("c")]
 

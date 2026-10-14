@@ -54,14 +54,14 @@ import {
   accountLabel,
   nextProfileName,
   useClaudeProfiles,
-} from "@/lib/worktree-chat/claude-profiles"
-import { useAgentModels } from "@/lib/worktree-chat/models"
+} from "@/lib/chat/claude-profiles"
+import { useAgentModels } from "@/lib/chat/models"
 import { ClaudeLoginDialog } from "./claude-login-dialog"
 import { IconButton } from "./icon-button"
 import { OfficialBadge } from "./official-badge"
 import { UpdateProgressBar } from "./update-progress"
-import { ModelMenu, ProfileMenu } from "./worktree/chat-composer"
-import { StateBadge } from "./worktree/chat-mcp"
+import { ModelMenu, ProfileMenu } from "./chat/chat-composer"
+import { StateBadge } from "./chat/chat-mcp"
 
 /**
  * The studio's preferences — **Settings…** in the application menu, ⌘,.

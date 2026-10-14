@@ -136,7 +136,7 @@ registerAppScheme()
 
 const {
   terminals,
-  worktreeChats,
+  allChats,
   tsServers,
   watchers,
   noteFilePath,
@@ -340,7 +340,7 @@ app.on("before-quit", (event) => {
         terminals.killAll(),
         // A turn in flight is a `claude` this app spawned; it goes with the app
         // rather than being left talking to a window that has gone.
-        worktreeChats.dispose(),
+        allChats.dispose(),
       ]),
       // A wedged daemon must not leave the app unquittable.
       new Promise((resolve) => setTimeout(resolve, CLEANUP_TIMEOUT_MS)),

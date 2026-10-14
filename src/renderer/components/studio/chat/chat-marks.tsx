@@ -12,7 +12,7 @@ import {
 import type { ComponentType, ReactNode, SVGProps } from "react"
 
 import type { AssistantMessage } from "@shared/api"
-import { AGENT_TOOLS } from "@/lib/worktree-chat/activity"
+import { AGENT_TOOLS } from "@/lib/chat/activity"
 import { cn } from "@/lib/utils"
 import { AsanaLogo } from "@/components/ui/svgs/asana"
 import { Atlassian } from "@/components/ui/svgs/atlassian"

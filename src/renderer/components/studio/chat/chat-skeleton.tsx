@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 
 import { cn } from "@/lib/utils"
-import { elapsed } from "@/lib/worktree-chat/since"
+import { elapsed } from "@/lib/chat/since"
 
 /**
  * What the chat pane shows while a turn is being sent: the loader, and how long

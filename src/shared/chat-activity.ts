@@ -2,7 +2,7 @@
  * How many chats are working, how many have stopped to ask, and how that reads.
  *
  * Drawn by the sidebar's project row and the rail
- * (`lib/worktree-chat/running.ts`, which re-exports all of this). It is under
+ * (`lib/chat/running.ts`, which re-exports all of this). It is under
  * `shared/` because the menu bar's tray used to draw it from main too; that is
  * deleted — `docs/design.md` § The menu bar, removed.
  */
@@ -20,7 +20,7 @@ export type ChatActivity = {
   /** Answering, and nothing is wanted from anybody. */
   working: number
   /** Stopped on a question. Nothing moves in these until they are answered, and
-   * nothing times them out — see `WorktreeChats.ask` in main. */
+   * nothing times them out — see `Chats.ask` in main. */
   waiting: number
 }
 

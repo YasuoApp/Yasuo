@@ -7,11 +7,11 @@ import {
   type ChatImage,
   type ChatPlace,
   type ChatWindow,
-  type WorktreeChat,
-  type WorktreeChatAnswer,
-  type WorktreeChatAsk,
+  type Chat,
+  type ChatAnswer,
+  type ChatAsk,
   type WorkspaceFolder,
-  type WorktreeChatOptions,
+  type ChatOptions,
 } from "@shared/api"
 import { localCommand } from "./command-text"
 import { storeImages } from "./images"
@@ -21,7 +21,9 @@ import { useShells } from "../shell/store"
 import { useStudio } from "../store"
 import { isRememberedTabs, recall, remember } from "../tab-memory"
 
-/** Which chats had a tab open, and which one was on screen. */
+/** Which chats had a tab open, and which one was on screen. Still keyed by the
+ * `worktree-` name the chats once had: a setting key already written keeps
+ * its name, or every open tab would be dropped once. */
 const OPEN_TABS_KEY = "worktree-chats.tabs"
 
 /**
@@ -46,7 +48,7 @@ function rememberTabs(state: { openIds: string[]; selectedId: string | null }) {
 /**
  * The chats held in the workspace's projects.
  *
- * A view of what `main/worktree-chat.ts` owns. The turn runs in the
+ * A view of what `main/chat.ts` owns. The turn runs in the
  * main process, so this holds no process and no timers — only the listing, the
  * lines of whichever chats have been opened, and which chat is on screen.
  *
@@ -54,8 +56,8 @@ function rememberTabs(state: { openIds: string[]; selectedId: string | null }) {
  * point rather than an edge case — a question about one project while another
  * is being refactored. So everything here is keyed by chat id.
  */
-type WorktreeChatState = {
-  chats: WorktreeChat[]
+type ChatState = {
+  chats: Chat[]
   loading: boolean
 
   /** Lines per chat, for the chats that have been opened this run. */
@@ -109,7 +111,7 @@ type WorktreeChatState = {
    * by category — which is what makes a percentage possible at all.
    *
    * Only for the chats a session has answered in this run. Main also keeps the
-   * last one on the record (`WorktreeChat.window`), which the pane falls back
+   * last one on the record (`Chat.window`), which the pane falls back
    * to, so a restarted app still has a meter before the next turn.
    */
   window: Record<string, ChatWindow>
@@ -143,7 +145,7 @@ type WorktreeChatState = {
    * Lost on a reload, like `sending` and for the same reason: what is on the
    * other end is a process in the main process, not a record.
    */
-  asks: Record<string, WorktreeChatAsk>
+  asks: Record<string, ChatAsk>
   /**
    * The messages sent into a chat that was already working, by chat id.
    *
@@ -175,7 +177,7 @@ type WorktreeChatState = {
    * already closed the app on.
    *
    * The rule for what lands here, and why an `ask` does not, is
-   * `lib/worktree-chat/unread.ts`. Cleared by looking at the chat — `select`,
+   * `lib/chat/unread.ts`. Cleared by looking at the chat — `select`,
    * and the window regaining focus while it is the one selected.
    */
   unread: Record<string, true>
@@ -292,7 +294,7 @@ type WorktreeChatState = {
    * The chat itself stays: same id, same tab, same title, same options. What
    * goes is the conversation, and with it the CLI session, since a chat's id is
    * its session id and the next message would otherwise resume into the context
-   * this was asked to throw away. See `clearWorktreeChat`.
+   * this was asked to throw away. See `clearChat`.
    */
   clear: (id: string) => Promise<void>
 
@@ -309,7 +311,7 @@ type WorktreeChatState = {
   /**
    * Message `at` — counted among the chat's user lines — said again as
    * `prompt`, with everything after it gone, here and in the CLI's session,
-   * and its pictures sent again as they were. See `editWorktreeChat`. Nothing while the chat is working: the bubble does
+   * and its pictures sent again as they were. See `editChat`. Nothing while the chat is working: the bubble does
    * not offer it, and main would refuse.
    */
   edit: (id: string, at: number, prompt: string) => Promise<void>
@@ -321,16 +323,16 @@ type WorktreeChatState = {
    * carries on the moment main has the answer, so a card left up until the
    * round trip completes is a card somebody can answer twice.
    */
-  answer: (chatId: string, answer: WorktreeChatAnswer) => void
+  answer: (chatId: string, answer: ChatAnswer) => void
   /** The model, effort and permission for one chat — the composer's toolbar. */
-  setOptions: (id: string, options: WorktreeChatOptions) => void
+  setOptions: (id: string, options: ChatOptions) => void
 
   /** Subscribes to turns. Called once from the workbench: a turn outlives the
    * pane being switched away from, and its lines have to land either way. */
   listen: () => () => void
 }
 
-export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
+export const useChats = create<ChatState>((set, get) => ({
   chats: [],
   loading: false,
   messages: {},
@@ -354,7 +356,7 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
   async refresh() {
     set({ loading: true })
     try {
-      const listed = await window.desktop.listWorktreeChats()
+      const listed = await window.desktop.listChats()
       // A chat main has never heard of is not missing from this list, it is
       // simply not main's yet — and a wholesale replace would close the tab
       // somebody is typing into. Kept at the end, where `create` put them.
@@ -362,7 +364,7 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
       const held = get().chats.filter((chat) => unsaved.includes(chat.id))
       set({ chats: [...listed, ...held], loading: false })
     } catch (error) {
-      console.error("Could not read the worktree chats", error)
+      console.error("Could not read the chats", error)
       set({ loading: false })
     }
   },
@@ -380,10 +382,10 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
     })
 
     // The pane too, or clicking a chat row would select a chat nothing is
-    // drawing: `worktree` is not a section, so it is only ever reached from a
+    // drawing: `chat` is not a section, so it is only ever reached from a
     // list in somebody else's sidebar, and this is the only thing that shows
     // it. Leaves the sections alone, as a session's pane does.
-    useStudio.getState().showPane("worktree")
+    useStudio.getState().showPane("chat")
 
     /*
      * And the workbench works in this chat's project.
@@ -474,7 +476,7 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
 
   async create(place, options) {
     const now = new Date().toISOString()
-    const chat: WorktreeChat = {
+    const chat: Chat = {
       /*
        * Minted here rather than by main, which is the whole of what makes an
        * unsaved chat possible: this id is the CLI's session id and the tab's
@@ -518,7 +520,7 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
       // Everything the tab picked up before anybody spoke into it goes with it
       // — see `ChatSeed`. `title` is `"Untitled"` unless `/rename` got there
       // first, and main reads that as no name at all.
-      await window.desktop.createWorktreeChat(place, {
+      await window.desktop.createChat(place, {
         id: chat.id,
         title: chat.title,
         options: chat.options,
@@ -578,7 +580,7 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
     // lost — `save` carries it over as the chat is written down.
     if (get().unsaved.includes(id)) return
 
-    void window.desktop.renameWorktreeChat(id, name).catch((error: unknown) => {
+    void window.desktop.renameChat(id, name).catch((error: unknown) => {
       console.error("Could not rename that chat", error)
     })
   },
@@ -587,7 +589,7 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
     // A chat that was never written down has nothing on disk to delete, and
     // asking main would be asking about an id it has never heard of.
     if (!get().unsaved.includes(id)) {
-      await window.desktop.deleteWorktreeChat(id).catch((error: unknown) => {
+      await window.desktop.deleteChat(id).catch((error: unknown) => {
         console.error("Could not delete that chat", error)
       })
     }
@@ -651,7 +653,7 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
     // behind it: the lines going from the screen is the whole of `/clear` there.
     if (get().unsaved.includes(id)) return
 
-    await window.desktop.clearWorktreeChat(id).catch((error: unknown) => {
+    await window.desktop.clearChat(id).catch((error: unknown) => {
       console.error("Could not clear that chat", error)
     })
   },
@@ -664,7 +666,7 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
      * The two commands this app answers rather than sends.
      *
      * Before the optimistic line below, so a `/clear` never appears in the
-     * transcript it is about to empty — and before `sendWorktreeChat`, so the
+     * transcript it is about to empty — and before `sendChat`, so the
      * CLI is never handed a message that would read as prose to it.
      */
     const local = localCommand(text)
@@ -732,7 +734,7 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
        */
       if (!(await get().save(id))) throw new Error("Could not start that chat.")
 
-      await window.desktop.sendWorktreeChat(id, text, kept)
+      await window.desktop.sendChat(id, text, kept)
     } catch (error) {
       // This line only, not the chat's other marks: a message that could not be
       // sent is not waiting behind anything, and the ones queued before it still
@@ -796,7 +798,7 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
     })
 
     try {
-      await window.desktop.editWorktreeChat(id, at, text)
+      await window.desktop.editChat(id, at, text)
     } catch (error) {
       // Main refuses before it cuts anything, so the chat is what it was: put
       // it back, with the reason under it.
@@ -823,7 +825,7 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
   },
 
   stop(id) {
-    void window.desktop.stopWorktreeChat(id).catch((error: unknown) => {
+    void window.desktop.stopChat(id).catch((error: unknown) => {
       console.error("Could not stop that turn", error)
     })
   },
@@ -835,7 +837,7 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
     set({ asks: without(get().asks, chatId) })
 
     void window.desktop
-      .answerWorktreeChatAsk(ask.id, answer)
+      .answerChatAsk(ask.id, answer)
       .catch((error: unknown) => {
         console.error("Could not answer that request", error)
       })
@@ -861,11 +863,9 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
     // over with the chat. A model picked before the first message is kept.
     if (get().unsaved.includes(id)) return
 
-    void window.desktop
-      .setWorktreeChatOptions(id, options)
-      .catch((error: unknown) => {
-        console.error("Could not save that chat's options", error)
-      })
+    void window.desktop.setChatOptions(id, options).catch((error: unknown) => {
+      console.error("Could not save that chat's options", error)
+    })
   },
 
   listen() {
@@ -881,7 +881,7 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
      * selects an id no row carries, which the pane already draws as nothing —
      * the same state a reload with a stale `selectedId` lands in.
      */
-    const stopReveal = window.desktop.onRevealWorktreeChat((chatId) => {
+    const stopReveal = window.desktop.onRevealChat((chatId) => {
       get().select(chatId)
     })
 
@@ -901,7 +901,7 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
     }
     window.addEventListener("focus", onFocus)
 
-    const stopEvents = window.desktop.onWorktreeChatEvent((event) => {
+    const stopEvents = window.desktop.onChatEvent((event) => {
       const { chatId } = event
 
       /*
@@ -956,7 +956,7 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
 
       /*
        * The chat has a name of its own now, in place of the sentence it was
-       * opened with — see `retitle` in `main/worktree-chat.ts`.
+       * opened with — see `retitle` in `main/chat.ts`.
        *
        * Arrives just ahead of `done`, whose re-read of the listing carries the
        * same name — so this is not what usually draws it. It is what draws it on
@@ -1158,7 +1158,7 @@ export const useWorktreeChats = create<WorktreeChatState>((set, get) => ({
 
 /** One project's chats, newest first. Keyed by root id, which for a chat is
  * its folder — the same key its group and its scope use. */
-export function chatsOf(chats: WorktreeChat[], rootId: string): WorktreeChat[] {
+export function chatsOf(chats: Chat[], rootId: string): Chat[] {
   return newestFirst(chats.filter((chat) => chatRootId(chat) === rootId))
 }
 
@@ -1170,7 +1170,7 @@ export function chatsOf(chats: WorktreeChat[], rootId: string): WorktreeChat[] {
  * you were reaching for moving as you click it. The file's own order is oldest
  * first, so a new chat landed at the bottom of a long project.
  */
-function newestFirst(chats: WorktreeChat[]): WorktreeChat[] {
+function newestFirst(chats: Chat[]): Chat[] {
   return [...chats].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
 }
 
@@ -1182,14 +1182,14 @@ function newestFirst(chats: WorktreeChat[]): WorktreeChat[] {
  * nowhere left to run its next turn. They were hidden for exactly that reason,
  * and hiding them was the wrong answer to it — the conversation is on disk and
  * readable, and a chat that silently stopped existing is worse than one that is
- * listed and says why when you send to it. `WorktreeChats.run` already finishes
+ * listed and says why when you send to it. `Chats.run` already finishes
  * such a turn with a line saying the project has gone, so the failure is
  * explained rather than mysterious.
  *
  * There is no `+` on that row and no `New chat here` on its menu: a chat needs
  * a directory to run in, and `Ungrouped` names the absence of one.
  */
-export function ungroupedChats(chats: WorktreeChat[]): WorktreeChat[] {
+export function ungroupedChats(chats: Chat[]): Chat[] {
   return newestFirst(chats.filter((chat) => chatRootId(chat) === null))
 }
 
@@ -1200,7 +1200,7 @@ export function ungroupedChats(chats: WorktreeChat[]): WorktreeChat[] {
  * `git worktree` checkout has only that checkout's id, and there is nowhere
  * left to run its next turn. Its lines are still on disk and still readable.
  */
-export function placeOf(chat: WorktreeChat): ChatPlace | null {
+export function placeOf(chat: Chat): ChatPlace | null {
   const rootId = chatRootId(chat)
   return rootId ? { folderId: rootId } : null
 }
@@ -1221,12 +1221,12 @@ export function placeOfRoot(
  * answer we already have.
  */
 function readLines(id: string): void {
-  const { getState, setState } = useWorktreeChats
+  const { getState, setState } = useChats
   if (getState().messages[id] || getState().reading.includes(id)) return
 
   setState({ reading: [...getState().reading, id] })
   void window.desktop
-    .readWorktreeChat(id)
+    .readChat(id)
     .then((lines) => {
       setState({ messages: { ...getState().messages, [id]: lines } })
     })
@@ -1249,8 +1249,8 @@ function without<T>(record: Record<string, T>, key: string): Record<string, T> {
   return rest
 }
 
-/** The listing with one chat's kept `window` dropped — see `WorktreeChat`. */
-function forgetWindow(chats: WorktreeChat[], id: string): WorktreeChat[] {
+/** The listing with one chat's kept `window` dropped — see `Chat`. */
+function forgetWindow(chats: Chat[], id: string): Chat[] {
   return chats.map((chat) =>
     chat.id === id && chat.window ? { ...chat, window: undefined } : chat
   )

@@ -1,10 +1,10 @@
-import type { WorktreeChat, WorktreeChatEvent } from "../src/shared/api"
+import type { Chat, ChatEvent } from "../src/shared/api"
 import {
   badgeCount,
   isWatched,
   marksUnread,
   unreadIn,
-} from "../src/renderer/lib/worktree-chat/unread"
+} from "../src/renderer/lib/chat/unread"
 import { check, finish, section } from "./harness"
 
 /**
@@ -22,17 +22,17 @@ import { check, finish, section } from "./harness"
 
 /** Only the id is read, and a fixture built out of the whole record would be a
  * test that breaks when an unrelated field is added. */
-const chat = (id: string): WorktreeChat => ({ id }) as WorktreeChat
+const chat = (id: string): Chat => ({ id }) as Chat
 
 /** Nobody is looking at anything — the case a background chat finishes in. */
 const away = { selectedId: null, focused: false }
 
-const quiet = (chatId: string): WorktreeChatEvent => ({
+const quiet = (chatId: string): ChatEvent => ({
   type: "busy",
   busy: false,
   chatId,
 })
-const busy = (chatId: string): WorktreeChatEvent => ({
+const busy = (chatId: string): ChatEvent => ({
   type: "busy",
   busy: true,
   chatId,

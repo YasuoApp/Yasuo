@@ -25,10 +25,10 @@ import {
   isAgentTool,
   isPending,
   summaryOf,
-} from "@/lib/worktree-chat/activity"
-import { dateTimeOf, timeOf } from "@/lib/worktree-chat/since"
-import { usageDetail, usageLine } from "@/lib/worktree-chat/usage"
-import { compactLine } from "@/lib/worktree-chat/window"
+} from "@/lib/chat/activity"
+import { dateTimeOf, timeOf } from "@/lib/chat/since"
+import { usageDetail, usageLine } from "@/lib/chat/usage"
+import { compactLine } from "@/lib/chat/window"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
@@ -36,7 +36,7 @@ import { MarkdownView } from "../markdown-view"
 import { IconButton } from "../icon-button"
 import { MentionText } from "./chat-composer"
 import { NoteImages } from "./chat-images"
-import { rowOf, splitStat } from "@/lib/worktree-chat/tool-row"
+import { rowOf, splitStat } from "@/lib/chat/tool-row"
 import { toolMark } from "./chat-marks"
 
 /**
@@ -51,7 +51,7 @@ import { toolMark } from "./chat-marks"
  *
  * **A tool row is one grammar, not a string.** A mark saying which kind of
  * tool it was, a verb, the one thing it was about as a chip, and what came back
- * at the far right — `rowOf` in `lib/worktree-chat/tool-row.ts` says which
+ * at the far right — `rowOf` in `lib/chat/tool-row.ts` says which
  * words, and why the order never changes. They are separate because they are
  * read at different speeds: the marks are scanned, the chips are looked for,
  * and the outcome is a column. A single line of
@@ -71,10 +71,10 @@ export function ChatMessage({
   /** Whether the turn this line is in is still running — see `ToolRow`. */
   live?: boolean
   /** On a usage line, what its turn said, for the turn's one copy button —
-   * `replyOf` in `lib/worktree-chat/activity.ts`. */
+   * `replyOf` in `lib/chat/activity.ts`. */
   reply?: string | null
   /** Sent while the chat was already working, so the CLI is holding it for the
-   * next turn — see `queued` in `lib/worktree-chat/store.ts`. Only ever true of
+   * next turn — see `queued` in `lib/chat/store.ts`. Only ever true of
    * a user line. */
   queued?: boolean
 }) {

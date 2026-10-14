@@ -9,13 +9,13 @@ import {
   summaryOf,
   type ActivityCounts,
   type ChatBlock,
-} from "@/lib/worktree-chat/activity"
+} from "@/lib/chat/activity"
 import {
   distinctFiles,
   groupOutcome,
   rowsOf,
   type ToolLine,
-} from "@/lib/worktree-chat/tool-row"
+} from "@/lib/chat/tool-row"
 import type { AssistantMessage } from "@shared/api"
 import {
   ChatMessage,

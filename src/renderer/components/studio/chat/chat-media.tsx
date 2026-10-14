@@ -19,7 +19,7 @@ import { nameOf, parentOf, relativeTo } from "@/lib/files/paths"
 import { rootOf } from "@/lib/files/roots"
 import { useFiles } from "@/lib/files/store"
 import { cn } from "@/lib/utils"
-import type { ChatMedia, MediaKind } from "@/lib/worktree-chat/media"
+import type { ChatMedia, MediaKind } from "@/lib/chat/media"
 import { IconButton } from "../icon-button"
 import { SideColumn } from "./side-column"
 

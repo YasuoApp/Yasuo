@@ -14,7 +14,7 @@ import {
   wireServer,
   withServerOff,
   withToolOff,
-} from "../src/renderer/lib/worktree-chat/mcp-servers"
+} from "../src/renderer/lib/chat/mcp-servers"
 import { check, finish, section } from "./harness"
 
 /**

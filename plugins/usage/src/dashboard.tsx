@@ -33,7 +33,7 @@ import {
   type DaySpend,
   type SpendRange,
 } from "./spend"
-import { compact, modelLabel } from "@/lib/worktree-chat/usage"
+import { compact, modelLabel } from "@/lib/chat/usage"
 
 /** The top chats listed at first, and how many each `more` row adds. */
 const TOP_CHATS = 10

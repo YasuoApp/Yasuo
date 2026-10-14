@@ -1,4 +1,4 @@
-import type { WorktreeChatEvent } from "../shared/api"
+import type { ChatEvent } from "../shared/api"
 
 /**
  * What is worth interrupting somebody for, read off the stream of chat events.
@@ -53,7 +53,7 @@ export class ChatNotices {
    * queued behind a turn that failed is worth knowing about late rather than
    * not at all.
    */
-  read(event: WorktreeChatEvent): ChatNotice | null {
+  read(event: ChatEvent): ChatNotice | null {
     const { chatId } = event
 
     if (event.type === "ask") {

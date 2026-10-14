@@ -29,8 +29,8 @@ import {
   issueNumbers,
   messageParts,
 } from "./files/git-blame"
-import { useComposerBus } from "./worktree-chat/composer-bus"
-import { dateTimeOf } from "./worktree-chat/since"
+import { useComposerBus } from "./chat/composer-bus"
+import { dateTimeOf } from "./chat/since"
 
 /**
  * Who last changed the caret's line, written faintly after it, and the commit

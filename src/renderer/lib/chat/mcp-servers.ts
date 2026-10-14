@@ -3,7 +3,7 @@ import type { McpServerInfo, McpServerState, McpToolInfo } from "@shared/api"
 /**
  * The composer's MCP menu (`chat-mcp.tsx`), minus the drawing.
  *
- * Split out for the reason the other `lib/worktree-chat` halves are: what order
+ * Split out for the reason the other `lib/chat` halves are: what order
  * the rows go in and what each state is *called* are the two things worth being
  * sure of, and neither needs a dialog on screen to check. See
  * `test/mcp-servers.ts`.

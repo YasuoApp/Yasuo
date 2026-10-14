@@ -1,4 +1,4 @@
-import type { WorktreeChat, WorktreeChatEvent } from "@shared/api"
+import type { Chat, ChatEvent } from "@shared/api"
 
 /**
  * Which chats have answered since anybody last looked at them.
@@ -11,7 +11,7 @@ import type { WorktreeChat, WorktreeChatEvent } from "@shared/api"
  * there is no story at all a second after it stops.
  *
  * Pure and tested (`test/chat-unread.ts`) for the reason the rest of
- * `lib/worktree-chat/` is split this way: the rule is a handful of edges over
+ * `lib/chat/` is split this way: the rule is a handful of edges over
  * an event stream, and getting one wrong looks like nothing rather than like a
  * bug — a dot that never lights, or one that never goes out.
  */
@@ -61,7 +61,7 @@ export function isWatched(chatId: string, attention: Attention): boolean {
  * more specific.
  */
 export function marksUnread(
-  event: WorktreeChatEvent,
+  event: ChatEvent,
   state: Attention & {
     /** The chats main last said were busy — `sending` in the store. Read so
      * quiet can be told from a repeat: `busy` is a state and the same value
@@ -80,10 +80,7 @@ export function marksUnread(
  * project's row draws. Kept out of `ChatActivity` on purpose: that shape
  * counts what is *happening*, and an unread chat is one where nothing is
  * happening any more. */
-export function unreadIn(
-  chats: WorktreeChat[],
-  unread: Record<string, true>
-): number {
+export function unreadIn(chats: Chat[], unread: Record<string, true>): number {
   return chats.filter((chat) => unread[chat.id] === true).length
 }
 

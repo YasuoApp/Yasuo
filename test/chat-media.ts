@@ -1,5 +1,5 @@
 import type { AssistantMessage } from "../src/shared/api"
-import { linksIn, mediaOf } from "../src/renderer/lib/worktree-chat/media"
+import { linksIn, mediaOf } from "../src/renderer/lib/chat/media"
 import { check, finish, section } from "./harness"
 
 /**

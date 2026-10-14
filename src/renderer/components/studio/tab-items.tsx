@@ -8,7 +8,7 @@ import { nameOf } from "@/lib/files/paths"
 import { useSettings } from "@/lib/settings"
 import { useStudio } from "@/lib/store"
 import { PREFIX } from "@/lib/tabs"
-import { useWorktreeChats } from "@/lib/worktree-chat/store"
+import { useChats } from "@/lib/chat/store"
 import { FileIcon } from "./file-icon"
 import type { TabStripItem } from "./tab-strip"
 
@@ -21,18 +21,18 @@ import type { TabStripItem } from "./tab-strip"
  * Keyed by strip id, so a caller with a list of ids has nothing left to decide.
  */
 export function useTabItems(): Map<string, TabStripItem> {
-  const chats = useWorktreeChats((state) => state.chats)
-  const chatOpenIds = useWorktreeChats((state) => state.openIds)
-  const chatSending = useWorktreeChats((state) => state.sending)
+  const chats = useChats((state) => state.chats)
+  const chatOpenIds = useChats((state) => state.openIds)
+  const chatSending = useChats((state) => state.sending)
   // A held turn is not a working one, and the strip is where a chat that is
   // waiting on somebody has to say so: the pane's card is only visible to
   // whoever is already looking at that chat, and the spinner beside a tab reads
   // as "still going" — which is exactly the answer that stops you clicking it.
-  const chatAsks = useWorktreeChats((state) => state.asks)
+  const chatAsks = useChats((state) => state.asks)
   // And which have answered since anybody looked at them. The strip needs it for
   // the same reason the column does: the tab of a chat you switched away from
   // goes back to looking exactly like the tab of one you have read.
-  const chatUnread = useWorktreeChats((state) => state.unread)
+  const chatUnread = useChats((state) => state.unread)
 
   const changesOpenIds = useChanges((state) => state.openIds)
   const changesByRoot = useChanges((state) => state.byRoot)
@@ -137,7 +137,7 @@ export function useTabItems(): Map<string, TabStripItem> {
     const title = where ? `${chat.title} — ${where}` : chat.title
 
     add({
-      id: PREFIX.worktree + id,
+      id: PREFIX.chat + id,
       label: chat.title,
       // The transcript's `Working…` light, run over the title too, so a chat
       // working in a tab nobody is looking at says so in words and not only

@@ -2,13 +2,13 @@ import {
   chatRootId,
   type AssistantMessage,
   type ChatSpend,
-  type WorktreeChat,
-  type WorktreeChatEvent,
+  type Chat,
+  type ChatEvent,
 } from "@shared/api"
 import type { PluginManifest } from "@shared/plugins"
 import { useFiles } from "@/lib/files/store"
 import { useStudio } from "@/lib/store"
-import { useWorktreeChats } from "@/lib/worktree-chat/store"
+import { useChats } from "@/lib/chat/store"
 
 import type { PluginIcon, PluginRegistry } from "./registry"
 
@@ -86,13 +86,13 @@ export type PluginApp = {
     /** A chat's lines, read off disk when it has not been opened this run. */
     read: (chatId: string) => Promise<AssistantMessage[]>
     /** One row per usage line across every chat — what the usage dashboard
-     * folds. Read off disk each call; see `WorktreeChats.spend`. */
+     * folds. Read off disk each call; see `Chats.spend`. */
     spend: () => Promise<ChatSpend[]>
     /** The chat on screen, if any. */
     selected: () => string | null
     open: (chatId: string) => void
     /** Every chat's events as main sends them; undone on unload. */
-    onEvent: (listener: (event: WorktreeChatEvent) => void) => void
+    onEvent: (listener: (event: ChatEvent) => void) => void
   }
 }
 
@@ -130,9 +130,9 @@ export function createPluginApp(
     openFile: (path) => useFiles.getState().open(path),
 
     chats: {
-      list: () => useWorktreeChats.getState().chats.map(pluginChatOf),
+      list: () => useChats.getState().chats.map(pluginChatOf),
       get: (chatId) => {
-        const chat = useWorktreeChats
+        const chat = useChats
           .getState()
           .chats.find((candidate) => candidate.id === chatId)
         return chat ? pluginChatOf(chat) : null
@@ -141,13 +141,13 @@ export function createPluginApp(
       // so one exported straight from the column is read off disk — the same
       // call the pane makes when it is selected.
       read: async (chatId) =>
-        useWorktreeChats.getState().messages[chatId] ??
-        (await window.desktop.readWorktreeChat(chatId)),
+        useChats.getState().messages[chatId] ??
+        (await window.desktop.readChat(chatId)),
       spend: () => window.desktop.chatSpend(),
-      selected: () => useWorktreeChats.getState().selectedId,
-      open: (chatId) => useWorktreeChats.getState().select(chatId),
+      selected: () => useChats.getState().selectedId,
+      open: (chatId) => useChats.getState().select(chatId),
       onEvent: (listener) => {
-        const stop = window.desktop.onWorktreeChatEvent((event) => {
+        const stop = window.desktop.onChatEvent((event) => {
           // One plugin throwing must not stop the bridge's other listeners —
           // the studio's own among them.
           try {
@@ -162,7 +162,7 @@ export function createPluginApp(
   }
 }
 
-function pluginChatOf(chat: WorktreeChat): PluginChat {
+function pluginChatOf(chat: Chat): PluginChat {
   const folderId = chatRootId(chat)
   return {
     id: chat.id,

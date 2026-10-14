@@ -6,11 +6,11 @@ import { cn } from "@/lib/utils"
 import { useProjects } from "@/lib/projects"
 import { useSettings } from "@/lib/settings"
 import { useStudio } from "@/lib/store"
-import { useClaudeProfiles } from "@/lib/worktree-chat/claude-profiles"
-import { useWorktreeChats } from "@/lib/worktree-chat/store"
+import { useClaudeProfiles } from "@/lib/chat/claude-profiles"
+import { useChats } from "@/lib/chat/store"
 import { IconButton } from "./icon-button"
 import { HAS_TRAFFIC_LIGHTS } from "./title-bar"
-import { WorktreeChatPane } from "./worktree/chat-pane"
+import { ChatPane } from "./chat/chat-pane"
 
 /**
  * One chat in a window of its own — what `?chat=<id>` on the renderer's URL
@@ -18,7 +18,7 @@ import { WorktreeChatPane } from "./worktree/chat-pane"
  *
  * The same stores, read the same way, with nothing of the workbench around
  * them: no strip, no Explorer, no dock. The chat's lines arrive over the same
- * `worktree-chats:event` channel the studio listens on, because main sends
+ * `chats:event` channel the studio listens on, because main sends
  * every window every event; a message sent from here goes to the same CLI
  * session the studio's tab is on, so the two windows are two views of one
  * conversation rather than two conversations.
@@ -30,7 +30,7 @@ import { WorktreeChatPane } from "./worktree/chat-pane"
  */
 export function ChatWindow({ chatId }: { chatId: string }) {
   const loaded = useStudio((state) => state.loaded)
-  const chat = useWorktreeChats((state) =>
+  const chat = useChats((state) =>
     state.chats.find((entry) => entry.id === chatId)
   )
   const [pinned, setPinned] = useState(false)
@@ -40,7 +40,7 @@ export function ChatWindow({ chatId }: { chatId: string }) {
     void useSettings.getState().restore()
     void useClaudeProfiles.getState().refresh()
     void Promise.all([
-      useWorktreeChats.getState().refresh(),
+      useChats.getState().refresh(),
       // Before `select`, which moves the column's active project and writes
       // the column down: with nothing restored first that write would be the
       // defaults — every project unfolded, the sidebar back — over whatever
@@ -50,7 +50,7 @@ export function ChatWindow({ chatId }: { chatId: string }) {
       // Selecting is what reads the lines and marks the chat read; the pane
       // and the sidebar it would move are not here, so the rest of what
       // `select` does lands on stores nothing in this window draws.
-      useWorktreeChats.getState().select(chatId)
+      useChats.getState().select(chatId)
     )
     void window.desktop.isAlwaysOnTop().then(setPinned)
   }, [chatId])
@@ -62,7 +62,7 @@ export function ChatWindow({ chatId }: { chatId: string }) {
     return useSettings.subscribe(applyAppearance)
   }, [])
 
-  useEffect(() => useWorktreeChats.getState().listen(), [])
+  useEffect(() => useChats.getState().listen(), [])
 
   // The chat's name in the OS's own title too, for the window switcher.
   useEffect(() => {
@@ -110,7 +110,7 @@ export function ChatWindow({ chatId }: { chatId: string }) {
 
       <div className="min-h-0 flex-1">
         {loaded && chat ? (
-          <WorktreeChatPane chatId={chatId} popped />
+          <ChatPane chatId={chatId} popped />
         ) : (
           <div className="grid h-full place-items-center p-6">
             <p className="max-w-xs text-center text-xs text-muted-foreground">

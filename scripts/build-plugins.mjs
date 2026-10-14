@@ -8,7 +8,7 @@ import * as esbuild from "esbuild"
  * Builds the built-in plugins from `plugins/<id>/` into `dist-plugins/<id>/`.
  *
  * A plugin's source is TypeScript under `src/main.ts`, and it may import the
- * renderer's **pure** modules — `lib/worktree-chat/usage.ts` and the like —
+ * renderer's **pure** modules — `lib/chat/usage.ts` and the like —
  * which are bundled into its `main.js` as a copy. What it must not import is
  * anything holding state (a store, `window.desktop`) or a library the app
  * already loads (Milkdown, CodeMirror): a second copy of a store is a second

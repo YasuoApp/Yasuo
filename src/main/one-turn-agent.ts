@@ -26,7 +26,7 @@ import { recentSubjects, stagedDiff } from "./git"
  *   `onAsk` is absent and `deciding` refuses an unpermitted call with a sentence
  *   the model can read.
  *
- * Deliberately **not** a method on `WorktreeChats`: everything that class does is
+ * Deliberately **not** a method on `Chats`: everything that class does is
  * about a conversation that persists — the transcript, the resume, the idle
  * reaper, the ask table — and none of it applies.
  *

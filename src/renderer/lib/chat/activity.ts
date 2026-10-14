@@ -360,7 +360,7 @@ function alwaysShown(line: AssistantMessage): boolean {
   )
 }
 
-/** The wording `main/worktree-chat.ts` composes a refusal with. Matched rather
+/** The wording `main/chat.ts` composes a refusal with. Matched rather
  * than flagged because the line is a sentence somebody reads, and it is the
  * same test the row's own colour uses. */
 export function refused(line: AssistantMessage): boolean {

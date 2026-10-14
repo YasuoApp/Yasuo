@@ -1,11 +1,11 @@
-import type { WorktreeChat } from "@shared/api"
+import type { Chat } from "@shared/api"
 import type { ChatActivity } from "@shared/chat-activity"
 
 /**
  * How many of a set of chats are working, and how many have stopped to ask.
  *
  * Pure and tested (`test/chat-running.ts`) for the reason the rest of
- * `lib/worktree-chat/` is split this way: the counting has one rule in it that
+ * `lib/chat/` is split this way: the counting has one rule in it that
  * is easy to get wrong in two places at once, and neither way of getting it
  * wrong looks broken.
  *
@@ -25,7 +25,7 @@ export {
  * itself draws with, and they must not disagree: the row is what somebody
  * checks the count against. */
 export function activityOf(
-  chats: WorktreeChat[],
+  chats: Chat[],
   /** The chats main last said were busy — `sending` in the store. */
   sending: string[],
   /** The questions that are up, keyed by chat — `asks` in the store. */

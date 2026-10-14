@@ -5,13 +5,9 @@ import { cn } from "@/lib/utils"
 import { useDock } from "@/lib/dock"
 import { useProjects } from "@/lib/projects"
 import { useWorkspaceSearch } from "@/lib/workspace-search"
-import { useWorktreeChats } from "@/lib/worktree-chat/store"
-import {
-  activityOf,
-  activityTitle,
-  isRunning,
-} from "@/lib/worktree-chat/running"
-import { unreadIn } from "@/lib/worktree-chat/unread"
+import { useChats } from "@/lib/chat/store"
+import { activityOf, activityTitle, isRunning } from "@/lib/chat/running"
+import { unreadIn } from "@/lib/chat/unread"
 import { PLUGIN_ICON_COMPONENTS } from "@/lib/plugins/icons"
 import type { PluginRailButton } from "@/lib/plugins/registry"
 import { usePlugins } from "@/lib/plugins/store"
@@ -51,10 +47,10 @@ export function NavRail({ onOpenSettings }: { onOpenSettings: () => void }) {
    * while another was answering. Drawn only while the column is shut; open, the
    * rows say it themselves.
    */
-  const chats = useWorktreeChats((state) => state.chats)
-  const sending = useWorktreeChats((state) => state.sending)
-  const asks = useWorktreeChats((state) => state.asks)
-  const unread = useWorktreeChats((state) => state.unread)
+  const chats = useChats((state) => state.chats)
+  const sending = useChats((state) => state.sending)
+  const asks = useChats((state) => state.asks)
+  const unread = useChats((state) => state.unread)
   const activity = activityOf(chats, sending, asks)
   const running = !sidebar && isRunning(activity)
   // Second to `running`: a chat that has already answered, which leaves nothing

@@ -17,7 +17,7 @@ import { useStudio } from "@/lib/store"
  * copied and no edit could reach the branch you had open — and that layer is
  * gone, so the only honest line left is this one.
  */
-export function WorktreeWelcome({ place }: { place: ChatPlace | null }) {
+export function ChatWelcome({ place }: { place: ChatPlace | null }) {
   const folders = useStudio((state) => state.folders)
 
   // Between the project leaving the workspace and its chats closing. The chat

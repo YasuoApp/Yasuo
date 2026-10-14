@@ -8,7 +8,7 @@ import type { ClaudeAccount, ClaudeProfile } from "@shared/api"
  * A view of `store.ts`'s own file, the same relationship `useApi`'s
  * `environments` has to `environments.json`: this holds the list, Settings'
  * Claude section edits it, and the composer's profile picker reads it. Loaded
- * once at launch (`studio.tsx`, beside `useWorktreeChats.refresh`) rather than
+ * once at launch (`studio.tsx`, beside `useChats.refresh`) rather than
  * per composer mount, since several chats' toolbars read the same list.
  */
 type ClaudeProfilesState = {
@@ -137,7 +137,7 @@ export const useClaudeProfiles = create<ClaudeProfilesState>((set, get) => ({
 
 /**
  * Written here and then to the record, rather than waiting on the write — the
- * same trade `setOptions` and `rename` make on `useWorktreeChats`: a field that
+ * same trade `setOptions` and `rename` make on `useChats`: a field that
  * only moved once a file had been written would lag behind the keystroke that
  * changed it, and the failure it trades against does not outlive the launch.
  *

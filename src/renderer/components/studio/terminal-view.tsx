@@ -25,7 +25,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu"
-import { fencedOutput, useComposerBus } from "@/lib/worktree-chat/composer-bus"
+import { fencedOutput, useComposerBus } from "@/lib/chat/composer-bus"
 
 import "@xterm/xterm/css/xterm.css"
 

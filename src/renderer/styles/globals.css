@@ -520,7 +520,7 @@
 
   /*
    * `⌘F` in a chat, painted over the words themselves — see
-   * `lib/worktree-chat/find-marks.ts` for why the marks are ranges in the
+   * `lib/chat/find-marks.ts` for why the marks are ranges in the
    * highlight registry rather than `<mark>` elements in the transcript.
    *
    * Here beside `::selection` because it is the same kind of thing: a painted
