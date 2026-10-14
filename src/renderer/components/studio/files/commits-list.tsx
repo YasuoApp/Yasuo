@@ -23,6 +23,7 @@ import { GIT_LETTERS, GIT_TONES, useGitStatus } from "@/lib/files/git-status"
 import type { FileRoot } from "@/lib/files/roots"
 import { cn } from "@/lib/utils"
 import { useComposerBus } from "@/lib/chat/composer-bus"
+import { useShells } from "@/lib/shell/store"
 import { since } from "@/lib/chat/since"
 import { FileIcon } from "../file-icon"
 import { SideRow } from "../side-row"
@@ -197,7 +198,7 @@ export function CommitsList({ root }: { root: FileRoot }) {
             </button>
           )}
         </div>
-        <UpstreamLine upstream={upstream} />
+        <UpstreamLine upstream={upstream} folderId={root.folderId} />
       </div>
 
       {read === null ? (
@@ -254,16 +255,29 @@ export function CommitsList({ root }: { root: FileRoot }) {
  * Where the branch stands against its remote, in one line over the list.
  * Nothing at all for a repository with no remote, which has nowhere to stand.
  */
-function UpstreamLine({ upstream }: { upstream: GitUpstream | null }) {
+function UpstreamLine({
+  upstream,
+  folderId,
+}: {
+  upstream: GitUpstream | null
+  folderId: string
+}) {
   if (!upstream) return null
   const { name, aheadCount, behind } = upstream
 
   if (!name) {
     if (aheadCount === 0) return null
     return (
-      <p className="px-0.5 text-[0.65rem] text-muted-foreground">
-        No upstream —{" "}
-        <span className="text-primary">↑{aheadCount} not on any remote</span>
+      <p className="flex items-center gap-1.5 px-0.5 text-[0.65rem] text-muted-foreground">
+        <span className="min-w-0 truncate">
+          No upstream —{" "}
+          <span className="text-primary">↑{aheadCount} not on any remote</span>
+        </span>
+        <PushButton
+          folderId={folderId}
+          command="git push -u origin HEAD"
+          title="Push this branch to origin and track it"
+        />
       </p>
     )
   }
@@ -288,7 +302,45 @@ function UpstreamLine({ upstream }: { upstream: GitUpstream | null }) {
           )}
         </span>
       )}
+      {aheadCount > 0 && (
+        <PushButton
+          folderId={folderId}
+          command="git push"
+          title={`Push ${aheadCount} commit${aheadCount === 1 ? "" : "s"} to ${name}`}
+        />
+      )}
     </p>
+  )
+}
+
+/**
+ * Types the push into a **dock shell** rather than running it in main: a key
+ * with a passphrase, a credential helper or a 2FA prompt all want a terminal,
+ * and `execFile` has none to ask in — it would hang or fail where the shell
+ * simply asks. It also leaves the output, and a rejected push's reason, on
+ * screen. No new write in `main/git.ts`: the dock's shell is still the git
+ * client, this only saves typing into it. The list re-reads off the git status
+ * like after any push made there.
+ */
+function PushButton({
+  folderId,
+  command,
+  title,
+}: {
+  folderId: string
+  command: string
+  title: string
+}) {
+  return (
+    <button
+      type="button"
+      title={`${title} — runs \`${command}\` in the terminal`}
+      onClick={() => useShells.getState().run(folderId, command)}
+      className="ml-auto flex h-5 shrink-0 items-center gap-1 rounded px-1.5 text-[0.65rem] text-primary transition-colors hover:bg-primary/10"
+    >
+      <ArrowUp aria-hidden className="size-3" />
+      Push
+    </button>
   )
 }
 
