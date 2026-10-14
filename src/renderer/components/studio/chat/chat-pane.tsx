@@ -976,6 +976,9 @@ function Conversation({
                                 : null
                             }
                             edit={editOf(block.line.id)}
+                            found={hits.some(
+                              (hit) => hit.messageId === block.line.id
+                            )}
                           />
                         )}
                       </div>

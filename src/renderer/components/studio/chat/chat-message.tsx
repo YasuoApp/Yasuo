@@ -1,9 +1,18 @@
-import { createContext, useContext, useState, type ReactNode } from "react"
+import {
+  createContext,
+  useContext,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react"
 import {
   Archive,
   Brain,
   Check,
+  ChevronDown,
   ChevronRight,
+  ChevronUp,
   Circle,
   CircleCheck,
   CircleDot,
@@ -63,7 +72,11 @@ export function ChatMessage({
   live = false,
   reply = null,
   edit,
+  found = false,
 }: {
+  /** Whether `⌘F` has a match in this line — a long user line opens for it,
+   * or the find would land on words its own fold is hiding. */
+  found?: boolean
   /** On a user line, what its Edit does — absent where the line cannot be
    * edited at all, inside a fold. */
   edit?: MessageEdit
@@ -79,7 +92,7 @@ export function ChatMessage({
   queued?: boolean
 }) {
   if (of.role === "user") {
-    return <UserMessage of={of} queued={queued} edit={edit} />
+    return <UserMessage of={of} queued={queued} edit={edit} found={found} />
   }
 
   if (of.role === "thinking") {
@@ -104,16 +117,47 @@ export type MessageEdit = {
   save: (text: string) => void
 }
 
+/**
+ * How tall a user bubble draws before it folds, and the slack past that it may
+ * run to first — a message one line over the cap is not worth a button.
+ *
+ * A pasted log or a long brief is the user's own words, so the reader already
+ * knows them; drawn in full they push the answer they were waiting for off the
+ * screen.
+ */
+const FOLDED_HEIGHT = 240
+const FOLD_SLACK = 48
+
 function UserMessage({
   of,
   queued,
   edit,
+  found,
 }: {
   of: Extract<AssistantMessage, { role: "user" }>
   queued: boolean
   edit?: MessageEdit
+  found: boolean
 }) {
   const [editing, setEditing] = useState(false)
+  const [open, setOpen] = useState(false)
+  const [long, setLong] = useState(false)
+  const body = useRef<HTMLDivElement>(null)
+
+  // The inner node is the one observed: the outer one is capped, so a picture
+  // finishing would grow its content without ever resizing it.
+  useLayoutEffect(() => {
+    const node = body.current
+    if (!node) return
+    const measure = () =>
+      setLong(node.offsetHeight > FOLDED_HEIGHT + FOLD_SLACK)
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [editing])
+
+  const folded = long && !open && !found
 
   if (editing && edit)
     return (
@@ -135,8 +179,40 @@ function UserMessage({
        inside an open fold is drawn by this same component. */
     <div data-line={of.id} className="group ml-4">
       <div className="rounded-lg rounded-br-sm bg-accent/60 px-2.5 py-1.5 text-chat">
-        <MentionText text={of.text} />
-        {of.images && of.images.length > 0 && <NoteImages files={of.images} />}
+        {/* A mask rather than a gradient laid over the text: the bubble's colour
+            is translucent, so nothing painted on top would match it. */}
+        <div
+          style={folded ? { maxHeight: FOLDED_HEIGHT } : undefined}
+          className={cn(
+            folded &&
+              "overflow-hidden [mask-image:linear-gradient(to_bottom,black_65%,transparent)]"
+          )}
+        >
+          <div ref={body}>
+            <MentionText text={of.text} />
+            {of.images && of.images.length > 0 && (
+              <NoteImages files={of.images} />
+            )}
+          </div>
+        </div>
+        {long && !found && (
+          <button
+            type="button"
+            aria-expanded={open}
+            onClick={() => setOpen(!open)}
+            className={cn(
+              "mt-1 flex items-center gap-1 rounded text-[0.7rem] text-muted-foreground outline-none",
+              "hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
+            )}
+          >
+            {open ? (
+              <ChevronUp aria-hidden className="size-3" />
+            ) : (
+              <ChevronDown aria-hidden className="size-3" />
+            )}
+            {open ? "Show less" : "Show more"}
+          </button>
+        )}
       </div>
       <MessageActions
         text={of.text}
