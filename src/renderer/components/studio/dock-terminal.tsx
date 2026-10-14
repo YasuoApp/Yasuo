@@ -80,6 +80,10 @@ function ShellView({ shell }: { shell: Shell }) {
   const terminalId = useRef<string | null>(null)
 
   const { id, folderId, shellId } = shell
+  // Until the first cwd lookup lands, the shell is where it started.
+  const folderPath = useStudio(
+    (state) => state.folders.find((folder) => folder.id === folderId)?.path
+  )
 
   const onReady = useCallback(
     (terminal: TerminalHandle) => {
@@ -178,6 +182,7 @@ function ShellView({ shell }: { shell: Shell }) {
       key={`${id}:${shell.attempt}`}
       onReady={onReady}
       onResize={onResize}
+      linkBase={shell.cwd ?? folderPath ?? null}
     />
   )
 }

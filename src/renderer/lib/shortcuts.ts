@@ -73,8 +73,8 @@ function inTerminal(target: EventTarget | null): boolean {
  * Read off `event.code`, not `event.key`: the binding is the physical key beside
  * `1`, and what `key` reports for it with `Ctrl` held varies by layout. Shift is
  * refused rather than accepted, so the key sometimes written `⌃~` is not this
- * one — that leaves `⌃⇧\`` free, which is where those editors put "new
- * terminal" if this ever grows one.
+ * one — that leaves `⌃⇧\`` free for `isNewTerminalShortcut`, which is where
+ * those editors put "new terminal".
  *
  * **Not refused inside a terminal**, unlike the letters above. A pty has nothing
  * bound to `⌃\``, and hiding the panel from inside the shell — having just run
@@ -84,6 +84,18 @@ export function isTerminalShortcut(event: KeyboardEvent): boolean {
   if (event.repeat) return false
   if (event.code !== "Backquote") return false
   if (event.altKey || event.shiftKey || event.metaKey) return false
+  return event.ctrlKey
+}
+
+/**
+ * `⌃⇧\`` — another shell in the dock, the key VS Code gives "new terminal"
+ * beside `⌃\``, and the one `isTerminalShortcut` leaves free for it by
+ * refusing Shift. Taken inside a terminal for the same reason that one is.
+ */
+export function isNewTerminalShortcut(event: KeyboardEvent): boolean {
+  if (event.repeat) return false
+  if (event.code !== "Backquote") return false
+  if (event.altKey || !event.shiftKey || event.metaKey) return false
   return event.ctrlKey
 }
 

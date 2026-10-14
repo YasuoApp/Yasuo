@@ -13,7 +13,10 @@ import { ClipboardPaste, Copy, Eraser, MessageSquarePlus } from "lucide-react"
 
 import { monoFontFamily, terminalFontSize } from "@/lib/appearance"
 import { useSettings } from "@/lib/settings"
+import { isNewTerminalShortcut, isTerminalShortcut } from "@/lib/shortcuts"
 import { useTheme } from "next-themes"
+import { IS_MAC } from "./title-bar"
+import { attachFileLinks } from "./terminal-file-links"
 
 import {
   ContextMenu,
@@ -90,6 +93,15 @@ const lightTheme = {
 }
 
 /**
+ * A file path in the output, in the theme's own blue — the hue a link already
+ * is everywhere else, and one the ANSI ramp above uses sparingly enough that a
+ * path stands out from the text around it.
+ */
+function linkColorOf(theme: string | undefined): string {
+  return theme === "dark" ? darkTheme.blue : lightTheme.blue
+}
+
+/**
  * A path as one word of a command line.
  *
  * A pasted `Screenshot 2026-08-10 at 10.37.38 AM.png` is three arguments to
@@ -150,6 +162,9 @@ type TerminalViewProps = {
   onReady: (terminal: TerminalHandle) => undefined | (() => void)
   /** Called whenever the terminal is resized, so a PTY can be kept in sync. */
   onResize?: (size: { cols: number; rows: number }) => void
+  /** The directory a relative path in the output is read from — the shell's
+   * cwd. Without one, only absolute paths are links. */
+  linkBase?: string | null
 }
 
 /**
@@ -157,7 +172,11 @@ type TerminalViewProps = {
  * Owning the lifecycle here keeps the callers (output log, interactive shell)
  * down to a few lines each.
  */
-export function TerminalView({ onReady, onResize }: TerminalViewProps) {
+export function TerminalView({
+  onReady,
+  onResize,
+  linkBase = null,
+}: TerminalViewProps) {
   const hostRef = useRef<HTMLDivElement>(null)
   const overlayRef = useRef<HTMLDivElement>(null)
   const pillRef = useRef<HTMLDivElement>(null)
@@ -168,10 +187,14 @@ export function TerminalView({ onReady, onResize }: TerminalViewProps) {
   // xterm outlives every render, so callbacks are reached through refs.
   const onReadyRef = useRef(onReady)
   const onResizeRef = useRef(onResize)
+  const linkBaseRef = useRef(linkBase)
+  const linkColorRef = useRef(linkColorOf(resolvedTheme))
+  const fileLinksRef = useRef<{ repaint: () => void } | null>(null)
   useEffect(() => {
     onReadyRef.current = onReady
     onResizeRef.current = onResize
-  }, [onReady, onResize])
+    linkBaseRef.current = linkBase
+  }, [onReady, onResize, linkBase])
 
   useEffect(() => {
     const host = hostRef.current
@@ -196,6 +219,9 @@ export function TerminalView({ onReady, onResize }: TerminalViewProps) {
       // cell; the renderer below draws them to whatever the cell is.
       lineHeight: 1.2,
       scrollback: 5_000,
+      // `registerDecoration`, which is how a file path is coloured, is still
+      // marked experimental.
+      allowProposedApi: true,
     })
     const fit = new FitAddon()
     terminal.loadAddon(fit)
@@ -246,6 +272,34 @@ export function TerminalView({ onReady, onResize }: TerminalViewProps) {
      * terminal sends it itself and the key works without a setup step.
      */
     terminal.attachCustomKeyEventHandler((event) => {
+      // The dock's own keys, answered by `studio.tsx` on the window's capture
+      // phase. Refused here as well, or the pty is sent the control byte xterm
+      // makes of them and the shell beeps at a key that has already worked.
+      if (isTerminalShortcut(event) || isNewTerminalShortcut(event)) {
+        return false
+      }
+
+      /*
+       * `⌘K` clears, as it does in Terminal.app, iTerm2 and VS Code — the one
+       * key every macOS terminal agrees on and the menu's `Clear` was the only
+       * way to here. macOS only: off it the key would be `Ctrl+K`, readline's
+       * kill-to-end-of-line, which is the shell's and not ours.
+       */
+      const clearKey =
+        IS_MAC &&
+        event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        !event.shiftKey &&
+        event.key.toLowerCase() === "k"
+      if (clearKey) {
+        if (event.type === "keydown") {
+          event.preventDefault()
+          terminal.clear()
+        }
+        return false
+      }
+
       const plainShiftEnter =
         event.key === "Enter" &&
         event.shiftKey &&
@@ -408,6 +462,14 @@ export function TerminalView({ onReady, onResize }: TerminalViewProps) {
     host.addEventListener("dragleave", onDragLeave)
     host.addEventListener("drop", onDrop)
 
+    // File paths in the output — coloured, and opened by ⌘-click. See
+    // `terminal-file-links.ts`.
+    const fileLinks = attachFileLinks(terminal, host, {
+      base: () => linkBaseRef.current,
+      color: () => linkColorRef.current,
+    })
+    fileLinksRef.current = fileLinks
+
     /*
      * The `Ask about this` pill, shown under the end of a selection and moved
      * by hand for the same reason the tint above is: no React state here.
@@ -517,6 +579,8 @@ export function TerminalView({ onReady, onResize }: TerminalViewProps) {
       host.removeEventListener("dragover", onDragOver)
       host.removeEventListener("dragleave", onDragLeave)
       host.removeEventListener("drop", onDrop)
+      fileLinks.dispose()
+      fileLinksRef.current = null
       teardown?.()
       disposeResize?.dispose()
       observer?.disconnect()
@@ -530,6 +594,11 @@ export function TerminalView({ onReady, onResize }: TerminalViewProps) {
     const terminal = terminalRef.current
     if (!terminal) return
     terminal.options.theme = resolvedTheme === "dark" ? darkTheme : lightTheme
+    const linkColor = linkColorOf(resolvedTheme)
+    if (linkColorRef.current !== linkColor) {
+      linkColorRef.current = linkColor
+      fileLinksRef.current?.repaint()
+    }
   }, [resolvedTheme])
 
   // Settings › Appearance's monospace face and size, applied to a live
