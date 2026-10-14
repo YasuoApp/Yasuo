@@ -7,9 +7,13 @@ import { promisify } from "node:util"
 import {
   changes,
   commit,
+  commitFileDiff,
+  commitFiles,
+  commitMatches,
   fileAtHead,
   log,
   recentSubjects,
+  upstream,
 } from "../src/main/git"
 import { check, finish, section } from "./harness"
 
@@ -286,6 +290,123 @@ async function main() {
   )
   check("and is empty past the end", (await log(root, 2, 3)).length === 0)
 
+  section("filtering the Commits tab")
+
+  const matched = await log(root, 10, 0, "SECOND")
+  check(
+    "matches the subject, ignoring case",
+    matched.length === 1 && matched[0]?.subject === "second",
+    matched.map((entry) => entry.subject)
+  )
+  check("or the author", (await log(root, 10, 0, "test")).length === 3)
+  const byHash = await log(root, 10, 0, commits[2]!.hash.slice(0, 8))
+  check(
+    "or the start of the hash",
+    byHash.length === 1 && byHash[0]?.subject === "first",
+    byHash.map((entry) => entry.subject)
+  )
+  const matchedPage = await log(root, 1, 1, "s")
+  check(
+    "and pages through the matches, not the log",
+    matchedPage.length === 1 && matchedPage[0]?.subject === "second",
+    matchedPage.map((entry) => entry.subject)
+  )
+  check(
+    "a word nothing has is no commits",
+    (await log(root, 10, 0, "no such words")).length === 0
+  )
+  check(
+    "commitMatches does not match the middle of a hash",
+    !commitMatches(commits[0]!, commits[0]!.hash.slice(3, 12))
+  )
+
+  section("a commit's files")
+
+  await git(root, "mv", "kept.ts", "renamed.ts")
+  await writeFile(path.join(root, "added.ts"), "one\ntwo\n")
+  await git(root, "add", "--all", "--", "added.ts", "renamed.ts")
+  await commit(root, "a rename and an addition")
+  const head = (await log(root, 1))[0]!
+
+  const files = await commitFiles(root, head.hash)
+  const byPath = Object.fromEntries(files.map((file) => [file.path, file]))
+  check(
+    "lists what the commit touched, by the repository's path",
+    Object.keys(byPath).sort().join(",") === "added.ts,renamed.ts",
+    files
+  )
+  check(
+    "an addition with its counts",
+    byPath["added.ts"]?.state === "added" &&
+      byPath["added.ts"]?.added === 2 &&
+      byPath["added.ts"]?.removed === 0,
+    byPath["added.ts"]
+  )
+  check(
+    "a rename as one row that says where it came from",
+    byPath["renamed.ts"]?.from === "kept.ts" &&
+      byPath["renamed.ts"]?.added === 0,
+    byPath["renamed.ts"]
+  )
+  check(
+    "the root commit is diffed against nothing",
+    (await commitFiles(root, commits[2]!.hash)).every(
+      (file) => file.state === "added"
+    )
+  )
+  check(
+    "a hash that is not one is no files",
+    (await commitFiles(root, "--all")).length === 0
+  )
+
+  const addedDiff = await commitFileDiff(root, head.hash, "added.ts")
+  check(
+    "an added file has an after and no before",
+    addedDiff.before === null &&
+      addedDiff.after === "one\ntwo\n" &&
+      addedDiff.patch?.includes("@@") === true,
+    addedDiff
+  )
+  const renamedDiff = await commitFileDiff(
+    root,
+    head.hash,
+    "renamed.ts",
+    "kept.ts"
+  )
+  check(
+    "a rename reads its before under the old name",
+    renamedDiff.before !== null && renamedDiff.before === renamedDiff.after,
+    renamedDiff
+  )
+  check(
+    "a path climbing out of the repository is refused",
+    (await commitFileDiff(root, head.hash, "../etc/passwd")).after === null
+  )
+
+  section("where the branch stands against its remote")
+
+  check("no remote marks nothing", (await upstream(root))?.ahead.length === 0)
+  const remote = await mkdtemp(path.join(tmpdir(), "vsclaude-changes-remote-"))
+  await git(remote, "init", "--bare", "--initial-branch", "main")
+  await git(root, "remote", "add", "origin", remote)
+  const unpublished = await upstream(root)
+  check(
+    "a branch never pushed has every commit ahead and no upstream",
+    unpublished?.name === null && unpublished.aheadCount === 4,
+    unpublished
+  )
+  await git(root, "push", "--quiet", "-u", "origin", "HEAD~1:refs/heads/main")
+  await git(root, "branch", "--set-upstream-to", "origin/main")
+  const tracked = await upstream(root)
+  check(
+    "a tracked branch is ahead by what it has not pushed",
+    tracked?.name === "origin/main" &&
+      tracked.aheadCount === 1 &&
+      tracked.ahead[0] === head.hash &&
+      tracked.behind === 0,
+    tracked
+  )
+
   section("a repository with no commits")
 
   const fresh = await mkdtemp(path.join(tmpdir(), "vsclaude-changes-empty-"))
@@ -314,6 +435,7 @@ async function main() {
 
   await rm(root, { recursive: true, force: true })
   await rm(fresh, { recursive: true, force: true })
+  await rm(remote, { recursive: true, force: true })
   finish()
 }
 

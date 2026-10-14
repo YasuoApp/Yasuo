@@ -119,3 +119,13 @@ export function askAboutCommit(
 ): string {
   return `About commit ${commit.hash.slice(0, 7)} ("${commit.summary}") by ${commit.author}, which last changed @${path}#L${line}: `
 }
+
+/** The same for a commit picked in the `Commits` view, where there is no line:
+ * the commit alone, for a question the user still writes. */
+export function askAboutLoggedCommit(commit: {
+  hash: string
+  subject: string
+  author: string
+}): string {
+  return `About commit ${commit.hash.slice(0, 7)} ("${commit.subject}") by ${commit.author}: `
+}

@@ -33,6 +33,8 @@ import {
   changes,
   log,
   commit,
+  commitFileDiff,
+  commitFiles,
   currentBranch,
   discard,
   discardAll,
@@ -42,6 +44,7 @@ import {
   fileDiff,
   stage,
   unstage,
+  upstream,
   workingTree,
 } from "./git"
 import { ChatNotices, noticeText, type ChatNotice } from "./notify"
@@ -707,11 +710,46 @@ export function createIpc(host: Host): {
   // and a page of `Infinity` is the whole log by another name.
   handle(
     IPC.gitLog,
-    async (_event, folderId: string, limit: number, skip = 0) =>
+    async (
+      _event,
+      folderId: string,
+      limit: number,
+      skip = 0,
+      query: unknown = ""
+    ) =>
       log(
         await store.resolveFolderDir(folderId),
         Math.max(1, Math.min(MAX_LOG_PAGE, Math.floor(limit) || 1)),
-        Math.max(0, Math.floor(skip) || 0)
+        Math.max(0, Math.floor(skip) || 0),
+        typeof query === "string" ? query : ""
+      )
+  )
+
+  handle(IPC.gitUpstream, async (_event, folderId: string) =>
+    upstream(await store.resolveFolderDir(folderId))
+  )
+
+  // Reads of the object store in the folder's own repository, so no path gate:
+  // what is named is a commit and a path *in* it, never a file on disk, and
+  // `git.ts` refuses a hash or a path that is anything else.
+  handle(IPC.gitCommitFiles, async (_event, folderId: string, hash: string) =>
+    commitFiles(await store.resolveFolderDir(folderId), String(hash))
+  )
+
+  handle(
+    IPC.gitCommitFileDiff,
+    async (
+      _event,
+      folderId: string,
+      hash: string,
+      file: string,
+      from?: string
+    ) =>
+      commitFileDiff(
+        await store.resolveFolderDir(folderId),
+        String(hash),
+        String(file),
+        typeof from === "string" ? from : undefined
       )
   )
 

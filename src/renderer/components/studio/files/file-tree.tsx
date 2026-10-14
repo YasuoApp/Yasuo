@@ -301,7 +301,7 @@ export function FileTree({ onAddFolder }: { onAddFolder: () => void }) {
             <div className="min-h-0 flex-1 overflow-auto pb-3">
               {shown &&
                 (gitView === "commits" ? (
-                  <CommitsList root={shown} />
+                  <CommitsList key={shown.folderId} root={shown} />
                 ) : (
                   <ChangesList root={shown} />
                 ))}

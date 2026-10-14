@@ -6,7 +6,7 @@ import {
   unifiedMergeView,
   type DiffConfig,
 } from "@codemirror/merge"
-import type { Extension } from "@codemirror/state"
+import { EditorState, type Extension } from "@codemirror/state"
 import { EditorView, highlightWhitespace } from "@codemirror/view"
 import { useTheme } from "next-themes"
 
@@ -85,6 +85,7 @@ export default function CodeMirrorFileDiff({
   whitespace,
   original,
   patch,
+  modified,
 }: {
   path: string
   /** The working tree's text as the tab read it. Only used if no pane is already
@@ -102,6 +103,13 @@ export default function CodeMirrorFileDiff({
   /** Git's own patch between the two, or null when there is none to be had —
    * see `gitDiffConfig` below. */
   patch: string | null
+  /**
+   * A fixed right-hand side, for a diff that is not of the working tree — a
+   * file as a commit left it. Given, the view takes no part in the shared
+   * buffers at all: `path` is then only what the language is read off, and a
+   * commit's file open beside the same path's editor must not be fed its edits.
+   */
+  modified?: string
 }) {
   const hostRef = useRef<HTMLDivElement>(null)
   /** Every view this diff is made of — one for inline, two for side by side —
@@ -121,7 +129,8 @@ export default function CodeMirrorFileDiff({
     const host = hostRef.current
     if (!host) return
 
-    acquireDoc(path, initialText)
+    const fixed = modified !== undefined
+    if (!fixed) acquireDoc(path, initialText)
 
     const dark = themeRef.current
     const marks = whitespaceRef.current
@@ -151,7 +160,7 @@ export default function CodeMirrorFileDiff({
     // The working side, hoisted because it is half of the pair `gitDiffConfig`
     // has to recognise — and it is the shared buffer rather than `initialText`
     // whenever a text editor already holds this path open.
-    const working = docTextOf(path) ?? initialText
+    const working = fixed ? modified : (docTextOf(path) ?? initialText)
     const diffConfig = gitDiffConfig(patch, committed, working)
 
     let views: EditorView[]
@@ -184,51 +193,50 @@ export default function CodeMirrorFileDiff({
             ...panelChrome(),
             ...common(),
             githubDiffTheme(dark),
-            docSharing(path, { editable: false }),
+            fixed ? [] : docSharing(path, { editable: false }),
           ],
         },
       })
       views = [merge.a, merge.b]
       destroy = () => merge.destroy()
     } else {
+      const extensions: Extension[] = [
+        ...baseChrome(),
+        ...common(),
+        // The three columns and Primer's palette. `panelChrome`'s own
+        // `lineNumbers` is deliberately not here: it would be a third
+        // number column beside the old and new ones.
+        githubDiffGutters(),
+        githubDiffTheme(dark),
+        // The removed rows are widgets, not text: selecting across them
+        // and copying what was selected are both assembled rather than
+        // read off the document.
+        diffSelection(),
+        fixed ? [] : docSharing(path, { editable: false }),
+        unifiedMergeView({
+          original: committed,
+          // Off, which is what makes an added row one flat tint. The
+          // extension marks the whole of an inserted line as "changed
+          // text", so this drew a darker band hugging the characters inside
+          // an already-green row — where GitHub tints the row and stops.
+          highlightChanges: false,
+          // The merge extension's own thin change gutter, off: the `+`/`-`
+          // column above says the same thing in the form a diff is read in.
+          gutter: false,
+          // Deletions keep their highlighting, which is the whole reason to
+          // read a removed line rather than see that one went.
+          syntaxHighlightDeletions: true,
+          // Accept/reject buttons are edits; see above.
+          mergeControls: false,
+          collapseUnchanged,
+          diffConfig,
+        }),
+      ]
       const view = new EditorView({
         parent: host,
-        state: docState(
-          path,
-          [
-            ...baseChrome(),
-            ...common(),
-            // The three columns and Primer's palette. `panelChrome`'s own
-            // `lineNumbers` is deliberately not here: it would be a third
-            // number column beside the old and new ones.
-            githubDiffGutters(),
-            githubDiffTheme(dark),
-            // The removed rows are widgets, not text: selecting across them
-            // and copying what was selected are both assembled rather than
-            // read off the document.
-            diffSelection(),
-            docSharing(path, { editable: false }),
-            unifiedMergeView({
-              original: committed,
-              // Off, which is what makes an added row one flat tint. The
-              // extension marks the whole of an inserted line as "changed
-              // text", so this drew a darker band hugging the characters inside
-              // an already-green row — where GitHub tints the row and stops.
-              highlightChanges: false,
-              // The merge extension's own thin change gutter, off: the `+`/`-`
-              // column above says the same thing in the form a diff is read in.
-              gutter: false,
-              // Deletions keep their highlighting, which is the whole reason to
-              // read a removed line rather than see that one went.
-              syntaxHighlightDeletions: true,
-              // Accept/reject buttons are edits; see above.
-              mergeControls: false,
-              collapseUnchanged,
-              diffConfig,
-            }),
-          ],
-          { editable: false }
-        ),
+        state: fixed
+          ? EditorState.create({ doc: working, extensions })
+          : docState(path, extensions, { editable: false }),
       })
       views = [view]
       destroy = () => view.destroy()
@@ -249,7 +257,7 @@ export default function CodeMirrorFileDiff({
       viewsRef.current = []
       destroy()
       // Let go rather than drop: the text editor may be holding the same buffer.
-      releaseDoc(path)
+      if (!fixed) releaseDoc(path)
     }
     // `isDark` is a dependency because Primer's diff palette is baked into the
     // view's configuration rather than held in a compartment: a light/dark swap
@@ -262,7 +270,7 @@ export default function CodeMirrorFileDiff({
     // draw the new file through the old file's ranges — which `gitDiffRanges`
     // would refuse, quietly costing the thing this was done for.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [path, original, patch, sideBySide, isDark])
+  }, [path, original, patch, modified, sideBySide, isDark])
 
   useEffect(() => {
     for (const view of viewsRef.current) {
