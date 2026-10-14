@@ -106,6 +106,8 @@ const api: DesktopApi = {
     ipcRenderer.invoke(IPC.renamePath, target, name),
   copyIntoDirectory: (dirPath, sources) =>
     ipcRenderer.invoke(IPC.copyIntoDirectory, dirPath, sources),
+  movePath: (target, dirPath) =>
+    ipcRenderer.invoke(IPC.movePath, target, dirPath),
   trashPath: (target) => ipcRenderer.invoke(IPC.trashPath, target),
   revealPath: (target) => ipcRenderer.invoke(IPC.revealPath, target),
   startDragPath: (target) => ipcRenderer.invoke(IPC.startDragPath, target),

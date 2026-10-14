@@ -27,6 +27,9 @@ import {
   ContextMenuRadioGroup,
   ContextMenuRadioItem,
   ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu"
 import { cn } from "@/lib/utils"
@@ -35,6 +38,7 @@ import {
   Globe,
   ChevronDown,
   ChevronRight,
+  ClipboardPaste,
   Copy,
   ExternalLink,
   File,
@@ -43,10 +47,12 @@ import {
   FilePlus,
   Folder,
   FolderOpen,
+  FolderInput,
   FolderPlus,
   NotebookPen,
   Pencil,
   RotateCw,
+  Scissors,
   Trash2,
 } from "lucide-react"
 
@@ -174,6 +180,15 @@ export function FileTree({ onAddFolder }: { onAddFolder: () => void }) {
   const menuFocus = useMenuFocusHandoff()
   const [dropDir, setDropDir] = useState<string | null>(null)
   const [dropError, setDropError] = useState<string | null>(null)
+  /** What `Copy` or `Cut` picked up for a later `Paste`. The app's own rather
+   * than the OS clipboard, which holds text here — `Copy path` is already its —
+   * and held across a switch of project, since pasting into another one is the
+   * point. */
+  const [copied, setCopied] = useState<{ path: string; cut: boolean } | null>(
+    null
+  )
+  /** Every project but the one on screen, for `Copy to`. */
+  const others = folders.filter((entry) => entry.id !== folder?.id)
   const [renamingFolder, setRenamingFolder] = useState<WorkspaceFolder | null>(
     null
   )
@@ -245,6 +260,30 @@ export function FileTree({ onAddFolder }: { onAddFolder: () => void }) {
     void useFiles
       .getState()
       .copyIn(dir, sources)
+      .catch((error: unknown) => {
+        setDropError(failureOf(error, "Could not copy that in."))
+      })
+  }
+
+  /** A cut is spent by its paste — the source is gone — and a copy is not. */
+  function paste(dir: string) {
+    if (!copied) return
+    if (!copied.cut) return copyTo(dir, copied.path)
+    setCopied(null)
+    void useFiles
+      .getState()
+      .moveInto(copied.path, dir)
+      .catch((error: unknown) => {
+        setDropError(failureOf(error, "Could not move that."))
+      })
+  }
+
+  /** Copies one of the tree's own paths in. `copyIn` already never overwrites —
+   * a taken name gets ` 2` — and refuses a folder pasted into itself. */
+  function copyTo(dir: string, source: string) {
+    void useFiles
+      .getState()
+      .copyIn(dir, [source])
       .catch((error: unknown) => {
         setDropError(failureOf(error, "Could not copy that in."))
       })
@@ -508,6 +547,7 @@ export function FileTree({ onAddFolder }: { onAddFolder: () => void }) {
             onRename={() => setRenamingFolder(folder)}
             onRemove={() => setRemovingFolder(folder)}
             onAddFolder={onAddFolder}
+            onPaste={copied ? () => paste(shown.path) : undefined}
           />
         ) : (
           <ContextMenuContent className="w-52">
@@ -557,9 +597,51 @@ export function FileTree({ onAddFolder }: { onAddFolder: () => void }) {
                 <FolderPlus />
                 New folder…
               </ContextMenuItem>
+              {copied && (
+                <ContextMenuItem onClick={() => paste(menuTarget.entry.path)}>
+                  <ClipboardPaste />
+                  Paste
+                </ContextMenuItem>
+              )}
               <ContextMenuSeparator />
             </>
           )}
+          <ContextMenuItem
+            onClick={() =>
+              setCopied({ path: menuTarget.entry.path, cut: false })
+            }
+          >
+            <Copy />
+            Copy
+          </ContextMenuItem>
+          <ContextMenuItem
+            onClick={() =>
+              setCopied({ path: menuTarget.entry.path, cut: true })
+            }
+          >
+            <Scissors />
+            Cut
+          </ContextMenuItem>
+          {others.length > 0 && (
+            <ContextMenuSub>
+              <ContextMenuSubTrigger>
+                <FolderInput />
+                Copy to
+              </ContextMenuSubTrigger>
+              <ContextMenuSubContent className="w-52">
+                {others.map((other) => (
+                  <ContextMenuItem
+                    key={other.id}
+                    onClick={() => copyTo(other.path, menuTarget.entry.path)}
+                  >
+                    <Folder />
+                    <span className="truncate">{other.name}</span>
+                  </ContextMenuItem>
+                ))}
+              </ContextMenuSubContent>
+            </ContextMenuSub>
+          )}
+          <ContextMenuSeparator />
           <ContextMenuItem
             onClick={() =>
               void navigator.clipboard.writeText(menuTarget.entry.path)
@@ -659,7 +741,7 @@ export function FileTree({ onAddFolder }: { onAddFolder: () => void }) {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Could not copy that in</AlertDialogTitle>
+            <AlertDialogTitle>Could not put that there</AlertDialogTitle>
             <AlertDialogDescription>{dropError}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -820,6 +902,7 @@ function RootMenu({
   onRename,
   onRemove,
   onAddFolder,
+  onPaste,
 }: {
   folder: WorkspaceFolder
   /** The directory being read — the project folder's own path. */
@@ -832,6 +915,8 @@ function RootMenu({
   onRename: () => void
   onRemove: () => void
   onAddFolder: () => void
+  /** Absent while nothing has been copied. */
+  onPaste?: () => void
 }) {
   return (
     <ContextMenuContent className="w-52">
@@ -843,6 +928,12 @@ function RootMenu({
         <FolderPlus />
         New folder…
       </ContextMenuItem>
+      {onPaste && (
+        <ContextMenuItem onClick={onPaste}>
+          <ClipboardPaste />
+          Paste
+        </ContextMenuItem>
+      )}
       <ContextMenuSeparator />
       <ContextMenuItem onClick={() => void useFiles.getState().read(path)}>
         <RotateCw />

@@ -4,6 +4,7 @@ import {
   mkdtemp,
   readlink,
   rm,
+  stat,
   symlink,
   writeFile,
 } from "node:fs/promises"
@@ -18,6 +19,7 @@ import {
   indexFiles,
   insideAny,
   listDirectory,
+  moveInto,
   nameError,
   readTextFile,
   renamePath,
@@ -598,6 +600,46 @@ async function main() {
   } finally {
     await rm(outside, { recursive: true, force: true })
     await rm(into, { recursive: true, force: true })
+  }
+
+  section("moveInto")
+
+  const from = await mkdtemp(path.join(tmpdir(), "vsclaude-cut-"))
+  const to = await mkdtemp(path.join(tmpdir(), "vsclaude-paste-"))
+  const exists = (target: string) =>
+    stat(target).then(
+      () => true,
+      () => false
+    )
+  try {
+    await writeFile(path.join(from, "a.txt"), "cut")
+    await writeFile(path.join(to, "a.txt"), "mine")
+    await mkdir(path.join(from, "dir", "inner"), { recursive: true })
+
+    const moved = await moveInto(path.join(from, "a.txt"), to)
+    check(
+      "a move numbers a taken name and leaves nothing behind",
+      moved === path.join(to, "a 2.txt") &&
+        !(await exists(path.join(from, "a.txt"))) &&
+        JSON.stringify(await readTextFile(path.join(to, "a.txt"))) ===
+          JSON.stringify({ kind: "text", text: "mine" })
+    )
+    check(
+      "pasting back where it was cut from is no move at all",
+      (await moveInto(moved, to)) === moved
+    )
+
+    let refused = false
+    await moveInto(
+      path.join(from, "dir"),
+      path.join(from, "dir", "inner")
+    ).catch(() => {
+      refused = true
+    })
+    check("a folder is not moved into itself", refused)
+  } finally {
+    await rm(from, { recursive: true, force: true })
+    await rm(to, { recursive: true, force: true })
   }
 
   finish()

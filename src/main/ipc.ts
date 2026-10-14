@@ -1078,6 +1078,10 @@ export function createIpc(host: Host): {
       files.copyInto(await inWorkspace(dir), sources)
   )
 
+  handle(IPC.movePath, async (_event, target: string, dir: string) =>
+    files.moveInto(await inWorkspace(target), await inWorkspace(dir))
+  )
+
   handle(IPC.trashPath, async (_event, target: string) => {
     // The OS trash rather than `unlink`: this is somebody's source file, the
     // studio has no undo of its own, and every desktop already has one.

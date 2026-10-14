@@ -2216,6 +2216,10 @@ export type DesktopApi = {
    * held to the workspace's folders — the sources are the point of the drop.
    * Resolves to the copies' paths. */
   copyIntoDirectory: (dirPath: string, sources: string[]) => Promise<string[]>
+  /** The tree's Cut and Paste: moves `target` into `dirPath`, renumbering a
+   * taken name like a copy does. Both ends are held to the workspace's
+   * folders. Resolves to the new path. */
+  movePath: (target: string, dirPath: string) => Promise<string>
   /** To the system trash, not `unlink`: this is somebody's source file, and the
    * OS already has the undo for it. */
   trashPath: (target: string) => Promise<void>
@@ -2845,6 +2849,7 @@ export const IPC = {
   createDirectory: "files:create-directory",
   renamePath: "files:rename",
   copyIntoDirectory: "files:copy-into",
+  movePath: "files:move",
   trashPath: "files:trash",
   revealPath: "files:reveal",
   startDragPath: "files:start-drag",
