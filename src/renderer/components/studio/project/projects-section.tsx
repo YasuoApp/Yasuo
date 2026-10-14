@@ -264,7 +264,7 @@ export function ProjectsSection() {
       <div className="min-h-0 flex-1 overflow-y-auto px-1 py-1">
         {folders.length === 0 && orphans.length === 0 && (
           <p className="px-3 py-1 text-xs leading-relaxed text-muted-foreground">
-            No folders yet. Add one with the + above and it will show up here.
+            No folders yet.
           </p>
         )}
 
