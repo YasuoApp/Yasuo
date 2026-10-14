@@ -9,6 +9,7 @@ import {
 } from "react"
 import {
   Archive,
+  ArrowDown,
   Images,
   ListTree,
   PictureInPicture2,
@@ -185,6 +186,14 @@ const RESTORE_MS = 400
  * what comes before it is visible — a message with nothing above it reads as the
  * start of the conversation. */
 const FOUND_MARGIN = 48
+
+/** How far above the bottom the view has to be before the jump-down button
+ * shows. More than a line or two, so a reply growing under a reader who nudged
+ * the wheel does not flash it in and out. */
+const AWAY_PX = 240
+
+const awayFromBottom = (element: HTMLElement) =>
+  element.scrollHeight - element.scrollTop - element.clientHeight > AWAY_PX
 
 /**
  * Which column is open beside the transcript — the table of contents, the
@@ -477,6 +486,19 @@ function Conversation({
     return false
   }
 
+  /** Whether the view is far enough above the bottom to offer a way back down.
+   * State rather than a ref because it draws, and set from the scroll and the
+   * resize alike: a reply growing under a still reader moves the bottom away
+   * without a single scroll event of theirs. */
+  const [away, setAway] = useState(false)
+  const toBottom = () => {
+    const element = box.current
+    if (!element) return
+    pinned.current = true
+    restore.current = null
+    element.scrollTo({ top: element.scrollHeight, behavior: "smooth" })
+  }
+
   // Follows the newest turn, but only while it is pinned: yanking the view down
   // while somebody reads further up is what makes a transcript unusable.
   // `ask` is in here too: a question arriving is the one thing that must not be
@@ -500,6 +522,7 @@ function Conversation({
       seen && !seen.pinned ? { top: seen.top, until: heldUntil() } : null
     if (!element) return
     element.scrollTop = pinned.current ? element.scrollHeight : (seen?.top ?? 0)
+    setAway(awayFromBottom(element))
   }, [chatId])
 
   // The transcript settles over several frames — lines arrive from disk after
@@ -515,15 +538,18 @@ function Conversation({
       if (pinned.current) {
         element.scrollTop = element.scrollHeight
         lastTop.current = element.scrollTop
+        setAway(false)
         return
       }
       // The other half of the same problem: a position put back before the
       // transcript had its full height was clamped, so it is written again
       // every time that height changes.
       const pending = restoring() ? restore.current : null
-      if (!pending) return
-      element.scrollTop = pending.top
-      lastTop.current = element.scrollTop
+      if (pending) {
+        element.scrollTop = pending.top
+        lastTop.current = element.scrollTop
+      }
+      setAway(awayFromBottom(element))
     })
     observer.observe(inner)
     return () => observer.disconnect()
@@ -858,6 +884,7 @@ function Conversation({
             onScroll={(event) => {
               const { scrollTop, scrollHeight, clientHeight } =
                 event.currentTarget
+              setAway(awayFromBottom(event.currentTarget))
               if (restoring()) {
                 lastTop.current = scrollTop
                 return
@@ -1013,6 +1040,19 @@ function Conversation({
               </div>
             )}
           </div>
+          {/* Back to the newest turn, for somebody who scrolled up to read.
+              Clicking it pins the view again, so a running turn is followed
+              from there on. */}
+          {away && !empty && !reading && (
+            <IconButton
+              label="Scroll to bottom"
+              variant="outline"
+              onClick={toBottom}
+              className="absolute bottom-3 left-1/2 z-10 size-8 -translate-x-1/2 animate-pop rounded-full bg-background shadow-md"
+            >
+              <ArrowDown className="size-4" />
+            </IconButton>
+          )}
         </div>
         {/* Beside the selection, wherever in the transcript it is — fixed, so
             it does not matter that it is mounted outside the scroll. */}
