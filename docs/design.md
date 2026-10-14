@@ -556,7 +556,9 @@ removes the items, which is the point of its being a plugin.
 ### Usage, the second
 
 The rail's `Usage` dialog is `plugins/usage/`: its button is an
-`addRailButton` under Search, the same dialog is `Show usage` in the palette, and
+`addRailButton` at the rail's foot above Terminal — it sat under Search once,
+where a button that opens a dialog read as a third view of the projects column
+— the same dialog is `Show usage` in the palette, and
 what it reads is `chats.spend()` — the `chatSpend` channel, which stays in main
 because the transcripts are main's to read. `dashboard.tsx` and `spend.ts` moved
 with it; `test/chat-spend.ts` follows them.
