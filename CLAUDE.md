@@ -140,7 +140,9 @@ imports may reach `electron`.
   `lineHistory` (`git log -L`) the card's list of every commit that changed
   that line. Amend, branch and
   push stay out — that is
-  the git client the dock's shell already is. `discard`
+  the git client the dock's shell already is; the `Commits` view's **Push**
+  button only types `git push` into a dock shell, so a key's passphrase is
+  asked there. `discard`
   answers with the paths it could not restore instead of deleting them: they go
   to the trash in `ipc.ts`, because this module stays free of `electron` so the
   tests can import it.
