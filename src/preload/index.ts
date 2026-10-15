@@ -166,6 +166,8 @@ const api: DesktopApi = {
   setAlwaysOnTop: (on) => ipcRenderer.invoke(IPC.setAlwaysOnTop, on),
   isAlwaysOnTop: () => ipcRenderer.invoke(IPC.isAlwaysOnTop),
   setBadgeCount: (count) => ipcRenderer.invoke(IPC.setBadgeCount, count),
+  signInWithGoogle: () => ipcRenderer.invoke(IPC.signInWithGoogle),
+  cancelSignInWithGoogle: () => ipcRenderer.invoke(IPC.cancelSignInWithGoogle),
   searchWorkspace: (query, options, filter) =>
     ipcRenderer.invoke(IPC.searchWorkspace, query, options, filter),
   replaceInFiles: (query, options, replacement, paths) =>

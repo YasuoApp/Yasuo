@@ -196,6 +196,9 @@ export function registerIpc(
     setBadgeCount(count) {
       app.setBadgeCount(Math.max(0, Math.floor(count)))
     },
+    openExternal(url) {
+      void shell.openExternal(url)
+    },
     version: app.getVersion(),
     installerScript: installerScript(),
     bundledPluginsDir: bundledPluginsDir(),

@@ -11,6 +11,7 @@ import { unreadIn } from "@/lib/chat/unread"
 import { PLUGIN_ICON_COMPONENTS } from "@/lib/plugins/icons"
 import type { PluginRailButton } from "@/lib/plugins/registry"
 import { usePlugins } from "@/lib/plugins/store"
+import { AccountMenu } from "./account-menu"
 import { IconButton } from "./icon-button"
 
 /**
@@ -130,6 +131,9 @@ export function NavRail({ onOpenSettings }: { onOpenSettings: () => void }) {
       <RailButton label="Settings" onClick={onOpenSettings}>
         <Settings />
       </RailButton>
+      {/* Last, so it is the corner of the window whatever the rail holds above
+          it. Who is signed in is the window's, not a setting's. */}
+      <AccountMenu />
     </nav>
   )
 }

@@ -56,6 +56,10 @@ export type Host = {
   setAlwaysOnTop: (caller: unknown, on: boolean) => void
   isAlwaysOnTop: (caller: unknown) => boolean
 
+  /** Opens a URL in the user's browser. Only for a URL this app built itself —
+   * a sign-in page on localhost — since the caller is not reviewing it. */
+  openExternal: (url: string) => void
+
   /** The number on the app's own icon — the dock's red badge on macOS, the
    * launcher's count on Linux. Zero clears it. */
   setBadgeCount: (count: number) => void

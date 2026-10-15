@@ -58,6 +58,7 @@ import {
   workingTree,
 } from "./git"
 import { ChatNotices, noticeText, type ChatNotice } from "./notify"
+import { cancelSignInWithGoogle, signInWithGoogle } from "./google-sign-in"
 import { installedMcpServers, removeMcpServer } from "./mcp-servers"
 import { planUsage } from "./plan-usage"
 import {
@@ -490,6 +491,11 @@ export function createIpc(host: Host): {
   handle(IPC.setBadgeCount, (_event, count: number) => {
     host.setBadgeCount(count)
   })
+
+  handle(IPC.signInWithGoogle, () =>
+    signInWithGoogle((url) => host.openExternal(url))
+  )
+  handle(IPC.cancelSignInWithGoogle, () => cancelSignInWithGoogle())
 
   /*
    * The left column's Search. `searching` is the generation: each call takes

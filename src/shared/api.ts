@@ -2574,6 +2574,16 @@ export type DesktopApi = {
    */
   setBadgeCount: (count: number) => Promise<void>
   /**
+   * Signs in with Google, in the user's browser — see `main/google-sign-in.ts`
+   * for why it is not a window of this app. Resolves with the Google ID token,
+   * which the renderer exchanges with Firebase; rejects when the browser is
+   * closed without an answer or after five minutes.
+   */
+  signInWithGoogle: () => Promise<string>
+  /** Ends a sign-in that is waiting on the browser, as cancelled. For a tab
+   * that was closed before it answered. */
+  cancelSignInWithGoogle: () => Promise<void>
+  /**
    * The left column's Search: `query` across every file in the workspace and
    * everything said in every chat — see `WorkspaceSearch`.
    *
@@ -2959,6 +2969,8 @@ export const IPC = {
   setAlwaysOnTop: "window:set-always-on-top",
   isAlwaysOnTop: "window:is-always-on-top",
   setBadgeCount: "app:set-badge-count",
+  signInWithGoogle: "auth:sign-in-google",
+  cancelSignInWithGoogle: "auth:cancel-sign-in-google",
   searchWorkspace: "search:workspace",
   replaceInFiles: "search:replace",
   deleteChat: "chats:delete",
