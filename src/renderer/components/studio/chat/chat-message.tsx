@@ -1,6 +1,7 @@
 import {
   createContext,
   useContext,
+  useId,
   useLayoutEffect,
   useRef,
   useState,
@@ -39,6 +40,8 @@ import { dateTimeOf, timeOf } from "@/lib/chat/since"
 import { usageDetail, usageLine } from "@/lib/chat/usage"
 import { compactLine } from "@/lib/chat/window"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Label } from "@/components/ui/label"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { MarkdownView } from "../markdown-view"
@@ -111,10 +114,11 @@ export type MessageEdit = {
   /** While the chat is working: the cut is read off a transcript the CLI is
    * still writing, so main refuses it then. */
   disabled: boolean
-  /** The files the turns after this message wrote, which an edit leaves as
-   * they are — `editedAfter`. Asked when the editor opens, not on every draw. */
+  /** The files the turns after this message wrote — `editedAfter` — which
+   * the edit puts back when asked to. Asked when the editor opens, not on every
+   * draw. */
   files: () => string[]
-  save: (text: string) => void
+  save: (text: string, restore: boolean) => void
 }
 
 /**
@@ -165,9 +169,9 @@ function UserMessage({
         text={of.text}
         files={edit.files()}
         onCancel={() => setEditing(false)}
-        onSave={(text) => {
+        onSave={(text, restore) => {
           setEditing(false)
-          edit.save(text)
+          edit.save(text, restore)
         }}
       />
     )
@@ -468,9 +472,12 @@ function MessageActions({
  * it again in its place.
  *
  * Says what it is about to do, because it is not undoable from here: every
- * turn after the message goes, and the files those turns wrote do not come
- * back with it — `editedAfter`. ⌘↩ sends and Esc puts the bubble back, the
- * composer's own keys.
+ * turn after the message goes, and — ticked by default — the files those turns
+ * wrote go back to how they were before it (`editedAfter` names them; the
+ * CLI's checkpoints restore them). A box rather than always, because the
+ * rewind takes whatever was typed into those files since along with the
+ * turns' own edits. ⌘↩ sends and Esc puts the bubble back, the composer's own
+ * keys.
  */
 function EditMessage({
   text,
@@ -481,10 +488,14 @@ function EditMessage({
   text: string
   files: string[]
   onCancel: () => void
-  onSave: (text: string) => void
+  onSave: (text: string, restore: boolean) => void
 }) {
   const [draft, setDraft] = useState(text)
+  const [restore, setRestore] = useState(true)
+  const boxId = useId()
   const ready = draft.trim() !== "" && draft.trim() !== text.trim()
+  // Nothing to put back is not a rewind worth a process.
+  const save = () => onSave(draft, restore && files.length > 0)
 
   return (
     <div className="ml-4 space-y-1.5 rounded-lg border bg-accent/30 p-1.5">
@@ -505,7 +516,7 @@ function EditMessage({
           }
           if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
             event.preventDefault()
-            if (ready) onSave(draft)
+            if (ready) save()
           }
         }}
         className="max-h-64 min-h-12 resize-none bg-background px-2 py-1.5 text-chat md:text-chat"
@@ -513,12 +524,20 @@ function EditMessage({
       <p className="px-0.5 text-[0.65rem] leading-snug text-muted-foreground">
         Everything after this message is removed and the conversation goes on
         from here.
-        {files.length > 0 && (
-          <>
-            {" "}
-            The {files.length === 1 ? "file" : `${files.length} files`} those
-            turns changed {files.length === 1 ? "stays" : "stay"} as{" "}
-            {files.length === 1 ? "it is" : "they are"}:{" "}
+      </p>
+      {files.length > 0 && (
+        <div className="flex items-start gap-1.5 px-0.5">
+          <Checkbox
+            id={boxId}
+            checked={restore}
+            onCheckedChange={(checked) => setRestore(checked === true)}
+            className="mt-px"
+          />
+          <Label
+            htmlFor={boxId}
+            className="block text-[0.65rem] leading-snug font-normal text-muted-foreground"
+          >
+            Put the files back —{" "}
             <span className="text-foreground/80">
               {files.slice(0, 5).map((path, index) => (
                 <span key={path} title={path}>
@@ -527,16 +546,18 @@ function EditMessage({
                 </span>
               ))}
               {files.length > 5 && `, and ${files.length - 5} more`}
-            </span>
-            .
-          </>
-        )}
-      </p>
+            </span>{" "}
+            as {files.length === 1 ? "it was" : "they were"} before this
+            message. Changes typed into {files.length === 1 ? "it" : "them"}{" "}
+            since go too; what a shell command wrote stays.
+          </Label>
+        </div>
+      )}
       <div className="flex justify-end gap-1">
         <Button size="xs" variant="ghost" onClick={onCancel}>
           Cancel
         </Button>
-        <Button size="xs" disabled={!ready} onClick={() => onSave(draft)}>
+        <Button size="xs" disabled={!ready} onClick={save}>
           Send
         </Button>
       </div>

@@ -624,8 +624,10 @@ export function createIpc(host: Host): {
       allChats.send(id, prompt, images ?? [])
   )
 
-  handle(IPC.editChat, (_event, id: string, at: number, prompt: string) =>
-    allChats.edit(id, at, prompt)
+  handle(
+    IPC.editChat,
+    (_event, id: string, at: number, prompt: string, restore: boolean) =>
+      allChats.edit(id, at, prompt, restore === true)
   )
 
   handle(IPC.stopChat, (_event, id: string) => {

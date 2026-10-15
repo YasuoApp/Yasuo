@@ -312,9 +312,15 @@ type ChatState = {
    * Message `at` — counted among the chat's user lines — said again as
    * `prompt`, with everything after it gone, here and in the CLI's session,
    * and its pictures sent again as they were. See `editChat`. Nothing while the chat is working: the bubble does
-   * not offer it, and main would refuse.
+   * not offer it, and main would refuse. `restore` puts the files the cut
+   * turns wrote back too.
    */
-  edit: (id: string, at: number, prompt: string) => Promise<void>
+  edit: (
+    id: string,
+    at: number,
+    prompt: string,
+    restore: boolean
+  ) => Promise<void>
   stop: (id: string) => void
   /**
    * Answers what a chat is waiting on, and takes the card down.
@@ -764,7 +770,7 @@ export const useChats = create<ChatState>((set, get) => ({
     }
   },
 
-  async edit(id, at, prompt) {
+  async edit(id, at, prompt, restore) {
     const text = prompt.trim()
     if (!text || get().sending.includes(id)) return
 
@@ -798,7 +804,7 @@ export const useChats = create<ChatState>((set, get) => ({
     })
 
     try {
-      await window.desktop.editChat(id, at, text)
+      await window.desktop.editChat(id, at, text, restore)
     } catch (error) {
       // Main refuses before it cuts anything, so the chat is what it was: put
       // it back, with the reason under it.

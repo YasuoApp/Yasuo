@@ -179,8 +179,8 @@ const api: DesktopApi = {
     ipcRenderer.invoke(IPC.answerChatAsk, askId, answer),
   sendChat: (id, prompt, images) =>
     ipcRenderer.invoke(IPC.sendChat, id, prompt, images),
-  editChat: (id, at, prompt) =>
-    ipcRenderer.invoke(IPC.editChat, id, at, prompt),
+  editChat: (id, at, prompt, restore) =>
+    ipcRenderer.invoke(IPC.editChat, id, at, prompt, restore),
   stopChat: (id) => ipcRenderer.invoke(IPC.stopChat, id),
   onChatEvent: (listener) => subscribe<ChatEvent>(IPC.chatEvent, listener),
   onRevealChat: (listener) => subscribe<string>(IPC.revealChat, listener),

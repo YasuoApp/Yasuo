@@ -2,15 +2,15 @@ import type { AssistantMessage } from "@shared/api"
 
 /**
  * What editing message `at` would leave behind it: the files the turns after
- * it wrote, which the edit does not put back.
+ * it wrote, which the edit puts back when its box is ticked.
  *
- * An edit cuts the conversation, not the working tree — there is no snapshot
- * of the tree per turn to restore (`docs/design.md` § Editing a message). So
- * the bubble says which files those turns touched before somebody presses
- * Send, rather than leaving a model that no longer remembers an edit looking
- * at a file that still has it. Off the tool rows' own `path`s, subagents'
- * included: a subagent's edit is the turn's edit too. A call that failed wrote
- * nothing.
+ * The putting back is the CLI's (its file checkpoints, `rewindSessionFiles`
+ * in main), and it answers with counts rather than a list until it is asked —
+ * so the bubble names the files off the transcript before somebody presses
+ * Send, rather than a model that no longer remembers an edit looking at a file
+ * that still has it. Off the tool rows' own `path`s, subagents' included: a
+ * subagent's edit is the turn's edit too. A call that failed wrote nothing.
+ * The same tools the CLI checkpoints, so a `Bash` write is in neither.
  */
 export function editedAfter(
   messages: AssistantMessage[],

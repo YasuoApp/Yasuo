@@ -32,12 +32,13 @@ import {
 } from "../shared/api"
 import { contentTypeOf, extensionForType } from "../shared/note-files"
 import { spendRows } from "./chat-digest"
-import { forkPointIn } from "./chat-fork"
+import { forkPointIn, promptIdIn } from "./chat-fork"
 import { chatMatchesIn } from "./content-search"
 import {
   AGENT_TOOLS,
   collapse,
   lineId,
+  rewindSessionFiles,
   startAgentSession,
   summarise,
   type AgentPrompt,
@@ -888,8 +889,21 @@ export class Chats {
    *
    * Refused while the chat is working: the cut is read off a transcript the
    * CLI is still appending to. The renderer does not offer it then either.
+   *
+   * **With `restore`, the files go back too** — every file the cut turns wrote
+   * through `Edit`/`Write`, to how it was before the edited message, out of
+   * the CLI's own file checkpoints (`rewindSessionFiles`). Done before the cut
+   * and refused whole when it cannot be, so a chat whose turns kept no copies
+   * says so rather than being cut over files that still hold what it is about
+   * to forget. A `Bash` write stays; so does anything typed into those files
+   * since, which is why the box asks rather than doing it unasked.
    */
-  async edit(id: string, at: number, prompt: string): Promise<void> {
+  async edit(
+    id: string,
+    at: number,
+    prompt: string,
+    restore = false
+  ): Promise<void> {
     if (this.live.get(id)?.busy)
       throw new Error("Stop the turn before editing a message.")
 
@@ -914,18 +928,31 @@ export class Chats {
       ...(record.startedIn ?? []),
     ])
     const latest = copies[0]
+    const transcript = latest ? await readFile(latest.path, "utf8") : null
+    const said = asked.slice(at).map((line) => line.text)
     // Thrown out of here before anything is cut, so a refusal leaves the chat
     // exactly as it was.
-    const fork =
-      at > 0 && latest
-        ? forkPointIn(
-            await readFile(latest.path, "utf8"),
-            asked.slice(at).map((line) => line.text)
-          )
-        : null
+    const fork = at > 0 && transcript ? forkPointIn(transcript, said) : null
+    const rewind = restore
+      ? {
+          to: transcript
+            ? promptIdIn(transcript, said)
+            : refuse(
+                "This chat has no CLI session to put the files back from."
+              ),
+          cwd:
+            (record.folderId
+              ? await this.source.folderDir(record.folderId)
+              : null) ?? refuse("That project is no longer in the workspace."),
+          // The account whose CLI wrote the checkpoints is the one whose
+          // transcript the conversation continued in.
+          configDir: latest?.dir || null,
+        }
+      : null
 
     // The session goes, quietly, the way `clear` closes one: it was opened on
-    // the conversation as it stood, and a resume is a new process.
+    // the conversation as it stood, and a resume is a new process. Before the
+    // rewind too, which resumes this same session in a process of its own.
     const live = this.live.get(id)
     this.live.delete(id)
     if (live?.idle) clearTimeout(live.idle)
@@ -935,6 +962,12 @@ export class Chats {
       this.asks.delete(askId)
       pending.answered({ allow: false, message: "That message was edited." })
     }
+
+    // Still before the cut: a rewind the CLI refuses leaves the lines and the
+    // transcript as they were, and the closed session reopens on the next
+    // message like any idle one. Before the first message's transcript is set
+    // aside below, too — the checkpoints are read through it.
+    if (rewind) await rewindSessionFiles({ sessionId: id, ...rewind })
 
     if (fork) this.forks.set(id, fork)
     else {
@@ -2290,6 +2323,11 @@ function startedDirs(
 ): string[] | undefined {
   if (!dirs || dirs.size === 0) return chat.startedIn
   return [...new Set([...(chat.startedIn ?? []), ...dirs])]
+}
+
+/** A throw where an expression is wanted — an `??` with nothing to fall to. */
+function refuse(message: string): never {
+  throw new Error(message)
 }
 
 /** A chat's name: the first thing asked, on one line and short enough for a tab

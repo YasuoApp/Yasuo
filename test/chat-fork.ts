@@ -1,4 +1,4 @@
-import { forkPointIn } from "../src/main/chat-fork"
+import { forkPointIn, promptIdIn } from "../src/main/chat-fork"
 import { check, finish, section } from "./harness"
 
 /**
@@ -144,6 +144,36 @@ section("what the CLI writes that nobody typed")
   check(
     "a later message the CLI never received does not stop the cut",
     forkPointIn(file, ["and also this", "never sent", "last"]) === said[1]!.uuid
+  )
+}
+
+section("the prompt a rewind puts the files back to")
+
+{
+  // The CLI files a turn's file checkpoint under the prompt that started it —
+  // measured against a real session — so the uuid is the prompt's own, not
+  // the entry before it that the conversation is cut at.
+  restart(null)
+  const said = [asked("one"), answered("1"), asked("two"), answered("2")]
+  const file = jsonl(said)
+  check(
+    "a later message is its own entry",
+    promptIdIn(file, ["two"]) === said[2]!.uuid
+  )
+  check(
+    "and so is the first, which has nothing before it to cut at",
+    promptIdIn(file, ["one", "two"]) === said[0]!.uuid
+  )
+  check(
+    "a message the CLI does not have is refused, as the cut is",
+    (() => {
+      try {
+        promptIdIn(file, ["never sent"])
+        return false
+      } catch {
+        return true
+      }
+    })()
   )
 }
 

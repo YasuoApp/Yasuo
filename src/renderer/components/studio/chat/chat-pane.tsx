@@ -579,7 +579,7 @@ function Conversation({
     return {
       disabled: working,
       files: () => editedAfter(lines, at),
-      save: (text) => void edit(chatId, at, text),
+      save: (text, restore) => void edit(chatId, at, text, restore),
     }
   }
   const liveFrom = useMemo(() => {

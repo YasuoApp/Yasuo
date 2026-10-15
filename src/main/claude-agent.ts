@@ -416,6 +416,98 @@ const NOT_INSTALLED =
   "Claude Code is not installed, or not on the PATH your shell gives it. Install it with: npm install -g @anthropic-ai/claude-code"
 
 /**
+ * Puts the files a session's turns wrote back the way they were before the
+ * prompt `to` — an edited message's other half (`Chats.edit`).
+ *
+ * **A process of its own, resumed and given no prompt**, the construction
+ * `mcp-servers.ts` uses: `rewindFiles` is a control request, so the CLI comes
+ * up on the session, answers, and is closed without a turn and without a
+ * token. The chat's own session is not used even when one is open — the edit
+ * closes it anyway, and the checkpoints are on disk, not in that process:
+ * measured, a session closed and resumed in a new process rewinds exactly as
+ * the one that wrote them would.
+ *
+ * Resolves with what was put back; throws with a sentence when the CLI says it
+ * cannot (`canRewind: false` — a chat from before checkpoints, or a message the
+ * CLI filed none under).
+ */
+export async function rewindSessionFiles(input: {
+  cwd: string
+  sessionId: string
+  configDir: string | null
+  to: string
+}): Promise<{ files: string[] }> {
+  const binary = await locate(claudeBinary())
+  if (!binary) throw new Error(NOT_INSTALLED)
+
+  const held = new AbortController()
+  // A prompt that never arrives: one that ended would let the CLI exit before
+  // the control request was answered.
+  const nothing: AsyncIterable<never> = {
+    [Symbol.asyncIterator]: () => ({
+      next: () =>
+        new Promise<IteratorResult<never, undefined>>((resolve) => {
+          held.signal.addEventListener(
+            "abort",
+            () => resolve({ done: true, value: undefined }),
+            { once: true }
+          )
+        }),
+    }),
+  }
+
+  const conversation = query({
+    prompt: nothing,
+    options: {
+      cwd: input.cwd,
+      pathToClaudeCodeExecutable: binary,
+      env: await spawnEnvironment(
+        input.configDir ? { CLAUDE_CONFIG_DIR: input.configDir } : {}
+      ),
+      abortController: held,
+      resume: input.sessionId,
+      enableFileCheckpointing: true,
+    },
+  })
+
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    // Asked dry first for the list, since the real rewind answers with counts
+    // alone — and a dry run that cannot is a refusal before anything moved.
+    const ask = async () => {
+      const preview = await conversation.rewindFiles(input.to, { dryRun: true })
+      if (!preview.canRewind)
+        throw new Error(
+          `The files cannot be put back: ${preview.error ?? "the CLI kept no copy of them for that message"}. Untick “Put the files back” to edit the message anyway.`
+        )
+      const done = await conversation.rewindFiles(input.to)
+      if (!done.canRewind)
+        throw new Error(
+          `The files could not be put back: ${done.error ?? "the CLI did not say why"}.`
+        )
+      return { files: preview.filesChanged ?? [] }
+    }
+    return await Promise.race([
+      ask(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () =>
+            reject(new Error("`claude` did not answer the rewind in time.")),
+          REWIND_TIMEOUT_MS
+        )
+      }),
+    ])
+  } finally {
+    clearTimeout(timer)
+    held.abort()
+    await conversation.return?.(undefined).catch(() => {})
+  }
+}
+
+/** The login shell's resolve and the CLI's startup, which is most of it. */
+const REWIND_TIMEOUT_MS = 30_000
+
+/**
  * The user's half of a streaming session, as the iterable the SDK reads.
  *
  * A queue and a promise rather than anything cleverer, because the SDK pulls:
@@ -571,6 +663,13 @@ export async function startAgentSession(
       // request changes, so the cached prefix is untouched — and drawn under
       // the `Agent` row that ran it (see `parent` on a line).
       forwardSubagentText: true,
+      // A copy of each file before a turn's `Edit`/`Write` touches it, filed
+      // under the prompt that started the turn — what an edited message puts
+      // the files back from (`rewindSessionFiles`). Kept by the CLI beside the
+      // transcript, so it outlives the process; nothing about the request
+      // changes, so the cached prefix is untouched. A `Bash` write is not
+      // tracked.
+      enableFileCheckpointing: true,
       ...(session.model ? { model: session.model } : {}),
       ...(session.effort
         ? { effort: session.effort as Options["effort"] }

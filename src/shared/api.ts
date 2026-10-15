@@ -2644,11 +2644,19 @@ export type DesktopApi = {
    * bubble's Edit. `at` counts the chat's user lines, from 0; the message's
    * pictures are sent again as they were. The CLI's session
    * is cut there too, so the model answers as though the turns after it never
-   * happened; the files those turns wrote are left as they are. Rejects while
-   * the chat is working, and when the CLI's copy of the conversation does not
-   * have the message (compacted away, or never sent).
+   * happened. With `restore`, the files those turns wrote through `Edit` /
+   * `Write` are put back as they were before the message, out of the CLI's
+   * file checkpoints; without it they are left as they are. Rejects while the
+   * chat is working, when the CLI's copy of the conversation does not have the
+   * message (compacted away, or never sent), and — before anything is cut —
+   * when `restore` was asked and the CLI kept no copies to put back.
    */
-  editChat: (id: string, at: number, prompt: string) => Promise<void>
+  editChat: (
+    id: string,
+    at: number,
+    prompt: string,
+    restore: boolean
+  ) => Promise<void>
   /** Kills the turn in flight. There is nothing gentler in print mode. */
   stopChat: (id: string) => Promise<void>
   /** Every chat's events, tagged with the chat. Returns an

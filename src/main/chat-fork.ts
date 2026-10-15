@@ -44,6 +44,26 @@ type Entry = {
  * be sure.
  */
 export function forkPointIn(jsonl: string, prompts: string[]): string | null {
+  // The first thing said: the chain starts at it. Anything else with no parent
+  // is a compaction boundary, and a prompt is never one.
+  return promptIn(jsonl, prompts).parentUuid ?? null
+}
+
+/**
+ * The uuid of the prompt being edited itself — what `rewindFiles` takes. The
+ * CLI files a turn's file checkpoint under the prompt that started it, so
+ * rewinding to it puts the files back as they were *before* that turn, which
+ * is the state the edited message is about to be said into. Same matching and
+ * same refusals as `forkPointIn`.
+ */
+export function promptIdIn(jsonl: string, prompts: string[]): string {
+  const target = promptIn(jsonl, prompts)
+  if (!target.uuid)
+    throw new Error("That message has no id in the CLI's copy of this chat.")
+  return target.uuid
+}
+
+function promptIn(jsonl: string, prompts: string[]): Entry {
   const said = chainOf(jsonl).filter(isPrompt)
 
   /*
@@ -70,11 +90,7 @@ export function forkPointIn(jsonl: string, prompts: string[]): string | null {
     throw new Error(
       "That message is not in the CLI's copy of this conversation — it was compacted away, or never reached it — so it cannot be edited."
     )
-  const target = said[index]!
-
-  // The first thing said: the chain starts at it. Anything else with no parent
-  // is a compaction boundary, and a prompt is never one.
-  return target.parentUuid ?? null
+  return said[index]!
 }
 
 /** The last prompt before `before` that this app's `prompt` is, or -1. */
