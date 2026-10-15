@@ -48,6 +48,29 @@ Sign-in will bring a second workspace; until then its id is a constant.
 The manifest keeps an opaque `databases?: unknown` because it is rewritten
 whole, and dropping the key would delete somebody's saved connections.
 
+### The account's workspace, in the cloud
+
+Signing in (`lib/account.ts`) keeps one document per account at
+`workspaces/<uid>` in Firestore (`lib/cloud-workspace.ts`, `firestore.rules`).
+It holds the folder **list** — id, name, date — and the settings in
+`SYNCED_SETTINGS` (`shared/workspace-sync.ts`). It never holds a path: a folder's
+path is this machine's, so a folder another machine added shows under **Not on
+this machine** in the Projects column until `Locate…` gives it one. The folder
+then keeps the id the account knows it by.
+
+Folders reconcile three ways, against the list the cloud held after the last
+cycle (`cloud.synced`). Without that base, the first sync of a machine would
+delete every folder it has just been given, and a removal on another machine
+would be indistinguishable from an addition. A cycle reads the document from the
+server before it writes, and runs one after another, so a change made elsewhere
+is applied before this machine's view is pushed over it.
+
+A machine is linked to one account by `cloud.owner`. A second account on the
+same machine is not given the first one's folders: the menu offers to take the
+workspace over. Both keys are local — facts about the machine, not data to copy.
+`firestore.rules` must be deployed (`firebase deploy --only firestore:rules`)
+for the sync to do anything but report the refusal.
+
 ## The window
 
 A canvas with cards: a full-width title bar (a centred `Run a command` field

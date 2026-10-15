@@ -222,7 +222,16 @@ type StudioState = {
    */
   refreshBranches: () => Promise<void>
   /** Points the workspace at another folder on this machine. */
-  addFolder: (input: { path: string; name: string }) => Promise<void>
+  /** With `id`, locates a folder the account has and this machine does not —
+   * see `PendingFolder`. */
+  addFolder: (input: {
+    path: string
+    name: string
+    id?: string
+  }) => Promise<void>
+  /** Reads the workspace again, for a change that came from the cloud rather
+   * than from this window. */
+  reloadWorkspace: () => Promise<void>
   renameFolder: (id: string, name: string) => Promise<void>
   /** Drops a folder from the workspace. The directory itself is untouched. */
   removeFolder: (id: string) => Promise<void>
@@ -422,6 +431,13 @@ export const useStudio = create<StudioState>((set, get) => {
       // open, which is the only place a bad path can be corrected.
       const workspace = await repo.addFolder(input)
       await load(workspace.folders)
+    },
+
+    async reloadWorkspace() {
+      // Pruned as `removeFolder` prunes, since a folder can leave from the cloud.
+      const { folders } = await repo.getWorkspace()
+      prune(folders)
+      await load(folders)
     },
 
     async renameFolder(id, name) {

@@ -12,6 +12,7 @@ import {
   type ClaudeProfile,
   type FileDiff,
   type FileIndexEntry,
+  type PendingFolder,
   type ReplaceResult,
   type SearchFilter,
   type SearchOptions,
@@ -658,8 +659,10 @@ export function createIpc(host: Host): {
     clipboardImagePath(await host.clipboardImage())
   )
 
-  handle(IPC.addFolder, (_event, input: { path: string; name: string }) =>
-    store.addFolder({ ...input, path: expandHome(input.path) })
+  handle(
+    IPC.addFolder,
+    (_event, input: { path: string; name: string; id?: string }) =>
+      store.addFolder({ ...input, path: expandHome(input.path) })
   )
 
   handle(IPC.renameFolder, (_event, id: string, name: string) =>
@@ -667,6 +670,10 @@ export function createIpc(host: Host): {
   )
 
   handle(IPC.removeFolder, (_event, id: string) => store.removeFolder(id))
+
+  handle(IPC.setPendingFolders, (_event, folders: PendingFolder[]) =>
+    store.setPendingFolders(folders)
+  )
 
   /*
    * A second checkout of a project, which becomes a project.

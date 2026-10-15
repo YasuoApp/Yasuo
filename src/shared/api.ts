@@ -27,6 +27,18 @@ export type WorkspaceFolder = {
 }
 
 /**
+ * A folder the signed-in account's workspace holds that this machine has no
+ * path for — added on another machine, or the same one before it was signed in
+ * to. It is listed, not opened: "Locate" gives it a path, and `addFolder` with
+ * its id then turns it into a `WorkspaceFolder`.
+ */
+export type PendingFolder = {
+  id: string
+  name: string
+  addedAt: string
+}
+
+/**
  * The one workspace everything in the studio belongs to.
  *
  * There is deliberately no second one and no switching between them: two
@@ -39,6 +51,12 @@ export type WorkspaceRecord = {
   id: string
   name: string
   folders: WorkspaceFolder[]
+  /**
+   * Folders the account's cloud copy holds that are not located here yet. Kept
+   * out of `folders` so nothing that opens a folder has to ask whether it has a
+   * path — only the list that shows them and `Locate` reads this.
+   */
+  pending: PendingFolder[]
 }
 
 /**
@@ -2001,13 +2019,27 @@ export type DesktopApi = {
    * workspace rather than the new folder alone, so the renderer never has to
    * splice a list the main process just rewrote.
    */
-  addFolder: (input: { path: string; name: string }) => Promise<WorkspaceRecord>
+  /**
+   * With `id`, locates a pending folder: the record keeps the id the cloud
+   * knows it by, and the pending entry goes. Refused when no pending folder has
+   * that id, so a stale "Locate" cannot mint a folder the account never had.
+   */
+  addFolder: (input: {
+    path: string
+    name: string
+    id?: string
+  }) => Promise<WorkspaceRecord>
   renameFolder: (id: string, name: string) => Promise<WorkspaceRecord>
   /**
    * Drops a folder from the workspace. The directory itself is untouched —
    * what goes is the studio's record of it, which is all the studio ever had.
    */
   removeFolder: (id: string) => Promise<WorkspaceRecord>
+  /**
+   * Replaces the pending list with what the cloud copy holds and this machine
+   * has not located. Drops any entry that is already a located folder.
+   */
+  setPendingFolders: (folders: PendingFolder[]) => Promise<WorkspaceRecord>
 
   /**
    * A second checkout of a project, added to the workspace as a project of its
@@ -2893,6 +2925,7 @@ export const IPC = {
   addFolder: "workspace:add-folder",
   renameFolder: "workspace:rename-folder",
   removeFolder: "workspace:remove-folder",
+  setPendingFolders: "workspace:set-pending-folders",
   addWorktree: "workspace:add-worktree",
   removeWorktree: "workspace:remove-worktree",
   nameWorktree: "workspace:name-worktree",

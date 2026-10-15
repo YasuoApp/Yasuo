@@ -15,6 +15,7 @@ import type {
   AssistantMessage,
   ClaudeProfile,
   Chat,
+  PendingFolder,
   WorkspaceFolder,
   WorkspaceRecord,
 } from "../shared/api"
@@ -155,7 +156,12 @@ type Manifest = {
 }
 
 function emptyWorkspace(): WorkspaceRecord {
-  return { id: DEFAULT_WORKSPACE_ID, name: "Workspace", folders: [] }
+  return {
+    id: DEFAULT_WORKSPACE_ID,
+    name: "Workspace",
+    folders: [],
+    pending: [],
+  }
 }
 
 /**
@@ -226,6 +232,9 @@ export class Store {
         id: workspace?.id ?? DEFAULT_WORKSPACE_ID,
         name: workspace?.name ?? "Workspace",
         folders: workspace?.folders ?? [],
+        // Written by `setPendingFolders`; a manifest from before the cloud
+        // copy existed has none, which is the same as an empty list.
+        pending: workspace?.pending ?? [],
       },
       settings: manifest.settings ?? {},
       // Only when it is there, so a manifest written since keeps its shape
@@ -259,7 +268,11 @@ export class Store {
    * through symlinks first, so the duplicate check below sees what will
    * actually be opened.
    */
-  addFolder(input: { path: string; name: string }): Promise<WorkspaceRecord> {
+  addFolder(input: {
+    path: string
+    name: string
+    id?: string
+  }): Promise<WorkspaceRecord> {
     return this.enqueue(async () => {
       let resolved: string
       try {
@@ -281,12 +294,50 @@ export class Store {
         throw new Error(`This folder is already open as “${clash.name}”.`)
       }
 
+      // Located from the pending list: keeps the id and the date the account
+      // knows it by, so the next push finds the same folder rather than a copy.
+      let id: string = randomUUID()
+      let addedAt = new Date().toISOString()
+      if (input.id !== undefined) {
+        const pending = manifest.workspace.pending.find(
+          (candidate) => candidate.id === ownId(input.id as string)
+        )
+        if (!pending) throw new Error(`No pending folder: ${input.id}`)
+        id = pending.id
+        addedAt = pending.addedAt
+        manifest.workspace.pending = manifest.workspace.pending.filter(
+          (candidate) => candidate !== pending
+        )
+      }
+
       manifest.workspace.folders.push({
-        id: randomUUID(),
+        id,
         name: input.name.trim() || path.basename(resolved),
         path: resolved,
-        addedAt: new Date().toISOString(),
+        addedAt,
       })
+      await this.writeManifest(manifest)
+      return manifest.workspace
+    })
+  }
+
+  /**
+   * Replaces the list of folders this machine has not located. Whatever is
+   * already a located folder is dropped from it: a folder is in one list or the
+   * other, never both, and the sync that calls this has the cloud's view while
+   * this has the local one.
+   */
+  setPendingFolders(folders: PendingFolder[]): Promise<WorkspaceRecord> {
+    return this.enqueue(async () => {
+      const manifest = await this.readManifest()
+      const located = new Set(manifest.workspace.folders.map((f) => f.id))
+      manifest.workspace.pending = folders
+        .filter((folder) => !located.has(folder.id))
+        .map((folder) => ({
+          id: ownId(folder.id),
+          name: folder.name,
+          addedAt: folder.addedAt,
+        }))
       await this.writeManifest(manifest)
       return manifest.workspace
     })

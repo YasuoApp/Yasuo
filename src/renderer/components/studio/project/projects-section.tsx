@@ -48,6 +48,7 @@ import { IconButton } from "../icon-button"
 import { RenameDialog } from "../rename-dialog"
 import { RenameRow, useMenuFocusHandoff } from "../rename-row"
 import { SideRow } from "../side-row"
+import { PendingFolders } from "./pending-folders"
 import { NewWorktreeDialog } from "./new-worktree-dialog"
 import { RemoveWorktreeDialog } from "./remove-worktree-dialog"
 import { useWorktreeStatus, WorktreeMarks } from "./worktree-status"
@@ -262,6 +263,7 @@ export function ProjectsSection() {
       className="flex h-full min-h-0 flex-col overflow-hidden"
     >
       <div className="min-h-0 flex-1 overflow-y-auto px-1 py-1">
+        <PendingFolders />
         {folders.length === 0 && orphans.length === 0 && (
           <p className="px-3 py-1 text-xs leading-relaxed text-muted-foreground">
             No folders yet.
