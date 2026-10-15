@@ -1,5 +1,12 @@
 import type { ChatAsk } from "../src/shared/api"
-import { asked, decided, isMcpTool, said, titleFor } from "../src/main/chat"
+import {
+  asked,
+  decided,
+  editsAsks,
+  isMcpTool,
+  said,
+  titleFor,
+} from "../src/main/chat"
 import { check, finish, section } from "./harness"
 
 /**
@@ -241,6 +248,22 @@ check(
   // Edits leaves these out on purpose; asking about them would undo that.
   "a built-in is not, so Edits still refuses one it never listed",
   !isMcpTool("KillShell") && !isMcpTool("ExitPlanMode")
+)
+
+check(
+  // Bash is permitted in Edits, so refusing the host it needs refused the
+  // command silently — the CLI logged it as "user denied" with no card shown.
+  "the sandbox's network prompt is asked about, not refused",
+  editsAsks("SandboxNetworkAccess") &&
+    editsAsks("mcp__claude_ai_Figma__get_screenshot") &&
+    !editsAsks("KillShell")
+)
+
+check(
+  "the network card names the host",
+  titleFor("SandboxNetworkAccess", { host: "api.anthropic.com" }).includes(
+    "api.anthropic.com"
+  )
 )
 
 finish()

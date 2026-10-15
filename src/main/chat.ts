@@ -239,6 +239,18 @@ const ALLOWED_TOOLS = [
 const ASK_TOOL = "AskUserQuestion"
 
 /**
+ * What the CLI calls a sandboxed command reaching for a host its sandbox does
+ * not allow, with `{ host }` as the input.
+ *
+ * Not a tool the model calls: it is the terminal's "Network request outside of
+ * sandbox" prompt, delivered through `canUseTool` like any other. Found in the
+ * CLI's bundle rather than the SDK's types, which do not name it. Edits refused
+ * it without a card, so a `curl` the terminal asks about once came back as
+ * "user denied" with nobody having been asked.
+ */
+const SANDBOX_NETWORK_TOOL = "SandboxNetworkAccess"
+
+/**
  * The read-only half: everything that reads, and nothing that writes.
  *
  * What both `plan` and `read` run as — they differ in what the turn is *told*,
@@ -365,10 +377,11 @@ const PERMISSIONS: Record<
    * Asks about an MCP tool rather than refusing it. Refusing was a mode that
    * runs any `curl` without a word but could not fetch a Figma frame through
    * the server the user's own `claude` already has — the plain CLI asks once
-   * and remembers, and this did not even ask. Only MCP: anything else off
-   * `ALLOWED_TOOLS` is a built-in this mode deliberately left out.
+   * and remembers, and this did not even ask. MCP and the sandbox's network
+   * prompt only: anything else off `ALLOWED_TOOLS` is a built-in this mode
+   * deliberately left out.
    */
-  edits: { allowed: ALLOWED_TOOLS, asks: isMcpTool },
+  edits: { allowed: ALLOWED_TOOLS, asks: editsAsks },
   /*
    * Nothing is refused except `ASK_TOOL`, and nothing else is asked.
    *
@@ -404,6 +417,15 @@ const PERMISSIONS: Record<
 /** A tool on an MCP server, by the wire name the CLI gives every one of them. */
 export function isMcpTool(name: string): boolean {
   return name.startsWith("mcp__")
+}
+
+/**
+ * What Edits puts on screen rather than refusing. The network prompt is here
+ * because `Bash` is permitted: refusing the host a permitted command needs is
+ * refusing the command, just later and without saying so.
+ */
+export function editsAsks(name: string): boolean {
+  return isMcpTool(name) || name === SANDBOX_NETWORK_TOOL
 }
 
 function permitting(allowed: string[] | undefined): (name: string) => boolean {
@@ -2078,6 +2100,8 @@ export function titleFor(tool: string, input: Record<string, unknown>): string {
       return `Claude wants to fetch ${named("url") ?? "a page"}`
     case "WebSearch":
       return `Claude wants to search the web for ${named("query") ?? "something"}`
+    case SANDBOX_NETWORK_TOOL:
+      return `Claude wants to connect to ${named("host") ?? "a host"} outside the sandbox`
     default:
       return `Claude wants to use ${tool}`
   }
