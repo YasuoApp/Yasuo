@@ -158,7 +158,9 @@ function ToolGroup({
         <Outcome text={groupOutcome(lines)} />
       </button>
       {open && (
-        <div className={OPENED}>
+        // Spaced like any other run of rows: with none, each call's bordered
+        // chip sat on the next one's and the calls read as one stacked block.
+        <div className={cn(OPENED, "space-y-1.5")}>
           {lines.map((line) => (
             <ChatMessage key={line.id} of={line} live={live} />
           ))}
