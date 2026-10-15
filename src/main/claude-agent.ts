@@ -427,9 +427,9 @@ const NOT_INSTALLED =
  * measured, a session closed and resumed in a new process rewinds exactly as
  * the one that wrote them would.
  *
- * Resolves with what was put back; throws with a sentence when the CLI says it
- * cannot (`canRewind: false` — a chat from before checkpoints, or a message the
- * CLI filed none under).
+ * Resolves with what was put back; throws when the CLI says it cannot
+ * (`canRewind: false` — a chat from before checkpoints, or a message the CLI
+ * filed none under), which the caller logs and edits past.
  */
 export async function rewindSessionFiles(input: {
   cwd: string
@@ -478,7 +478,7 @@ export async function rewindSessionFiles(input: {
       const preview = await conversation.rewindFiles(input.to, { dryRun: true })
       if (!preview.canRewind)
         throw new Error(
-          `The files cannot be put back: ${preview.error ?? "the CLI kept no copy of them for that message"}. Untick “Put the files back” to edit the message anyway.`
+          `The files cannot be put back: ${preview.error ?? "the CLI kept no copy of them for that message"}.`
         )
       const done = await conversation.rewindFiles(input.to)
       if (!done.canRewind)

@@ -892,11 +892,12 @@ export class Chats {
    *
    * **With `restore`, the files go back too** — every file the cut turns wrote
    * through `Edit`/`Write`, to how it was before the edited message, out of
-   * the CLI's own file checkpoints (`rewindSessionFiles`). Done before the cut
-   * and refused whole when it cannot be, so a chat whose turns kept no copies
-   * says so rather than being cut over files that still hold what it is about
-   * to forget. A `Bash` write stays; so does anything typed into those files
-   * since, which is why the box asks rather than doing it unasked.
+   * the CLI's own file checkpoints (`rewindSessionFiles`). The renderer asks
+   * for it whenever those turns wrote anything. A rewind that cannot happen —
+   * a chat from before checkpoints, a project gone from the workspace — does
+   * not hold the edit up: the message is edited and the files stay, which is
+   * what an edit did before there was a rewind. A `Bash` write stays either
+   * way.
    */
   async edit(
     id: string,
@@ -933,22 +934,12 @@ export class Chats {
     // Thrown out of here before anything is cut, so a refusal leaves the chat
     // exactly as it was.
     const fork = at > 0 && transcript ? forkPointIn(transcript, said) : null
-    const rewind = restore
-      ? {
-          to: transcript
-            ? promptIdIn(transcript, said)
-            : refuse(
-                "This chat has no CLI session to put the files back from."
-              ),
-          cwd:
-            (record.folderId
-              ? await this.source.folderDir(record.folderId)
-              : null) ?? refuse("That project is no longer in the workspace."),
-          // The account whose CLI wrote the checkpoints is the one whose
-          // transcript the conversation continued in.
-          configDir: latest?.dir || null,
-        }
-      : null
+    const rewindTo =
+      restore && transcript ? promptIdOrNull(transcript, said) : null
+    const rewindIn =
+      rewindTo && record.folderId
+        ? await this.source.folderDir(record.folderId)
+        : null
 
     // The session goes, quietly, the way `clear` closes one: it was opened on
     // the conversation as it stood, and a resume is a new process. Before the
@@ -963,11 +954,19 @@ export class Chats {
       pending.answered({ allow: false, message: "That message was edited." })
     }
 
-    // Still before the cut: a rewind the CLI refuses leaves the lines and the
-    // transcript as they were, and the closed session reopens on the next
-    // message like any idle one. Before the first message's transcript is set
-    // aside below, too — the checkpoints are read through it.
-    if (rewind) await rewindSessionFiles({ sessionId: id, ...rewind })
+    // Before the first message's transcript is set aside below — the
+    // checkpoints are read through it.
+    if (rewindTo && rewindIn)
+      await rewindSessionFiles({
+        sessionId: id,
+        cwd: rewindIn,
+        // The account whose CLI wrote the checkpoints is the one whose
+        // transcript the conversation continued in.
+        configDir: latest?.dir || null,
+        to: rewindTo,
+      }).catch((error: unknown) =>
+        console.error("Could not put the files back", error)
+      )
 
     if (fork) this.forks.set(id, fork)
     else {
@@ -2325,9 +2324,15 @@ function startedDirs(
   return [...new Set([...(chat.startedIn ?? []), ...dirs])]
 }
 
-/** A throw where an expression is wanted — an `??` with nothing to fall to. */
-function refuse(message: string): never {
-  throw new Error(message)
+/** `promptIdIn`, with a message the CLI does not have read as nothing to
+ * rewind to rather than a refusal — the cut's own matching refuses that case
+ * where it matters, and the first message is not matched by it at all. */
+function promptIdOrNull(transcript: string, said: string[]): string | null {
+  try {
+    return promptIdIn(transcript, said)
+  } catch {
+    return null
+  }
 }
 
 /** A chat's name: the first thing asked, on one line and short enough for a tab

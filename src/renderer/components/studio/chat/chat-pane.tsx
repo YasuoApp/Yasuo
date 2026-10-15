@@ -578,8 +578,9 @@ function Conversation({
     if (at === undefined || unsaved) return undefined
     return {
       disabled: working,
-      files: () => editedAfter(lines, at),
-      save: (text, restore) => void edit(chatId, at, text, restore),
+      // Nothing written after it is no rewind worth a process.
+      save: (text) =>
+        void edit(chatId, at, text, editedAfter(lines, at).length > 0),
     }
   }
   const liveFrom = useMemo(() => {

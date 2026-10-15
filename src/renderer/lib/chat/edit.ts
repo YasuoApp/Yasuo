@@ -1,16 +1,13 @@
 import type { AssistantMessage } from "@shared/api"
 
 /**
- * What editing message `at` would leave behind it: the files the turns after
- * it wrote, which the edit puts back when its box is ticked.
+ * The files the turns after message `at` wrote — what an edit of it puts back.
  *
  * The putting back is the CLI's (its file checkpoints, `rewindSessionFiles`
- * in main), and it answers with counts rather than a list until it is asked —
- * so the bubble names the files off the transcript before somebody presses
- * Send, rather than a model that no longer remembers an edit looking at a file
- * that still has it. Off the tool rows' own `path`s, subagents' included: a
- * subagent's edit is the turn's edit too. A call that failed wrote nothing.
- * The same tools the CLI checkpoints, so a `Bash` write is in neither.
+ * in main) and costs a process, so it is asked for only when this is not
+ * empty. Off the tool rows' own `path`s, subagents' included: a subagent's
+ * edit is the turn's edit too. A call that failed wrote nothing. The same
+ * tools the CLI checkpoints, so a `Bash` write is in neither.
  */
 export function editedAfter(
   messages: AssistantMessage[],

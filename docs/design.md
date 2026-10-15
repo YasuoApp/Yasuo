@@ -192,8 +192,7 @@ closes the session and resumes it at the entry before the message
 nobody typed. Editing the first message renames the transcript aside and starts
 over under the same id.
 
-**The files go back too**, when the edit box's `Put the files back` is ticked
-(it is by default, and only drawn when the dropped turns wrote something). An
+**The files go back too**, whenever the dropped turns wrote something. An
 edit that cut the conversation and left the tree had a model that no longer
 remembered a change looking at a file that still held it. The restore is the
 CLI's own: every session runs with `enableFileCheckpointing`, which keeps a copy
@@ -205,12 +204,13 @@ back as it was before that turn, deleting the ones it created. Measured before
 it was built: the checkpoints outlive the process that wrote them, so a session
 closed by `IDLE_MS` rewinds like a live one.
 
-It runs **before the cut and is refused whole**: a chat from before
-checkpoints, or a message the CLI filed none under, answers with a sentence and
-leaves the conversation as it was — untick the box to edit anyway. A box
-rather than always, because the rewind is not selective: what was typed into
-those files since goes with the turns' own edits. A `Bash` write is not
-checkpointed and stays, which the box says.
+It runs before the cut and **never holds the edit up**: a chat from before
+checkpoints, or a message the CLI filed none under, is edited and its files
+stay, which is what an edit did before there was a rewind. The edit box says
+none of this — nor that the turns after the message go — because that is what
+an edit is. Two things it costs: the rewind is not selective, so what was typed
+into those files since goes with the turns' own edits; and a `Bash` write is
+not checkpointed and stays.
 
 Not done: keeping the old branch on screen, editing while working, and editing
 pictures.

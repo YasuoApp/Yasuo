@@ -2646,10 +2646,10 @@ export type DesktopApi = {
    * is cut there too, so the model answers as though the turns after it never
    * happened. With `restore`, the files those turns wrote through `Edit` /
    * `Write` are put back as they were before the message, out of the CLI's
-   * file checkpoints; without it they are left as they are. Rejects while the
-   * chat is working, when the CLI's copy of the conversation does not have the
-   * message (compacted away, or never sent), and — before anything is cut —
-   * when `restore` was asked and the CLI kept no copies to put back.
+   * file checkpoints; without it, or when the CLI kept no copies, they are
+   * left as they are. Rejects while the chat is working, and when the CLI's
+   * copy of the conversation does not have the message (compacted away, or
+   * never sent).
    */
   editChat: (
     id: string,

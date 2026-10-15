@@ -411,12 +411,12 @@ A user bubble's **Edit** (`Chats.edit`, `IPC.editChat`) cuts the
 before the message (`resumeSessionAt`), found in the CLI's transcript by
 `main/chat-fork.ts` (`test/chat-fork.ts`). Messages are addressed by **ordinal
 among the main loop's user lines**, never by id — the renderer's optimistic line
-has an id main never wrote. A ticked **Put the files back** rewinds what the cut
-turns wrote through `Edit`/`Write` out of the CLI's own file checkpoints
+has an id main never wrote. The **files go back too**: what the cut turns wrote
+through `Edit`/`Write` is rewound out of the CLI's own file checkpoints
 (`enableFileCheckpointing` on every session, `rewindSessionFiles` in a resumed
-process with no prompt, at `promptIdIn`'s uuid), before anything is cut and
-refused whole when it cannot be — `docs/design.md` § Editing a message; a
-reply's one Copy is on its turn's cost line (`replyOf`).
+process with no prompt, at `promptIdIn`'s uuid) before the cut, and a rewind
+that cannot happen is logged and edited past — `docs/design.md` § Editing a
+message; a reply's one Copy is on its turn's cost line (`replyOf`).
 `⌘F` opens a **find bar over the transcript** (`chat-find.tsx`, matching in
 `lib/chat/search.ts`) — a bar and not a palette group, since the results
 are the conversation behind it. The matched **text** is painted through the CSS
