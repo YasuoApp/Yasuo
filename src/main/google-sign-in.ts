@@ -404,7 +404,9 @@ export function parseAnswer(
   } catch {
     return null
   }
-  if (typeof parsed !== "object" || parsed === null) return null
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    return null
+  }
   const { idToken, error } = parsed as Record<string, unknown>
   if (typeof idToken === "string" && idToken.length > 0) return { idToken }
   if (idToken === undefined) {

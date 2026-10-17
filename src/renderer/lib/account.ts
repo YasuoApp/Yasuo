@@ -1,3 +1,4 @@
+import { initializeApp } from "firebase/app"
 import {
   getAuth,
   GoogleAuthProvider,
@@ -8,10 +9,7 @@ import {
 } from "firebase/auth"
 import { create } from "zustand"
 
-import { SIGN_IN_CANCELLED } from "@shared/firebase"
-
-import { followAccount } from "./cloud-workspace"
-import { firebaseApp } from "./firebase"
+import { FIREBASE_CONFIG, SIGN_IN_CANCELLED } from "@shared/firebase"
 
 /**
  * Who is signed in to the studio, through Firebase.
@@ -48,9 +46,10 @@ type AccountState = {
 
 let auth: Auth | null = null
 
-/** The window's Auth, on the one Firebase app `firebase.ts` makes. */
+/** One Firebase app for the window, made on first use rather than at import,
+ * so a window that never opens Settings never starts the SDK. */
 function authOf(): Auth {
-  auth ??= getAuth(firebaseApp())
+  auth ??= getAuth(initializeApp(FIREBASE_CONFIG))
   return auth
 }
 
@@ -68,7 +67,6 @@ export function watchAccount(): void {
         ? { email: user.email, name: user.displayName, photo: user.photoURL }
         : null,
     })
-    followAccount(user?.uid ?? null)
   })
 }
 

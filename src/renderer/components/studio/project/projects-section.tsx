@@ -48,7 +48,6 @@ import { IconButton } from "../icon-button"
 import { RenameDialog } from "../rename-dialog"
 import { RenameRow, useMenuFocusHandoff } from "../rename-row"
 import { SideRow } from "../side-row"
-import { PendingFolders } from "./pending-folders"
 import { NewWorktreeDialog } from "./new-worktree-dialog"
 import { RemoveWorktreeDialog } from "./remove-worktree-dialog"
 import { useWorktreeStatus, WorktreeMarks } from "./worktree-status"
@@ -164,6 +163,8 @@ export function ProjectsSection() {
    * taken off the disk. One of each for the whole list, for the reason above. */
   const [branching, setBranching] = useState<WorkspaceFolder | null>(null)
   const [unchecking, setUnchecking] = useState<WorkspaceFolder | null>(null)
+  /** Which template-made project is being moved to the Trash. */
+  const [trashing, setTrashing] = useState<WorkspaceFolder | null>(null)
   /** Which repository each project is a checkout of — what decides whether
    * `Remove worktree` is on its menu at all. */
   const worktrees = useStudio((state) => state.worktrees)
@@ -242,6 +243,13 @@ export function ProjectsSection() {
         onRemoveWorktree={
           worktrees[folder.id] ? () => setUnchecking(folder) : null
         }
+        // Only what this app made: `template` is written by `createProject`
+        // alone, so an added folder never offers to be deleted.
+        onTrash={
+          folder.template && !worktrees[folder.id]
+            ? () => setTrashing(folder)
+            : null
+        }
         onToggle={() => {
           toggleFolder(folder.id)
           // And the dock's shell follows: a project row is the one place this
@@ -263,7 +271,6 @@ export function ProjectsSection() {
       className="flex h-full min-h-0 flex-col overflow-hidden"
     >
       <div className="min-h-0 flex-1 overflow-y-auto px-1 py-1">
-        <PendingFolders />
         {folders.length === 0 && orphans.length === 0 && (
           <p className="px-3 py-1 text-xs leading-relaxed text-muted-foreground">
             No folders yet.
@@ -345,6 +352,7 @@ export function ProjectsSection() {
               onRename={null}
               onRemove={null}
               onRemoveWorktree={null}
+              onTrash={null}
               onToggle={() => toggleFolder(UNGROUPED_ID)}
             />
             {!ungroupedShut && <ProjectChats folderId={null} />}
@@ -381,6 +389,62 @@ export function ProjectsSection() {
               }}
             >
               Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={trashing !== null}
+        onOpenChange={(next) => {
+          if (!next) setTrashing(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Move “{trashing?.name}” to the Trash?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              The folder goes to the Trash with everything in it, and its chats
+              are deleted. Its terminals are closed first.
+            </AlertDialogDescription>
+            <p className="truncate font-mono text-xs text-muted-foreground">
+              {trashing?.path}
+            </p>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => {
+                const target = trashing
+                setTrashing(null)
+                if (!target) return
+                setFailure(null)
+                // A shell whose cwd is inside it holds the directory open, and
+                // Windows refuses to move it. Main retries while the ptys end.
+                const shells = useShells.getState()
+                for (const shell of shells.shells) {
+                  if (shell.folderId === target.id) shells.close(shell.id)
+                }
+                void useStudio
+                  .getState()
+                  .trashProject(target.id)
+                  .then(() => useChats.getState().refresh())
+                  .catch((error: unknown) =>
+                    setFailure(
+                      error instanceof Error
+                        ? error.message.replace(
+                            /^Error invoking remote method '[^']+': (?:Error: )?/,
+                            ""
+                          )
+                        : String(error)
+                    )
+                  )
+              }}
+            >
+              Move to Trash
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -503,6 +567,7 @@ function ProjectRow({
   onRename,
   onRemove,
   onRemoveWorktree,
+  onTrash,
 }: {
   name: string
   /** Whose icon this row draws. Null for `Ungrouped`, which has none. */
@@ -569,6 +634,13 @@ function ProjectRow({
    * changed meaning depending on the row would be the worst of both.
    */
   onRemoveWorktree: (() => void) | null
+  /**
+   * Asks to move this project's directory to the Trash, or null for every
+   * project this app did not make from a template — which is most of them, and
+   * is the point: a second prop rather than a flag, for `onRemoveWorktree`'s
+   * reason.
+   */
+  onTrash: (() => void) | null
 }) {
   // Open and shut rather than one mark rotated: a folder is the thing being
   // drawn, and its two states are two glyphs rather than two angles.
@@ -802,7 +874,7 @@ function ProjectRow({
             </ContextMenuItem>
           </>
         )}
-        {(onRemove || onRemoveWorktree) && (
+        {(onRemove || onRemoveWorktree || onTrash) && (
           <>
             <ContextMenuSeparator />
             {/* "Remove", not "Delete": the directory is the user's own and
@@ -820,6 +892,14 @@ function ProjectRow({
               <ContextMenuItem variant="destructive" onClick={onRemoveWorktree}>
                 <Trash2 />
                 Remove worktree…
+              </ContextMenuItem>
+            )}
+            {/* The other deletion, on the other kind of row that may have
+                one: a directory this app made, from a template. */}
+            {onTrash && (
+              <ContextMenuItem variant="destructive" onClick={onTrash}>
+                <Trash2 />
+                Move to Trash…
               </ContextMenuItem>
             )}
           </>

@@ -480,6 +480,15 @@ ClickUp tasks, removed has the argument. What stays on a user's disk stays:
 nothing reads `workspace/clickup-watches.json` or the `clickup.token` key any
 more, and nothing deletes them either.
 
+`Add project` can also **start one from a template** (`From template` tab,
+`template-project-form.tsx`): `IPC.createProject` makes and adds an empty
+directory, and the framework's own `create-*` CLI runs in a dock shell inside
+it — no starter is bundled (`shared/project-templates.ts`,
+`test/project-templates.ts`; `docs/design.md` § A new project from a template).
+Such a folder carries `template` on its record, and **only** such a folder
+offers `Move to Trash…` (`IPC.trashProject`) — an added folder is never the
+app's to delete.
+
 A project's row also makes a **`git worktree`** — the button beside its `+`,
 `main/worktrees.ts`, `test/worktrees.ts`. What it produces is an ordinary
 **workspace folder** pointed at the checkout, under
@@ -601,6 +610,9 @@ send each is also kept as a note file and the user line names it, so the
 composer and the transcript both draw thumbnails (`chat-images.tsx`,
 `docs/design.md` § Pictures in a message) (`test/chat-images.ts`),
 `lib/files/change-tree.ts` (`test/change-tree.ts`),
+`lib/files/image-edit.ts` — the image editor's geometry, with `main/files.ts`'s
+`writeImageFile`, which refuses bytes of one format under another's extension
+(`test/image-edit.ts`; `docs/design.md` § Editing a picture),
 `lib/shell/file-links.ts` — the paths in a line of terminal output that
 `⌘`-click opens (`test/terminal-links.ts`),
 `lib/files/conflicts.ts` — merge-conflict blocks and what Accept writes, drawn

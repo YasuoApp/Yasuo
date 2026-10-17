@@ -12,6 +12,7 @@ import {
   Copy,
   ExternalLink,
   FolderTree,
+  Pencil,
   Pilcrow,
   Rows3,
   Save,
@@ -29,7 +30,9 @@ import { SECTION_ACCENT } from "../section-marks"
 import { IconButton } from "../icon-button"
 import { FileDiff } from "./file-diff"
 import { FileEditor } from "./file-editor"
+import { encodableTypeOf } from "@shared/image-files"
 import { FileImage } from "./file-image"
+import { FileImageEditor } from "./file-image-editor"
 import { FileImageDiff } from "./file-image-diff"
 import { FileHtml } from "./file-html"
 import { FileMarkdown } from "./file-markdown"
@@ -180,6 +183,15 @@ export function FilePane({
    * or one whose directory has gone since it was opened. */
   const [failure, setFailure] = useState<string | null>(null)
 
+  /**
+   * The picture the image editor was opened on, or null for the preview — the
+   * pane's own, since what it holds is unsaved canvases and not anything the
+   * store would know how to restore. The source rather than a flag because a
+   * save is a write the watcher re-reads, and the image going back through
+   * `loading` must not unmount the editor and its undo history with it.
+   */
+  const [editing, setEditing] = useState<string | null>(null)
+
   const dirty = isDirty(doc)
 
   /* Which root this file is in, subscribed rather than read: a project removed
@@ -270,6 +282,22 @@ export function FilePane({
             while it is showing rather than claim none of its buttons is on. */}
         <ViewerSwitch path={path} viewer={viewer} changed={changed} />
 
+        {/* Not on the `Changes` tab, which is reading what changed rather than
+            changing it, and not for a format a canvas cannot write back. */}
+        {viewer === "image" &&
+          !preferred &&
+          editing === null &&
+          image?.kind === "image" &&
+          encodableTypeOf(path) && (
+            <IconButton
+              label="Edit image"
+              onClick={() => setEditing(image.src)}
+              className="shrink-0"
+            >
+              <Pencil />
+            </IconButton>
+          )}
+
         {/* Shown for every document, including the ones with no editor: a
             picture still has a path worth copying and a place in Finder worth
             opening. Save stays put rather than disappearing in the image
@@ -313,6 +341,13 @@ export function FilePane({
             path={path}
             image={image ?? { kind: "loading" }}
             revision={status}
+          />
+        ) : viewer === "image" && editing !== null ? (
+          <FileImageEditor
+            key={path}
+            path={path}
+            src={editing}
+            onClose={() => setEditing(null)}
           />
         ) : viewer === "image" ? (
           <FileImage image={image ?? { kind: "loading" }} alt={path} />

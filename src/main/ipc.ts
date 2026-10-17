@@ -1,4 +1,11 @@
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises"
+import {
+  mkdir,
+  readdir,
+  readFile,
+  rmdir,
+  stat,
+  writeFile,
+} from "node:fs/promises"
 import { homedir, tmpdir } from "node:os"
 import path from "node:path"
 
@@ -12,7 +19,6 @@ import {
   type ClaudeProfile,
   type FileDiff,
   type FileIndexEntry,
-  type PendingFolder,
   type ReplaceResult,
   type SearchFilter,
   type SearchOptions,
@@ -21,6 +27,10 @@ import {
   type ChatOptions,
 } from "../shared/api"
 import type { PluginFile, PluginSource } from "../shared/plugins"
+import {
+  PROJECT_TEMPLATES,
+  projectNameProblem,
+} from "../shared/project-templates"
 import { pathFilterOf } from "../shared/search"
 import { agentCommands } from "./agent-commands"
 import { agentModels } from "./agent-models"
@@ -659,21 +669,116 @@ export function createIpc(host: Host): {
     clipboardImagePath(await host.clipboardImage())
   )
 
-  handle(
-    IPC.addFolder,
-    (_event, input: { path: string; name: string; id?: string }) =>
-      store.addFolder({ ...input, path: expandHome(input.path) })
+  handle(IPC.addFolder, (_event, input: { path: string; name: string }) =>
+    store.addFolder({ ...input, path: expandHome(input.path) })
   )
+
+  /*
+   * The directory a template's CLI will fill, made and added in one handler for
+   * the reason `addWorktree` is: a directory made here and an `addFolder` that
+   * then refused would be one nothing in the app knows about, so a directory
+   * this made is taken back on a refusal. An empty one already there is used
+   * as it is — somebody who made `~/code/my-app` first meant exactly that.
+   */
+  handle(
+    IPC.createProject,
+    async (
+      _event,
+      input: { parent: string; name: string; template: string }
+    ) => {
+      const name = input.name.trim()
+      const problem = projectNameProblem(name)
+      if (problem) throw new Error(problem)
+      // Checked because it is what later licenses `trashProject`: a mark only
+      // this handler can write is what keeps that delete to directories this
+      // app made.
+      if (!PROJECT_TEMPLATES.some((known) => known.id === input.template)) {
+        throw new Error(`No such template: ${input.template}`)
+      }
+
+      const parent = expandHome(input.parent.trim())
+      const parentStats = await stat(parent).catch(() => null)
+      if (!parentStats?.isDirectory()) {
+        throw new Error(`There is no folder at ${input.parent}.`)
+      }
+
+      const dir = path.join(parent, name)
+      const existing = await stat(dir).catch(() => null)
+      if (existing) {
+        if (!existing.isDirectory()) throw new Error(`${dir} is a file.`)
+        if ((await readdir(dir)).length > 0) {
+          throw new Error(`${dir} already has files in it.`)
+        }
+      } else {
+        await mkdir(dir)
+      }
+
+      try {
+        return await store.addFolder({
+          path: dir,
+          name,
+          template: input.template,
+        })
+      } catch (failure) {
+        if (!existing) await rmdir(dir).catch(() => {})
+        throw failure
+      }
+    }
+  )
+
+  /*
+   * And back out of one: the directory to the Trash, its chats, then the
+   * project — the order `removeWorktree` keeps, so a Trash that refuses leaves
+   * the project listed rather than a row gone and a directory nobody can reach
+   * from here.
+   *
+   * What holds the directory open has to let go first, or Windows refuses the
+   * move: the tsservers and the watchers here (the renderer re-sends its
+   * watch list when the folders change), and the dock's shells, which the
+   * renderer closes before asking. A pty's teardown is not instant, hence the
+   * retries.
+   */
+  handle(IPC.trashProject, async (_event, folderId: string) => {
+    const { folders } = await store.getWorkspace()
+    const folder = folders.find((candidate) => candidate.id === folderId)
+    if (!folder) throw new Error(`No such folder: ${folderId}`)
+    if (!folder.template) {
+      throw new Error("Only a project made from a template can be deleted.")
+    }
+    const dir = await store.resolveFolderDir(folderId)
+
+    tsServers.stopUnder(dir)
+    watchers.closeAll()
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        await host.trash(dir)
+        break
+      } catch (failure) {
+        if (attempt >= 3) {
+          const reason =
+            failure instanceof Error ? failure.message : String(failure)
+          throw new Error(
+            `${dir} could not be moved to the Trash — is something still running in it? (${reason})`
+          )
+        }
+        await new Promise((resolve) => setTimeout(resolve, 500))
+      }
+    }
+
+    for (const chat of await allChats.list()) {
+      if (chatRootId(chat) !== folderId) continue
+      notices.forget(chat.id)
+      await allChats.delete(chat.id)
+    }
+
+    return store.removeFolder(folderId)
+  })
 
   handle(IPC.renameFolder, (_event, id: string, name: string) =>
     store.renameFolder(id, name)
   )
 
   handle(IPC.removeFolder, (_event, id: string) => store.removeFolder(id))
-
-  handle(IPC.setPendingFolders, (_event, folders: PendingFolder[]) =>
-    store.setPendingFolders(folders)
-  )
 
   /*
    * A second checkout of a project, which becomes a project.
@@ -1149,6 +1254,12 @@ export function createIpc(host: Host): {
     // Under `imageDataUrl`'s size ceiling, which is what keeps a 40MP photograph from being turned into a
     // base64 string and posted across the bridge.
     imageDataUrl(await inWorkspace(filePath))
+  )
+
+  handle(
+    IPC.writeImageFile,
+    async (_event, filePath: string, dataUrl: string) =>
+      files.writeImageFile(await inWorkspace(filePath), dataUrl)
   )
 
   handle(IPC.readImageRelative, async (_event, dir: string, relative: string) =>

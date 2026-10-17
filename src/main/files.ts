@@ -11,6 +11,7 @@ import {
 import path from "node:path"
 
 import type { FileContent, FileEntry, FileIndexEntry } from "../shared/api"
+import { encodableTypeOf } from "../shared/image-files"
 import { ignoredPaths } from "./git"
 
 /**
@@ -201,6 +202,29 @@ export async function writeTextFile(
   text: string
 ): Promise<void> {
   await writeFile(filePath, text, "utf8")
+}
+
+/**
+ * Writes the image editor's result over the picture it was opened on.
+ *
+ * A `data:` URL rather than raw bytes because that is what a canvas hands
+ * over, and its type is checked against the file's extension here rather than
+ * trusted: a renderer that encoded the wrong format would otherwise leave a PNG
+ * named `.jpg`, which opens everywhere except the tools that believe the name.
+ */
+export async function writeImageFile(
+  filePath: string,
+  dataUrl: string
+): Promise<void> {
+  const expected = encodableTypeOf(filePath)
+  if (!expected) {
+    throw new Error(`${path.basename(filePath)} is not a format this can save.`)
+  }
+  const match = /^data:([^;,]+);base64,(.*)$/s.exec(dataUrl)
+  if (!match || match[1] !== expected) {
+    throw new Error(`Expected ${expected} for ${path.basename(filePath)}.`)
+  }
+  await writeFile(filePath, Buffer.from(match[2]!, "base64"))
 }
 
 /**

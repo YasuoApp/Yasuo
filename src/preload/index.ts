@@ -36,10 +36,10 @@ const api: DesktopApi = {
 
   getWorkspace: () => ipcRenderer.invoke(IPC.getWorkspace),
   addFolder: (input) => ipcRenderer.invoke(IPC.addFolder, input),
+  createProject: (input) => ipcRenderer.invoke(IPC.createProject, input),
+  trashProject: (folderId) => ipcRenderer.invoke(IPC.trashProject, folderId),
   renameFolder: (id, name) => ipcRenderer.invoke(IPC.renameFolder, id, name),
   removeFolder: (id) => ipcRenderer.invoke(IPC.removeFolder, id),
-  setPendingFolders: (folders) =>
-    ipcRenderer.invoke(IPC.setPendingFolders, folders),
   addWorktree: (input) => ipcRenderer.invoke(IPC.addWorktree, input),
   removeWorktree: (folderId, options) =>
     ipcRenderer.invoke(IPC.removeWorktree, folderId, options),
@@ -117,6 +117,8 @@ const api: DesktopApi = {
   revealPath: (target) => ipcRenderer.invoke(IPC.revealPath, target),
   startDragPath: (target) => ipcRenderer.invoke(IPC.startDragPath, target),
   readImageFile: (filePath) => ipcRenderer.invoke(IPC.readImageFile, filePath),
+  writeImageFile: (filePath, dataUrl) =>
+    ipcRenderer.invoke(IPC.writeImageFile, filePath, dataUrl),
   readImageRelative: (dir, relative) =>
     ipcRenderer.invoke(IPC.readImageRelative, dir, relative),
   projectIcon: (folderId) => ipcRenderer.invoke(IPC.projectIcon, folderId),

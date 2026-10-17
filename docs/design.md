@@ -48,28 +48,19 @@ Sign-in will bring a second workspace; until then its id is a constant.
 The manifest keeps an opaque `databases?: unknown` because it is rewritten
 whole, and dropping the key would delete somebody's saved connections.
 
-### The account's workspace, in the cloud
+### Syncing the folder list to the account, removed
 
-Signing in (`lib/account.ts`) keeps one document per account at
-`workspaces/<uid>` in Firestore (`lib/cloud-workspace.ts`, `firestore.rules`).
-It holds the folder **list** — id, name, date — and the settings in
-`SYNCED_SETTINGS` (`shared/workspace-sync.ts`). It never holds a path: a folder's
-path is this machine's, so a folder another machine added shows under **Not on
-this machine** in the Projects column until `Locate…` gives it one. The folder
-then keeps the id the account knows it by.
+Signing in (`lib/account.ts`) used to keep one Firestore document per account at
+`workspaces/<uid>`, holding the folder list and a few settings, so a folder
+added on one machine showed under **Not on this machine** on another until it
+was located. It was removed: the folder list is this machine's to keep, and a
+second copy in the cloud that had to reconcile against it was more to get right
+than the feature was worth. Sign-in stays; the account now only says who is
+signed in.
 
-Folders reconcile three ways, against the list the cloud held after the last
-cycle (`cloud.synced`). Without that base, the first sync of a machine would
-delete every folder it has just been given, and a removal on another machine
-would be indistinguishable from an addition. A cycle reads the document from the
-server before it writes, and runs one after another, so a change made elsewhere
-is applied before this machine's view is pushed over it.
-
-A machine is linked to one account by `cloud.owner`. A second account on the
-same machine is not given the first one's folders: the menu offers to take the
-workspace over. Both keys are local — facts about the machine, not data to copy.
-`firestore.rules` must be deployed (`firebase deploy --only firestore:rules`)
-for the sync to do anything but report the refusal.
+What was already written is left alone: `workspaces/<uid>` documents in the
+Firebase project still exist, and nothing reads or deletes them. Deleting them
+is a step in the Firebase console, not in this repository.
 
 ## The window
 
@@ -203,6 +194,44 @@ remove` runs before the folder is dropped.
 - The column files a checkout **one indent under its project**
   (`projectTree`, tested), the only nesting there is. A shut project counts its
   checkouts' chats too.
+
+### A new project from a template
+
+The `Add project` dialog has a second tab, `From template`: Next.js, Nuxt, or
+Vite with React, Vue, Svelte or nothing, under npm, pnpm or bun
+(`shared/project-templates.ts`, tested). **The app holds no template.** Main
+makes an empty `<location>/<name>` and adds it as an ordinary folder
+(`IPC.createProject`, which removes a directory it made if `addFolder` then
+refuses); the framework's own CLI is typed into a **dock shell** inside it —
+`create-next-app`, `nuxi init` or `create-vite`, at `@latest`, aimed at `.`.
+
+- **A shell, not a background process**, for the reason the worktree's
+  `Setup` runs in one: these CLIs ask questions (ESLint? Tailwind? install
+  now?), the install is worth watching, and a failure is a line in a terminal
+  you can re-run rather than an error dialog with half a directory behind it.
+- **No bundled starters**, because what a starter contains is the framework's
+  call and changes every release; a copy here would be stale by the next one.
+- **The name is held to npm's rule** (`projectNameProblem` — lower case, no
+  spaces, no leading dot), on both sides: each CLI, aimed at `.`, takes the
+  directory's name as the package's and refuses one npm would not publish —
+  after the directory existed.
+- **An empty directory already there is used**; one with anything in it is
+  refused, so a typo cannot scaffold over somebody's work.
+- **A project made this way can be moved to the Trash** from its row's menu
+  (`Move to Trash…`, `IPC.trashProject`), and no other project can. The
+  folder record carries `template`, written by `createProject` alone and
+  checked again by main, so a repository somebody added is never one click
+  from deletion — `Remove project` stays the only way out for those, and
+  forgets rather than deletes. The Trash, not an unlink, as every delete
+  here is. Its chats are deleted with it, as a worktree's are. On Windows
+  whatever holds the directory open makes the move fail, so the dock's
+  shells in it are closed first, its tsservers stopped and the watchers
+  dropped, and the move is retried while the ptys end; a refusal is shown
+  under the list and the project stays.
+- **The logos are [svgl](https://svgl.app)'s, vendored** into
+  `assets/brand-icons/` (`lib/brand-icons.ts`) rather than asked of its API:
+  the dialog draws offline, and the API is rate-limited. A logo with a
+  dark-theme twin is `<name>_dark.svg` beside it.
 
 ### Editing a message
 
@@ -719,7 +748,8 @@ closing the other project's tabs. Its header is two tabs, `All files` and
 - **Every `files:*` call goes through `insideAny`**; deleting is
   `shell.trashItem`. Adding, renaming and removing workspace folders is here;
   removing one never touches the directory. Rows are renamed in place.
-- **Viewers** (`lib/files/viewers.ts`): text, image (on a checkerboard),
+- **Viewers** (`lib/files/viewers.ts`): text, image (on a checkerboard,
+  editable — § Editing a picture),
   markdown preview, HTML preview (a sandboxed `srcdoc` frame without
   `allow-same-origin`), the block editor for `.md` (by choice), and
   diff. Binary files and anything over 2 MB are reported, not opened.
@@ -849,6 +879,28 @@ copy of `@codemirror/view` is enforced twice — see `CLAUDE.md`.
 `lib/files/documents.ts` lets several views share one path's buffer. `⌘S` saves;
 closing a tab writes rather than asks. The cost of leaving Monaco: `.ts` files
 get no syntax squiggles.
+
+### Editing a picture
+
+A PNG, JPEG or WebP tab has `Edit image` in its header, which swaps the preview
+for a canvas editor (`file-image-editor.tsx`): crop, rotate, flip, resize, and
+a pen, rectangle and arrow for marking a screenshot up before it goes into a
+chat. The arithmetic — pointer to picture pixels, the crop, the ratio — is
+`lib/files/image-edit.ts` (`test/image-edit.ts`).
+
+- **Only what a canvas can encode.** `encodableTypeOf` in `shared/image-files.ts`
+  is the one list, asked by both sides: a GIF or BMP would come back from
+  `toDataURL` as a PNG, and PNG bytes under `.gif` is a file other tools misread.
+  An SVG keeps its text editor; flattening it to pixels is not an edit of it.
+- **One write, `files:write-image`**, under `insideAny`, which refuses a `data:`
+  URL whose type is not the one the extension names. A `.jpg` saved is a JPEG
+  re-encoded — what any other editor would do to it.
+- **Each step is a whole canvas** on an undo stack of 30, not operations
+  replayed from the original: rotate, crop and a stroke compose in an order
+  that matters. The stack is the pane's, not the store's — closing the editor
+  with unsaved steps asks; closing the tab does not keep them.
+- **Not on the `Changes` tab**, which is reading what changed in a picture
+  rather than changing it.
 
 ### Hover and go-to-definition
 

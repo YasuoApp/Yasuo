@@ -11,7 +11,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { useAccount, watchAccount } from "@/lib/account"
-import { adoptWorkspace, useCloudSync } from "@/lib/cloud-workspace"
 import { IconButton } from "./icon-button"
 
 /**
@@ -29,8 +28,6 @@ export function AccountMenu() {
   const signIn = useAccount((state) => state.signIn)
   const cancelSignIn = useAccount((state) => state.cancelSignIn)
   const signOut = useAccount((state) => state.signOut)
-  const cloud = useCloudSync((state) => state.status)
-  const cloudError = useCloudSync((state) => state.error)
 
   useEffect(watchAccount, [])
 
@@ -79,25 +76,6 @@ export function AccountMenu() {
               <DropdownMenuItem disabled={busy} onClick={() => void signOut()}>
                 Sign out
               </DropdownMenuItem>
-              {cloud === "other-account" && (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuLabel className="text-xs font-normal whitespace-normal">
-                    This machine&apos;s workspace belongs to another account.
-                  </DropdownMenuLabel>
-                  <DropdownMenuItem onClick={() => void adoptWorkspace()}>
-                    Use it for this account
-                  </DropdownMenuItem>
-                </>
-              )}
-              {cloud === "error" && (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuLabel className="text-xs font-normal whitespace-normal text-destructive">
-                    Not syncing: {cloudError}
-                  </DropdownMenuLabel>
-                </>
-              )}
             </>
           ) : busy ? (
             <>

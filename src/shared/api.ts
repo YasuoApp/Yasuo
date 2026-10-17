@@ -24,18 +24,14 @@ export type WorkspaceFolder = {
    * a record and reads the files where they are. */
   path: string
   addedAt: string
-}
-
-/**
- * A folder the signed-in account's workspace holds that this machine has no
- * path for — added on another machine, or the same one before it was signed in
- * to. It is listed, not opened: "Locate" gives it a path, and `addFolder` with
- * its id then turns it into a `WorkspaceFolder`.
- */
-export type PendingFolder = {
-  id: string
-  name: string
-  addedAt: string
+  /**
+   * The template this app made the directory from, when it made it — the one
+   * thing that lets a project be moved to the Trash from its menu. Absent on
+   * every folder that was added rather than made, so a repository somebody
+   * pointed the studio at never offers to be deleted. Not synced: a folder
+   * located on another machine is one this app did not make there.
+   */
+  template?: string
 }
 
 /**
@@ -51,12 +47,6 @@ export type WorkspaceRecord = {
   id: string
   name: string
   folders: WorkspaceFolder[]
-  /**
-   * Folders the account's cloud copy holds that are not located here yet. Kept
-   * out of `folders` so nothing that opens a folder has to ask whether it has a
-   * path — only the list that shows them and `Locate` reads this.
-   */
-  pending: PendingFolder[]
 }
 
 /**
@@ -2019,27 +2009,32 @@ export type DesktopApi = {
    * workspace rather than the new folder alone, so the renderer never has to
    * splice a list the main process just rewrote.
    */
+  addFolder: (input: { path: string; name: string }) => Promise<WorkspaceRecord>
   /**
-   * With `id`, locates a pending folder: the record keeps the id the cloud
-   * knows it by, and the pending entry goes. Refused when no pending folder has
-   * that id, so a stale "Locate" cannot mint a folder the account never had.
+   * An empty directory `name` under `parent`, added as a folder — the first
+   * half of a project from a template (`shared/project-templates.ts`). The
+   * starter itself is the framework's CLI, run by the renderer in a dock shell
+   * inside it. Refuses a name npm would not take and a directory that already
+   * has something in it, with a sentence for the dialog.
    */
-  addFolder: (input: {
-    path: string
+  createProject: (input: {
+    parent: string
     name: string
-    id?: string
+    template: string
   }) => Promise<WorkspaceRecord>
+  /**
+   * A project made from a template, its directory moved to the Trash and its
+   * chats deleted, then dropped from the workspace. Refused for a folder with
+   * no `template` — one this app did not make is never its to delete. The
+   * Trash rather than an unlink, as every delete in this app is.
+   */
+  trashProject: (folderId: string) => Promise<WorkspaceRecord>
   renameFolder: (id: string, name: string) => Promise<WorkspaceRecord>
   /**
    * Drops a folder from the workspace. The directory itself is untouched —
    * what goes is the studio's record of it, which is all the studio ever had.
    */
   removeFolder: (id: string) => Promise<WorkspaceRecord>
-  /**
-   * Replaces the pending list with what the cloud copy holds and this machine
-   * has not located. Drops any entry that is already a located folder.
-   */
-  setPendingFolders: (folders: PendingFolder[]) => Promise<WorkspaceRecord>
 
   /**
    * A second checkout of a project, added to the workspace as a project of its
@@ -2333,6 +2328,14 @@ export type DesktopApi = {
    * held to the workspace's folders like every other `files:*` call.
    */
   readImageFile: (filePath: string) => Promise<string>
+  /**
+   * The image editor's result, written over the file it was opened on.
+   *
+   * A canvas's `data:` URL, whose type must be the one the extension names
+   * (`encodableTypeOf` in `shared/image-files.ts`) — PNG, JPEG or WebP. Held
+   * to the workspace's folders like `writeTextFile`.
+   */
+  writeImageFile: (filePath: string, dataUrl: string) => Promise<void>
   /**
    * A picture next to a document, as a `data:` URL.
    *
@@ -2923,9 +2926,10 @@ export type MenuCommand =
 export const IPC = {
   getWorkspace: "workspace:get",
   addFolder: "workspace:add-folder",
+  createProject: "workspace:create-project",
+  trashProject: "workspace:trash-project",
   renameFolder: "workspace:rename-folder",
   removeFolder: "workspace:remove-folder",
-  setPendingFolders: "workspace:set-pending-folders",
   addWorktree: "workspace:add-worktree",
   removeWorktree: "workspace:remove-worktree",
   nameWorktree: "workspace:name-worktree",
@@ -2969,6 +2973,7 @@ export const IPC = {
   revealPath: "files:reveal",
   startDragPath: "files:start-drag",
   readImageFile: "files:read-image",
+  writeImageFile: "files:write-image",
   readImageRelative: "files:read-image-relative",
   projectIcon: "workspace:project-icon",
   pickProjectIcon: "workspace:pick-project-icon",

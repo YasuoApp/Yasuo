@@ -399,6 +399,17 @@ export class TsServers {
     return server ? server.definition(file, line, offset) : []
   }
 
+  /** The servers reading `dir` or a folder inside it, ahead of that directory
+   * being deleted: on Windows a running tsserver holds its `node_modules` open,
+   * and the delete fails on the lock. */
+  stopUnder(dir: string): void {
+    for (const [folder, server] of this.servers) {
+      if (folder !== dir && !folder.startsWith(dir + path.sep)) continue
+      server.stop()
+      this.servers.delete(folder)
+    }
+  }
+
   /** Every server, on the way out. Synchronous: these are child processes with
    * nothing to flush. */
   stopAll(): void {

@@ -1,5 +1,12 @@
 import { useId, useState } from "react"
-import { AlertCircle, Folder, FolderPlus, FolderX, Loader2 } from "lucide-react"
+import {
+  AlertCircle,
+  Folder,
+  FolderPlus,
+  FolderX,
+  Loader2,
+  Sparkles,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -11,10 +18,12 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 import * as repo from "@/lib/workspace"
 import { useStudio } from "@/lib/store"
 import { cn } from "@/lib/utils"
+import { TemplateProjectForm } from "./template-project-form"
 
 /** The directory's own name, as a starting point for the folder's name. */
 function basename(target: string): string {
@@ -63,6 +72,8 @@ export function AddFolderDialog({ onClose }: { onClose: () => void }) {
   const nameId = useId()
   const pathId = useId()
 
+  /** A folder that exists already, or a new one from a template's CLI. */
+  const [mode, setMode] = useState<"existing" | "template">("existing")
   const [path, setPath] = useState("")
   const [name, setName] = useState("")
   const [error, setError] = useState<string | null>(null)
@@ -116,176 +127,199 @@ export function AddFolderDialog({ onClose }: { onClose: () => void }) {
       <DialogContent className="sm:max-w-lg">
         <DialogHeader className="flex-row items-center gap-3.5">
           <span className="grid size-11 shrink-0 place-items-center rounded-xl border bg-gradient-to-b from-card to-muted text-primary shadow-sm ring-1 ring-primary/10">
-            <FolderPlus className="size-5" />
+            {mode === "existing" ? (
+              <FolderPlus className="size-5" />
+            ) : (
+              <Sparkles className="size-5" />
+            )}
           </span>
           <div className="min-w-0 space-y-0.5">
-            <DialogTitle>Add a folder</DialogTitle>
+            <DialogTitle>
+              {mode === "existing" ? "Add a folder" : "New project"}
+            </DialogTitle>
             <DialogDescription>
-              Work on a folder where it already is. Nothing is copied.
+              {mode === "existing"
+                ? "Work on a folder where it already is. Nothing is copied."
+                : "Start one from a framework's own starter."}
             </DialogDescription>
           </div>
         </DialogHeader>
 
-        <form
-          onSubmit={(event) => void submit(event)}
-          className="min-w-0 space-y-5"
+        <Tabs
+          value={mode}
+          onValueChange={(next) => setMode(next as typeof mode)}
         >
-          {/* A folder dragged in from Finder has a real path, and
-              `getPathForFile` gives it — a directory as much as a file. */}
-          <button
-            type="button"
-            onClick={() => void browse()}
-            onDragOver={(event) => {
-              event.preventDefault()
-              const kind = draggedKind(event.dataTransfer)
-              // `none` is what puts the no-entry cursor up and keeps the
-              // drop from firing at all.
-              event.dataTransfer.dropEffect = kind === "file" ? "none" : "copy"
-              setDragging(kind)
-            }}
-            onDragLeave={() => setDragging(null)}
-            onDrop={(event) => {
-              event.preventDefault()
-              setDragging(null)
-              // Asked again here, where it can be answered for certain: a
-              // file with no MIME type passes `draggedKind`, and would
-              // otherwise be drawn as the folder chosen and only fail on Add.
-              const entry = event.dataTransfer.items[0]?.webkitGetAsEntry()
-              if (entry && !entry.isDirectory) {
-                setError("Only folders can be added.")
-                return
-              }
-              const file = event.dataTransfer.files[0]
-              const dropped = file ? window.desktop.getPathForFile(file) : ""
-              if (dropped) choose(dropped)
-            }}
-            className={cn(
-              "group relative flex w-full min-w-0 items-center gap-4 rounded-xl border p-4 text-left transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              path
-                ? "bg-muted/40 hover:bg-muted/60"
-                : "justify-center border-dashed py-8 hover:border-primary/50 hover:bg-primary/5",
-              dragging === "folder" && "border-primary bg-primary/10",
-              dragging === "file" &&
-                "cursor-not-allowed border-destructive/60 bg-destructive/5"
-            )}
+          <TabsList className="w-full">
+            <TabsTrigger value="existing">Existing folder</TabsTrigger>
+            <TabsTrigger value="template">From template</TabsTrigger>
+          </TabsList>
+        </Tabs>
+
+        {mode === "template" ? (
+          <TemplateProjectForm onClose={onClose} />
+        ) : (
+          <form
+            onSubmit={(event) => void submit(event)}
+            className="min-w-0 space-y-5"
           >
-            {path ? (
-              <>
-                <span className="grid size-10 shrink-0 animate-pop place-items-center rounded-lg bg-primary/10 text-primary">
-                  <Folder className="size-5 fill-current/20" />
-                </span>
-                <span className="min-w-0 flex-1">
+            {/* A folder dragged in from Finder has a real path, and
+              `getPathForFile` gives it — a directory as much as a file. */}
+            <button
+              type="button"
+              onClick={() => void browse()}
+              onDragOver={(event) => {
+                event.preventDefault()
+                const kind = draggedKind(event.dataTransfer)
+                // `none` is what puts the no-entry cursor up and keeps the
+                // drop from firing at all.
+                event.dataTransfer.dropEffect =
+                  kind === "file" ? "none" : "copy"
+                setDragging(kind)
+              }}
+              onDragLeave={() => setDragging(null)}
+              onDrop={(event) => {
+                event.preventDefault()
+                setDragging(null)
+                // Asked again here, where it can be answered for certain: a
+                // file with no MIME type passes `draggedKind`, and would
+                // otherwise be drawn as the folder chosen and only fail on Add.
+                const entry = event.dataTransfer.items[0]?.webkitGetAsEntry()
+                if (entry && !entry.isDirectory) {
+                  setError("Only folders can be added.")
+                  return
+                }
+                const file = event.dataTransfer.files[0]
+                const dropped = file ? window.desktop.getPathForFile(file) : ""
+                if (dropped) choose(dropped)
+              }}
+              className={cn(
+                "group relative flex w-full min-w-0 items-center gap-4 rounded-xl border p-4 text-left transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                path
+                  ? "bg-muted/40 hover:bg-muted/60"
+                  : "justify-center border-dashed py-8 hover:border-primary/50 hover:bg-primary/5",
+                dragging === "folder" && "border-primary bg-primary/10",
+                dragging === "file" &&
+                  "cursor-not-allowed border-destructive/60 bg-destructive/5"
+              )}
+            >
+              {path ? (
+                <>
+                  <span className="grid size-10 shrink-0 animate-pop place-items-center rounded-lg bg-primary/10 text-primary">
+                    <Folder className="size-5 fill-current/20" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span
+                      className="block truncate text-sm font-medium"
+                      title={path}
+                    >
+                      {basename(path)}
+                    </span>
+                    <span className="block truncate font-mono text-[0.7rem] text-muted-foreground">
+                      {path}
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-xs text-muted-foreground transition-colors group-hover:text-foreground">
+                    Change
+                  </span>
+                </>
+              ) : (
+                <span className="flex flex-col items-center gap-2 text-center">
                   <span
-                    className="block truncate text-sm font-medium"
-                    title={path}
+                    className={cn(
+                      "grid size-11 place-items-center rounded-full bg-muted text-muted-foreground transition-colors group-hover:bg-primary/10 group-hover:text-primary",
+                      dragging === "folder" && "bg-primary/15 text-primary",
+                      dragging === "file" &&
+                        "bg-destructive/10 text-destructive group-hover:bg-destructive/10 group-hover:text-destructive"
+                    )}
                   >
-                    {basename(path)}
+                    {dragging === "file" ? (
+                      <FolderX className="size-5" />
+                    ) : (
+                      <FolderPlus className="size-5" />
+                    )}
                   </span>
-                  <span className="block truncate font-mono text-[0.7rem] text-muted-foreground">
-                    {path}
+                  <span
+                    className={cn(
+                      "text-sm font-medium",
+                      dragging === "file" && "text-destructive"
+                    )}
+                  >
+                    {dragging === "folder"
+                      ? "Drop to add it"
+                      : dragging === "file"
+                        ? "Only folders can be added"
+                        : "Choose a folder"}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {dragging === "file"
+                      ? "Drag the folder that holds it instead"
+                      : "or drag one here from Finder"}
                   </span>
                 </span>
-                <span className="shrink-0 text-xs text-muted-foreground transition-colors group-hover:text-foreground">
-                  Change
-                </span>
-              </>
-            ) : (
-              <span className="flex flex-col items-center gap-2 text-center">
-                <span
-                  className={cn(
-                    "grid size-11 place-items-center rounded-full bg-muted text-muted-foreground transition-colors group-hover:bg-primary/10 group-hover:text-primary",
-                    dragging === "folder" && "bg-primary/15 text-primary",
-                    dragging === "file" &&
-                      "bg-destructive/10 text-destructive group-hover:bg-destructive/10 group-hover:text-destructive"
-                  )}
+              )}
+            </button>
+
+            <div className="grid gap-4">
+              <div>
+                <Label
+                  htmlFor={pathId}
+                  className="text-xs font-medium text-muted-foreground"
                 >
-                  {dragging === "file" ? (
-                    <FolderX className="size-5" />
-                  ) : (
-                    <FolderPlus className="size-5" />
-                  )}
-                </span>
-                <span
-                  className={cn(
-                    "text-sm font-medium",
-                    dragging === "file" && "text-destructive"
-                  )}
+                  Path
+                </Label>
+                <Input
+                  id={pathId}
+                  value={path}
+                  onChange={(event) => {
+                    const next = event.target.value
+                    setPath(next)
+                    setName((current) => current || basename(next))
+                  }}
+                  placeholder="~/code/my-app"
+                  spellCheck={false}
+                  className="mt-1.5 font-mono text-xs"
+                />
+              </div>
+              <div>
+                <Label
+                  htmlFor={nameId}
+                  className="text-xs font-medium text-muted-foreground"
                 >
-                  {dragging === "folder"
-                    ? "Drop to add it"
-                    : dragging === "file"
-                      ? "Only folders can be added"
-                      : "Choose a folder"}
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {dragging === "file"
-                    ? "Drag the folder that holds it instead"
-                    : "or drag one here from Finder"}
-                </span>
-              </span>
+                  Name
+                </Label>
+                <Input
+                  id={nameId}
+                  value={name}
+                  placeholder={path ? basename(path) : "my-app"}
+                  onChange={(event) => setName(event.target.value)}
+                  className="mt-1.5"
+                />
+              </div>
+            </div>
+
+            {error && (
+              <p className="flex items-start gap-2 rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                <AlertCircle className="mt-px size-3.5 shrink-0" />
+                {error}
+              </p>
             )}
-          </button>
 
-          <div className="grid gap-4">
-            <div>
-              <Label
-                htmlFor={pathId}
-                className="text-xs font-medium text-muted-foreground"
-              >
-                Path
-              </Label>
-              <Input
-                id={pathId}
-                value={path}
-                onChange={(event) => {
-                  const next = event.target.value
-                  setPath(next)
-                  setName((current) => current || basename(next))
-                }}
-                placeholder="~/code/my-app"
-                spellCheck={false}
-                className="mt-1.5 font-mono text-xs"
-              />
-            </div>
-            <div>
-              <Label
-                htmlFor={nameId}
-                className="text-xs font-medium text-muted-foreground"
-              >
-                Name
-              </Label>
-              <Input
-                id={nameId}
-                value={name}
-                placeholder={path ? basename(path) : "my-app"}
-                onChange={(event) => setName(event.target.value)}
-                className="mt-1.5"
-              />
-            </div>
-          </div>
-
-          {error && (
-            <p className="flex items-start gap-2 rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
-              <AlertCircle className="mt-px size-3.5 shrink-0" />
-              {error}
-            </p>
-          )}
-
-          <DialogFooter className="items-center sm:justify-between">
-            <p className="text-[0.7rem] text-muted-foreground">
-              Removing it later leaves its files untouched.
-            </p>
-            <div className="flex gap-2">
-              <Button type="button" variant="outline" onClick={onClose}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={!path || adding}>
-                {adding && <Loader2 className="animate-spin" />}
-                Add folder
-              </Button>
-            </div>
-          </DialogFooter>
-        </form>
+            <DialogFooter className="items-center sm:justify-between">
+              <p className="text-[0.7rem] text-muted-foreground">
+                Removing it later leaves its files untouched.
+              </p>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={onClose}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={!path || adding}>
+                  {adding && <Loader2 className="animate-spin" />}
+                  Add folder
+                </Button>
+              </div>
+            </DialogFooter>
+          </form>
+        )}
       </DialogContent>
     </Dialog>
   )

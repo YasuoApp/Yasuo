@@ -131,13 +131,4 @@ export default defineConfig({
       "@lezer/common",
     ],
   },
-  /*
-   * The Firebase entries named up front. Firestore is the one that arrived after
-   * the others: left to be discovered when it is first imported, Vite
-   * re-optimises mid-session and the window can hold two copies of the SDK's
-   * component registry, which reads as "Service firestore is not available".
-   */
-  optimizeDeps: {
-    include: ["firebase/app", "firebase/auth", "firebase/firestore"],
-  },
 })
