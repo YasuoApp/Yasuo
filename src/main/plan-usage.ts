@@ -4,6 +4,7 @@ import { query } from "@anthropic-ai/claude-agent-sdk"
 
 import type { PlanUsage, PlanWindow } from "../shared/api"
 import { claudeBinary } from "./claude-bin"
+import { accountEnv } from "./free-ai"
 import { locate, spawnEnvironment } from "./shell-env"
 
 /**
@@ -109,9 +110,7 @@ async function askCli(configDir: string | null): Promise<PlanUsage> {
     options: {
       cwd: homedir(),
       pathToClaudeCodeExecutable: binary,
-      env: await spawnEnvironment(
-        configDir ? { CLAUDE_CONFIG_DIR: configDir } : {}
-      ),
+      env: await spawnEnvironment(accountEnv(configDir)),
       abortController: stop,
     },
   })

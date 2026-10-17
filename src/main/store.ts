@@ -61,6 +61,14 @@ export const CLAUDE_PROFILES_FILE = "claude-profiles.json"
 export const CLAUDE_PROFILES_DIR = "claude-profiles"
 
 /**
+ * The free AI's `CLAUDE_CONFIG_DIR` — its transcripts, and the token file and
+ * `apiKeyHelper` it is signed in with (`main/free-ai.ts`). Beside the profiles'
+ * rather than among them, since it is not one a user named and a profile
+ * called `Free` must not land on it.
+ */
+export const FREE_AI_DIR = "claude-free"
+
+/**
  * The chats held in the workspace's projects — their listing; each chat's lines
  * are a file of its own, the split the notes have and for the same reason: a
  * turn rewrites one chat rather than all of them.

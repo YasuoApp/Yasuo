@@ -586,6 +586,65 @@ Every row says whether it is signed in and as whom, **asked of the CLI**
 (`claude auth status --json`); a missing directory is never spawned into, since
 the CLI would create it. The composer's account menu shows each profile's email.
 
+### The free AI
+
+Anybody signed in to the studio (Google, through Firebase) can chat on
+**Haiku through this app's own server**, with no Claude account of their own —
+the way in for somebody who has not got one. It is a row of the composer's
+account menu, `Free`, and **not a profile**: Settings has nothing to rename or
+delete, and it is offered exactly while somebody is signed in. A chat on it
+carries `FREE_PROFILE_ID` as its `profileId`, and main resolves that to a
+`CLAUDE_CONFIG_DIR` of its own, `workspace/claude-free`. A new chat opens on it
+only for somebody whose own `claude` is signed out and who has no profiles —
+somebody already spending their own plan is not moved onto Haiku. The server is
+`FREE_AI_URL` in `shared/free-ai.ts`, empty until there is one (which hides the
+whole thing), or `VSCLAUDE_AI_URL` in main's environment for one on this
+machine.
+
+**What the server is sent is the user's Firebase ID token**, as
+`Authorization: Bearer` and as `x-api-key` both. It verifies it
+(`firebase-admin`'s `verifyIdToken`), refuses any model but `FREE_AI_MODEL`, and
+forwards to Anthropic with a key of its own — so the free tier is this app's
+API spend, metered per uid by the server, and no user credential is ever
+forwarded.
+
+**The token is a file, read by an `apiKeyHelper`, not a variable.** An ID token
+lives an hour and a chat session can stay open all day; a token fixed into a
+process's env at spawn is a session that fails at minute sixty. So the free
+directory's own `settings.json` names an `apiKeyHelper` that prints
+`vsclaude-token` (`type` on Windows, where the CLI runs it through `cmd.exe` —
+measured; `cat` elsewhere), the CLI re-runs it every five minutes
+(`CLAUDE_CODE_API_KEY_HELPER_TTL_MS`), and the renderer hands main every token
+Firebase refreshes (`onIdTokenChanged` → `setFreeAiToken`). The file is `0600`
+and deleted on sign-out; it is not sealed by the keychain, because the CLI has
+to `cat` it and it is dead within the hour anyway.
+
+**Haiku is pinned three times**: `forFreeAi` turns a free chat's options into
+`haiku` at send time in main (and the commit draft's), the composer's model menu
+offers Haiku rows alone, and `freeAiEnv` points every model the CLI could ask
+for on its own — `ANTHROPIC_MODEL`, the `opus`/`sonnet`/`haiku` aliases, a
+subagent's — at `FREE_AI_MODEL`, since each of those would otherwise be a
+request the server refuses halfway through a turn. Measured against a local
+server: `--model opus` arrives as `claude-haiku-5-5`. The server's refusal is
+the real one; these keep a turn from reaching it.
+
+**The user's own credentials are emptied** — `ANTHROPIC_API_KEY`,
+`ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN` go over as empty strings.
+A spawned `claude` gets the login shell's whole env (`mergeShellEnv`), and a
+key exported there would win over the helper and be sent to this app's server.
+Measured too: with one exported, the server saw the Firebase token alone.
+
+Every place that starts a `claude` on a profile asks `accountEnv` (in
+`main/free-ai.ts`) by directory rather than building `{ CLAUDE_CONFIG_DIR }`
+itself, which is how the free directory brings its server with it. The usage
+meter is not drawn for a free chat — there is no claude.ai plan behind it — and
+a free turn sent while signed out is refused with a sentence rather than left to
+the CLI's "Please run /login", which names the wrong login.
+
+The `Gateway` profile that came before this — a URL and a token typed into
+Settings per profile — was never shipped and is not here: a server of the
+app's own, reached by whoever is signed in, is the thing it was a stand-in for.
+
 ## Plugins
 
 Obsidian's model, not VS Code's. A plugin is a directory — `manifest.json`,

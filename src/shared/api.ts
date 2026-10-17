@@ -2619,6 +2619,19 @@ export type DesktopApi = {
    * that was closed before it answered. */
   cancelSignInWithGoogle: () => Promise<void>
   /**
+   * Whether this build has a server for the free AI at all — `FREE_AI_URL`, or
+   * `VSCLAUDE_AI_URL` in main's environment. Asked once: with neither, the free
+   * AI is drawn nowhere.
+   */
+  freeAiAvailable: () => Promise<boolean>
+  /**
+   * The signed-in user's Firebase ID token, handed over every time Firebase
+   * refreshes it (`onIdTokenChanged`), or null on sign-out — what the free AI's
+   * requests are sent with (`main/free-ai.ts`). Resolves with whether a free
+   * turn can now run.
+   */
+  setFreeAiToken: (token: string | null) => Promise<boolean>
+  /**
    * The left column's Search: `query` across every file in the workspace and
    * everything said in every chat — see `WorkspaceSearch`.
    *
@@ -3009,6 +3022,8 @@ export const IPC = {
   setBadgeCount: "app:set-badge-count",
   signInWithGoogle: "auth:sign-in-google",
   cancelSignInWithGoogle: "auth:cancel-sign-in-google",
+  freeAiAvailable: "free-ai:available",
+  setFreeAiToken: "free-ai:token",
   searchWorkspace: "search:workspace",
   replaceInFiles: "search:replace",
   deleteChat: "chats:delete",

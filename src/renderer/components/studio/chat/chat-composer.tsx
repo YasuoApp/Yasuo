@@ -69,7 +69,9 @@ import { iconFor } from "@/lib/files/icons"
 import { useFiles } from "@/lib/files/store"
 import { useSettings } from "@/lib/settings"
 import { cn } from "@/lib/utils"
+import { FREE_PROFILE_ID, forFreeAi, isHaiku } from "@shared/free-ai"
 import { accountLine, useClaudeProfiles } from "@/lib/chat/claude-profiles"
+import { useFreeAi } from "@/lib/free-ai"
 import {
   defaultModelAlias,
   effortFor,
@@ -375,6 +377,10 @@ export function ChatComposer({
   // Loaded once at launch (`studio.tsx`); read here for the profile picker,
   // which is drawn only once there is a profile to choose — see `ProfileMenu`.
   const profiles = useClaudeProfiles((state) => state.profiles)
+  // The free AI is a row of the same menu, and it is enough on its own to draw
+  // it — somebody with no profiles still has their own login to choose against.
+  const freeReady = useFreeAi((state) => state.ready)
+  const free = options.profileId === FREE_PROFILE_ID
 
   /* The draft as it stands, for the unmount below: the cleanup runs once and
    * would otherwise close over the empty string it was built with. */
@@ -936,7 +942,7 @@ export function ChatComposer({
           {onOptions && (
             <>
               <ModelMenu
-                models={models}
+                models={free ? models.filter(isHaiku) : models}
                 model={options.model}
                 effort={options.effort}
                 onPick={(model, effort) =>
@@ -956,11 +962,13 @@ export function ChatComposer({
                 permission={options.permission}
                 onPick={(permission) => onOptions({ ...options, permission })}
               />
-              {profiles.length > 0 && (
+              {(profiles.length > 0 || freeReady || free) && (
                 <ProfileMenu
                   profiles={profiles}
                   profileId={options.profileId ?? null}
-                  onPick={(profileId) => onOptions({ ...options, profileId })}
+                  onPick={(profileId) =>
+                    onOptions(forFreeAi({ ...options, profileId }))
+                  }
                 />
               )}
               <McpMenu
@@ -1436,6 +1444,8 @@ export function ProfileMenu({
   const accounts = useClaudeProfiles((state) => state.accounts)
   const checking = useClaudeProfiles((state) => state.checking)
   const checkUnknown = useClaudeProfiles((state) => state.checkUnknown)
+  const freeReady = useFreeAi((state) => state.ready)
+  const free = profileId === FREE_PROFILE_ID
 
   return (
     <DropdownMenu
@@ -1451,7 +1461,7 @@ export function ProfileMenu({
         render={
           <ToolbarButton
             icon={<KeyRound />}
-            label={chosen?.name ?? "Account"}
+            label={free ? "Free" : (chosen?.name ?? "Account")}
             title="Which CLAUDE_CONFIG_DIR this chat's turns run under"
             on={profileId !== null}
           />
@@ -1476,7 +1486,30 @@ export function ProfileMenu({
             />
           </div>
         </DropdownMenuItem>
-        <DropdownMenuSeparator />
+        {/* Kept on a chat already on it after a sign-out, so the menu still
+            says where the chat stands — `send` refuses it until sign-in. */}
+        {(freeReady || free) && (
+          <DropdownMenuItem
+            onClick={() => onPick(FREE_PROFILE_ID)}
+            className="flex cursor-pointer items-center gap-2 px-2 py-1.5"
+          >
+            <div className="flex size-4 shrink-0 items-center justify-center">
+              {free && <CheckIcon className="size-3.5 text-foreground" />}
+            </div>
+            <div className="flex min-w-0 flex-1 flex-col">
+              <span className="truncate text-xs font-normal">Free</span>
+              <span
+                className={cn(
+                  "truncate text-[0.625rem]",
+                  freeReady ? "text-muted-foreground" : "text-destructive"
+                )}
+              >
+                {freeReady ? "Haiku, with your studio account" : "Signed out"}
+              </span>
+            </div>
+          </DropdownMenuItem>
+        )}
+        {profiles.length > 0 && <DropdownMenuSeparator />}
         {profiles.map((profile) => (
           <DropdownMenuItem
             key={profile.id}

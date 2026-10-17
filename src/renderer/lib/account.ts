@@ -3,6 +3,7 @@ import {
   getAuth,
   GoogleAuthProvider,
   onAuthStateChanged,
+  onIdTokenChanged,
   signInWithCredential,
   signOut,
   type Auth,
@@ -10,6 +11,8 @@ import {
 import { create } from "zustand"
 
 import { FIREBASE_CONFIG, SIGN_IN_CANCELLED } from "@shared/firebase"
+
+import { handFreeAiToken, watchFreeAi } from "./free-ai"
 
 /**
  * Who is signed in to the studio, through Firebase.
@@ -67,6 +70,17 @@ export function watchAccount(): void {
         ? { email: user.email, name: user.displayName, photo: user.photoURL }
         : null,
     })
+  })
+
+  // The free AI's requests carry this user's ID token, which lives an hour.
+  // Firebase refreshes it ahead of that and says so here, so main's copy —
+  // which the CLI re-reads every five minutes — is never the expired one.
+  watchFreeAi()
+  onIdTokenChanged(authOf(), (user) => {
+    void (async () => {
+      const token = user ? await user.getIdToken().catch(() => null) : null
+      await handFreeAiToken(token)
+    })()
   })
 }
 

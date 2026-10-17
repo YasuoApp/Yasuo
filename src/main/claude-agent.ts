@@ -17,6 +17,7 @@ import type {
   TurnUsage,
 } from "../shared/api"
 import { claudeBinary } from "./claude-bin"
+import { accountEnv } from "./free-ai"
 import { locate, spawnEnvironment } from "./shell-env"
 
 /**
@@ -165,7 +166,8 @@ export type AgentSessionOptions = {
    * Unset (or null) for the account the user's own `claude` is already signed
    * into — the same "leave it alone" default `model` and `effort` follow. Goes
    * through `environment`'s `extra`, which is the one place this app's own env
-   * wins over whatever the shell already exports.
+   * wins over whatever the shell already exports — by way of `accountEnv`, so
+   * the free AI's directory brings its server with it.
    */
   configDir?: string | null
   /** Directories outside `cwd` the turn may read. */
@@ -461,9 +463,7 @@ export async function rewindSessionFiles(input: {
     options: {
       cwd: input.cwd,
       pathToClaudeCodeExecutable: binary,
-      env: await spawnEnvironment(
-        input.configDir ? { CLAUDE_CONFIG_DIR: input.configDir } : {}
-      ),
+      env: await spawnEnvironment(accountEnv(input.configDir)),
       abortController: held,
       resume: input.sessionId,
       enableFileCheckpointing: true,
@@ -648,7 +648,7 @@ export async function startAgentSession(
          * app has no other way to learn.
          */
         CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS: "1",
-        ...(session.configDir ? { CLAUDE_CONFIG_DIR: session.configDir } : {}),
+        ...accountEnv(session.configDir ?? null),
       }),
       // One or the other, never both — the SDK refuses `sessionId` together
       // with `resume`, which is the same rule `--session-id` had.

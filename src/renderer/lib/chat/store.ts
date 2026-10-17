@@ -13,6 +13,8 @@ import {
   type WorkspaceFolder,
   type ChatOptions,
 } from "@shared/api"
+import { newChatOptions, useFreeAi } from "../free-ai"
+import { useClaudeProfiles } from "./claude-profiles"
 import { localCommand } from "./command-text"
 import { storeImages } from "./images"
 import { marksUnread } from "./unread"
@@ -496,6 +498,14 @@ export const useChats = create<ChatState>((set, get) => ({
       createdAt: now,
       updatedAt: now,
     }
+    // Somebody here only for the free AI gets a chat already on it, rather
+    // than one whose first message fails with "Not logged in".
+    const opening = newChatOptions({
+      ready: useFreeAi.getState().ready,
+      login: useClaudeProfiles.getState().accounts[""],
+      profiles: useClaudeProfiles.getState().profiles,
+    })
+    if (opening) chat.options = opening
 
     set({
       chats: [...get().chats, chat],

@@ -18,6 +18,7 @@ import {
   type ChatSeed,
   type ClaudeProfile,
   type FileDiff,
+  type PlanUsage,
   type FileIndexEntry,
   type ReplaceResult,
   type SearchFilter,
@@ -26,6 +27,7 @@ import {
   type ChatAnswer,
   type ChatOptions,
 } from "../shared/api"
+import { FREE_PROFILE_ID } from "../shared/free-ai"
 import type { PluginFile, PluginSource } from "../shared/plugins"
 import {
   PROJECT_TEMPLATES,
@@ -40,6 +42,13 @@ import { claudeBinary } from "./claude-bin"
 import { dataDir, migrateChatFiles, migrateLegacyDataDir } from "./data-dir"
 import { Chats } from "./chat"
 import { findFavicon, MAX_FAVICON_BYTES } from "./favicon"
+import {
+  freeAiDir,
+  freeAiReady,
+  freeAiUrl,
+  setFreeAiDir,
+  setFreeAiToken,
+} from "./free-ai"
 import * as files from "./files"
 import { MAX_INDEXED_FILES } from "./files"
 import {
@@ -90,7 +99,13 @@ import { draftCommitMessage } from "./one-turn-agent"
 import type { Host } from "./host"
 import { expandHome, quote, spawnEnvironment } from "./shell-env"
 import { systemUsage } from "./system-usage"
-import { PLUGIN_DATA_DIR, PLUGINS_DIR, Store, WORKSPACE_DIR } from "./store"
+import {
+  FREE_AI_DIR,
+  PLUGIN_DATA_DIR,
+  PLUGINS_DIR,
+  Store,
+  WORKSPACE_DIR,
+} from "./store"
 import { installedShells } from "./shells"
 import { TerminalManager } from "./terminal"
 import { TsServers } from "./tsserver"
@@ -214,6 +229,21 @@ export function createIpc(host: Host): {
   migrateLegacyDataDir()
   migrateChatFiles()
   const store = new Store()
+  setFreeAiDir(path.join(dataDir(), WORKSPACE_DIR, FREE_AI_DIR))
+
+  /**
+   * The stored profiles and the free AI as one more, for `Chats` — which
+   * resolves a chat's `profileId` to a directory through this list, and looks
+   * for a session's transcript in every directory on it. Not what Settings is
+   * sent: the free AI is nothing there can rename or delete.
+   */
+  const chatProfiles = async (): Promise<ClaudeProfile[]> => {
+    const stored = await store.listClaudeProfiles()
+    const dir = freeAiDir()
+    return dir
+      ? [...stored, { id: FREE_PROFILE_ID, name: "Free", configDir: dir }]
+      : stored
+  }
 
   const handlers = new Map<string, Handler>()
   const handle = (channel: string, handler: Handler): void => {
@@ -247,6 +277,7 @@ export function createIpc(host: Host): {
     profileId: string | null
   ): Promise<string | null> => {
     if (!profileId) return null
+    if (profileId === FREE_PROFILE_ID) return freeAiDir()
     const profile = (await store.listClaudeProfiles()).find(
       (entry) => entry.id === profileId
     )
@@ -273,7 +304,7 @@ export function createIpc(host: Host): {
         store.resolveFolderDir(folderId).catch(() => null),
       // Asked per turn rather than held — Settings can add, rename or delete a
       // profile between two messages in the same chat.
-      claudeProfiles: () => store.listClaudeProfiles(),
+      claudeProfiles: chatProfiles,
       chats: () => store.listChats(),
       saveChats: (chats) => store.saveChats(chats),
       readChat: (id) => store.readChat(id),
@@ -361,8 +392,20 @@ export function createIpc(host: Host): {
   // the same `configDirOf` the commit draft goes through.
   handle(
     IPC.planUsage,
-    async (_event, profileId: string | null, fresh: boolean) =>
-      planUsage(await configDirOf(profileId), fresh === true)
+    async (_event, profileId: string | null, fresh: boolean) => {
+      // The free AI spends this app's server, not a claude.ai plan, so there
+      // are no windows to draw — and no plan login to ask about them.
+      if (profileId === FREE_PROFILE_ID) {
+        return {
+          available: false,
+          subscription: null,
+          windows: [],
+          error: null,
+          at: new Date().toISOString(),
+        } satisfies PlanUsage
+      }
+      return planUsage(await configDirOf(profileId), fresh === true)
+    }
   )
 
   // The CLI's own `mcp remove`, in the same directory the listing was asked in —
@@ -507,6 +550,12 @@ export function createIpc(host: Host): {
     signInWithGoogle((url) => host.openExternal(url))
   )
   handle(IPC.cancelSignInWithGoogle, () => cancelSignInWithGoogle())
+
+  handle(IPC.freeAiAvailable, () => freeAiUrl() !== null)
+
+  handle(IPC.setFreeAiToken, (_event, token: unknown) =>
+    setFreeAiToken(typeof token === "string" && token ? token : null)
+  )
 
   /*
    * The left column's Search. `searching` is the generation: each call takes
@@ -1042,13 +1091,21 @@ export function createIpc(host: Host): {
       // A second press for the same folder replaces the first rather than
       // running beside it: the box has one message to put an answer in.
       drafts.get(folderId)?.abort()
+
+      // The same two rules a free chat's `send` keeps: Haiku whatever was
+      // picked, and a sentence rather than the CLI's own login error.
+      const free = profileId === FREE_PROFILE_ID
+      if (free && !freeAiReady()) {
+        return { error: "Sign in to Visual Studio Claude to use the free AI." }
+      }
+
       const controller = new AbortController()
       drafts.set(folderId, controller)
       try {
         return await draftCommitMessage({
           cwd: await store.resolveFolderDir(folderId),
-          model,
-          effort,
+          model: free ? "haiku" : model,
+          effort: free ? null : effort,
           configDir: await configDirOf(profileId),
           signal: controller.signal,
         })

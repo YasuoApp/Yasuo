@@ -30,6 +30,7 @@ import {
   type ChatEvent,
   type ChatOptions,
 } from "../shared/api"
+import { forFreeAi, FREE_PROFILE_ID } from "../shared/free-ai"
 import { contentTypeOf, extensionForType } from "../shared/note-files"
 import { spendRows } from "./chat-digest"
 import { forkPointIn, promptIdIn } from "./chat-fork"
@@ -46,6 +47,7 @@ import {
   type AskDecision,
   type AskRequest,
 } from "./claude-agent"
+import { freeAiReady } from "./free-ai"
 import { expandHome } from "./shell-env"
 
 /**
@@ -850,7 +852,16 @@ export class Chats {
     // Read at send time rather than held: the toolbar writes to the record, and
     // a message takes whatever it said when it was sent. Through `chatOptions`,
     // which is where a record older than either field is brought up to date.
-    const options = chatOptions(chat.options)
+    // A free chat runs Haiku whatever its toolbar last said (`forFreeAi`).
+    const options = forFreeAi(chatOptions(chat.options))
+
+    // Refused here rather than left to fail in the CLI, whose answer to a
+    // missing token is "Not logged in · Please run /login" — the wrong login.
+    if (options.profileId === FREE_PROFILE_ID && !freeAiReady()) {
+      this.setBusy(id, false)
+      this.endTurn(id, "Sign in to Visual Studio Claude to use the free AI.")
+      return
+    }
 
     // The line keeps the `[Image #n]` and the names of the note files the
     // renderer stored, never the picture: a transcript that carried base64

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import { Pin, PinOff } from "lucide-react"
 
+import { watchAccount } from "@/lib/account"
 import { applyAppearance } from "@/lib/appearance"
 import { cn } from "@/lib/utils"
 import { useProjects } from "@/lib/projects"
@@ -39,6 +40,9 @@ export function ChatWindow({ chatId }: { chatId: string }) {
     void useStudio.getState().init()
     void useSettings.getState().restore()
     void useClaudeProfiles.getState().refresh()
+    // For the composer's free AI row, which the studio window learns of through
+    // its rail's account menu — a window this one has none of.
+    watchAccount()
     void Promise.all([
       useChats.getState().refresh(),
       // Before `select`, which moves the column's active project and writes

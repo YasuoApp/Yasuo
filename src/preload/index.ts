@@ -172,6 +172,8 @@ const api: DesktopApi = {
   setBadgeCount: (count) => ipcRenderer.invoke(IPC.setBadgeCount, count),
   signInWithGoogle: () => ipcRenderer.invoke(IPC.signInWithGoogle),
   cancelSignInWithGoogle: () => ipcRenderer.invoke(IPC.cancelSignInWithGoogle),
+  freeAiAvailable: () => ipcRenderer.invoke(IPC.freeAiAvailable),
+  setFreeAiToken: (token) => ipcRenderer.invoke(IPC.setFreeAiToken, token),
   searchWorkspace: (query, options, filter) =>
     ipcRenderer.invoke(IPC.searchWorkspace, query, options, filter),
   replaceInFiles: (query, options, replacement, paths) =>
