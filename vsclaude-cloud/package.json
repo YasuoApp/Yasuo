@@ -1,0 +1,23 @@
+{
+  "name": "vsclaude-cloud",
+  "type": "module",
+  "scripts": {
+    "build": "nitro build",
+    "dev": "nitro dev",
+    "preview": "nitro preview",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "imports": {
+    "#*": "./*"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.3",
+    "@types/node": "latest",
+    "nitro": "latest",
+    "typescript": "latest"
+  },
+  "dependencies": {
+    "jose": "^6.2.12"
+  }
+}
